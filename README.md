@@ -8,16 +8,18 @@ Your pet runs on its own. You keep it out of trouble and on task:
 | --- | --- | --- |
 | Jump | Tap | Space |
 | Slide (and fast-fall in the air) | Swipe down | Down arrow |
-| Call your pet back from a distraction | Swipe up | Up arrow |
+| Keep your pet on task (call it back) | Swipe up | Up arrow |
 
 ## Week 1 prototype
 
 This version uses placeholder shapes only, so we can find out whether the game is fun before adding art.
 
-- The pet speeds up over time.
-- Fences and puddles need a jump. Low branches need a slide.
+- The pet speeds up over time. Reach the ball at 600 m to finish Level 1 (about a minute).
+- Fences and puddles need a jump. Low branches need a slide (or a well-timed jump).
 - Treats are worth 10 points each.
-- A squirrel shows up about every 11 to 18 seconds. Swipe up within about a second for a focus bonus. Wait too long and your pet starts chasing it and drifting back. If it drifts off the left edge, the run ends.
+- Distractions show up every 8 to 13 seconds. Swipe up during the warning ("!" or "?") for a +50 focus bonus.
+  - Squirrel on the trail: if you wait, your pet turns around, the run slows down, and your pet runs back after it. If it gets too far back, the run ends.
+  - Bird in the sky or a critter in a den hole: out of reach, so your pet just stops to stare and the run slows down until you call it back.
 - Your best score is saved on your device.
 
 All the numbers that control how the game feels are in `src/config.ts`.

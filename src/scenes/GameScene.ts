@@ -1,48 +1,64 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, SCORE, SPAWN, SPEED, SQUIRREL } from '../config';
+import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, LEVEL, PET, SCORE, SPAWN, SPEED } from '../config';
 
 type State = 'ready' | 'playing' | 'over';
 type Rect = Phaser.GameObjects.Rectangle;
 type Body = Phaser.Physics.Arcade.Body;
 
+/**
+ * chase: a squirrel on the trail. The pet turns around and runs after it,
+ *        and the run ends if it gets too far back.
+ * gawk:  a bird in the sky or a critter in a den hole, out of reach.
+ *        The pet stops to stare and slows down, but the run goes on.
+ */
+type DistractionKind = 'chase' | 'gawk';
+interface Distraction {
+  kind: DistractionKind;
+  active: boolean; // false during the short warning, true once the pet gives in
+}
+
 const BEST_KEY = 'fetch-dash-best';
 const SWIPE_PX = 30; // screen pixels
+const PET_COLOR = 0xa86b3c;
 
 /**
  * Week 1 prototype: placeholder shapes only.
  * The pet runs on its own. Tap to jump, swipe down to slide,
- * swipe up to call the pet back when a squirrel distracts it.
+ * swipe up to call the pet back when something distracts it.
+ * Reach the ball at the end of the trail to finish Level 1.
  */
 export class GameScene extends Phaser.Scene {
   private state: State = 'ready';
   private pet!: Rect;
   private petBody!: Body;
+  private nose!: Rect;
   private obstacles!: Phaser.Physics.Arcade.Group;
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
   private shownHints = new Set<string>();
 
-  private speed = SPEED.start;
+  private baseSpeed = SPEED.start; // full running speed, rises over time
+  private speedFactor = 1; // drops while the pet is distracted
   private distancePx = 0;
   private treatCount = 0;
   private bonus = 0;
   private best = 0;
   private nextSpawnIn = 0;
+  private ballSpawned = false;
 
   private sliding = false;
   private slideTimer?: Phaser.Time.TimerEvent;
 
-  private distracted = false;
-  private chasing = false;
+  private distraction?: Distraction;
   private returning = false;
   private distractionTimer?: Phaser.Time.TimerEvent;
-  private squirrelTimer?: Phaser.Time.TimerEvent;
-  private squirrel?: Rect;
+  private scheduleTimer?: Phaser.Time.TimerEvent;
   private alertText!: Phaser.GameObjects.Text;
 
   private scoreText!: Phaser.GameObjects.Text;
   private centerText!: Phaser.GameObjects.Text;
   private toastText!: Phaser.GameObjects.Text;
+  private progressFill!: Rect;
   private groundStripes: Rect[] = [];
 
   private pointerStart?: { x: number; y: number; handled: boolean };
@@ -51,17 +67,22 @@ export class GameScene extends Phaser.Scene {
     super('game');
   }
 
+  private get speed(): number {
+    return this.baseSpeed * this.speedFactor;
+  }
+
   create(): void {
     this.best = loadBest();
     this.state = 'ready';
-    this.speed = SPEED.start;
+    this.baseSpeed = SPEED.start;
+    this.speedFactor = 1;
     this.distancePx = 0;
     this.treatCount = 0;
     this.bonus = 0;
     this.nextSpawnIn = 600;
+    this.ballSpawned = false;
     this.sliding = false;
-    this.distracted = false;
-    this.chasing = false;
+    this.distraction = undefined;
     this.returning = false;
     this.groundStripes = [];
     this.shownHints = new Set<string>();
@@ -75,14 +96,15 @@ export class GameScene extends Phaser.Scene {
       this.groundStripes.push(this.add.rectangle(x, GROUND_Y + 6, 40, 6, 0x5aa648));
     }
 
-    // Pet (placeholder: a brown block with an ear)
-    this.pet = this.add.rectangle(PET.homeX, GROUND_Y - PET.height / 2, PET.width, PET.height, 0xa86b3c);
+    // Pet (placeholder: a brown block; the dark "nose" shows where it's looking)
+    this.pet = this.add.rectangle(PET.homeX, GROUND_Y - PET.height / 2, PET.width, PET.height, PET_COLOR);
     this.pet.setStrokeStyle(3, 0x5c3a1e);
     this.physics.add.existing(this.pet);
     this.pet.setDepth(2);
     this.petBody = this.pet.body as Body;
     this.petBody.setCollideWorldBounds(false);
     this.physics.add.collider(this.pet, ground);
+    this.nose = this.add.rectangle(0, 0, 12, 12, 0x2b1a0d).setDepth(3);
 
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
     this.treats = this.physics.add.group({ allowGravity: false });
@@ -93,6 +115,9 @@ export class GameScene extends Phaser.Scene {
     // HUD
     const font = { fontFamily: 'Arial, sans-serif', color: '#1d2b1f' };
     this.scoreText = this.add.text(20, 16, '', { ...font, fontSize: '24px', fontStyle: 'bold' }).setDepth(10);
+    this.add.rectangle(GAME_WIDTH - 220, 30, 200, 14, 0xffffff, 0.7).setOrigin(0, 0.5).setDepth(10);
+    this.progressFill = this.add.rectangle(GAME_WIDTH - 220, 30, 0, 14, 0x3f7d3a).setOrigin(0, 0.5).setDepth(10);
+    this.add.circle(GAME_WIDTH - 14, 30, 10, 0xd8e65a).setStrokeStyle(2, 0x7a8a1a).setDepth(10);
     this.centerText = this.add
       .text(GAME_WIDTH / 2, 190, '', { ...font, fontSize: '30px', fontStyle: 'bold', align: 'center' })
       .setOrigin(0.5)
@@ -109,10 +134,13 @@ export class GameScene extends Phaser.Scene {
       .setVisible(false);
 
     this.centerText.setText(
-      'FETCH DASH\n\nTap to start\n\nTap / Space: jump    Swipe down / Down: slide\nSwipe up / Up: call your pet back from squirrels'
+      'FETCH DASH  ·  Level 1\n\nTap to start\n\n' +
+        'Tap / Space: jump    Swipe down / Down: slide\n' +
+        'Swipe up / Up: keep your pet on task\n\nReach the ball at the end of the trail!'
     );
     this.centerText.setFontSize(24);
     this.updateHud();
+    this.updateNose();
 
     this.setupInput();
   }
@@ -186,10 +214,14 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private get chasing(): boolean {
+    return this.distraction?.kind === 'chase' && this.distraction.active;
+  }
+
   private onTap(): void {
     if (this.state === 'ready') return this.startRun();
     if (this.state === 'over') return this.restart();
-    if (this.chasing) return; // a chasing pet doesn't listen to jump
+    if (this.chasing) return; // a pet running the wrong way doesn't listen to jump
     if (this.petBody.blocked.down || this.petBody.touching.down) {
       this.stopSlide();
       this.petBody.setVelocityY(PET.jumpVelocity);
@@ -207,7 +239,7 @@ export class GameScene extends Phaser.Scene {
 
   private onSwipeUp(): void {
     if (this.state !== 'playing') return;
-    if (this.distracted || this.chasing) this.callBack();
+    if (this.distraction) this.callBack();
   }
 
   // ---------- Run lifecycle ----------
@@ -215,17 +247,18 @@ export class GameScene extends Phaser.Scene {
   private startRun(): void {
     this.state = 'playing';
     this.centerText.setText('');
-    this.scheduleSquirrel(SQUIRREL.firstAfterMs);
+    this.scheduleDistraction(DISTRACTION.firstAfterMs);
   }
 
-  private endRun(reason: string): void {
+  private endRun(reason: string, won = false): void {
     if (this.state !== 'playing') return;
     this.state = 'over';
     this.physics.pause();
-    this.squirrelTimer?.remove();
+    this.tweens.pauseAll();
+    this.scheduleTimer?.remove();
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
-    this.pet.setFillStyle(0x8a8a8a);
+    if (!won) this.pet.setFillStyle(0x8a8a8a);
 
     const score = this.score();
     const newBest = score > this.best;
@@ -236,24 +269,27 @@ export class GameScene extends Phaser.Scene {
     this.centerText.setFontSize(30);
     this.centerText.setText(
       `${reason}\n\nScore ${score}${newBest ? '  (new best!)' : ''}\n` +
-        `${this.meters()} m  ·  ${this.treatCount} treats\n\nTap to run again`
+        `${Math.min(this.meters(), LEVEL.goalMeters)} of ${LEVEL.goalMeters} m  ·  ${this.treatCount} treats\n\n` +
+        (won ? 'Tap to play again' : 'Tap to run again')
     );
     this.updateHud();
   }
 
   private restart(): void {
     this.physics.resume();
+    this.tweens.resumeAll();
     this.scene.restart();
   }
 
   // ---------- Main loop ----------
 
   update(_time: number, deltaMs: number): void {
-    this.alertText.setPosition(this.pet.x, this.pet.y - 60);
+    this.alertText.setPosition(this.pet.x, this.pet.y - 62);
+    this.updateNose();
     if (this.state !== 'playing') return;
     const dt = deltaMs / 1000;
 
-    this.speed = Math.min(SPEED.max, this.speed + SPEED.gainPerSecond * dt);
+    this.baseSpeed = Math.min(SPEED.max, this.baseSpeed + SPEED.gainPerSecond * dt);
     const dx = this.speed * dt;
     this.distancePx += dx;
 
@@ -273,8 +309,16 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
+    const remainingPx = LEVEL.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
+    if (remainingPx <= 0) {
+      this.endRun('You caught the ball!\nLevel 1 complete', true);
+      return;
+    }
+    if (!this.ballSpawned && remainingPx <= GAME_WIDTH - PET.homeX) this.spawnBall(remainingPx);
+
+    // No new obstacles in the final stretch, so the finish stays clear
     this.nextSpawnIn -= dx;
-    if (this.nextSpawnIn <= 0) this.spawnNext();
+    if (this.nextSpawnIn <= 0 && remainingPx > GAME_WIDTH + 200) this.spawnNext();
 
     this.updatePetPosition();
 
@@ -286,8 +330,8 @@ export class GameScene extends Phaser.Scene {
 
   private updatePetPosition(): void {
     if (this.chasing) {
-      this.petBody.setVelocityX(-SQUIRREL.driftSpeed);
-      if (this.pet.x <= SQUIRREL.loseX) this.endRun('Chased the squirrel!');
+      this.petBody.setVelocityX(-DISTRACTION.chaseDriftSpeed);
+      if (this.pet.x <= DISTRACTION.loseX) this.endRun('Ran off after the squirrel!');
     } else if (this.returning) {
       if (this.pet.x < PET.homeX - 4) {
         this.petBody.setVelocityX(260);
@@ -301,7 +345,21 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  // ---------- Obstacles and treats ----------
+  /** The nose shows where the pet is looking: ahead, back at a squirrel, or up. */
+  private updateNose(): void {
+    const halfW = this.pet.width / 2;
+    const halfH = this.pet.height / 2;
+    const d = this.distraction;
+    if (d?.active && d.kind === 'chase') {
+      this.nose.setPosition(this.pet.x - halfW, this.pet.y - halfH + 14);
+    } else if (d?.active && d.kind === 'gawk') {
+      this.nose.setPosition(this.pet.x + halfW - 10, this.pet.y - halfH);
+    } else {
+      this.nose.setPosition(this.pet.x + halfW, this.pet.y - halfH + 14);
+    }
+  }
+
+  // ---------- Obstacles, treats and the ball ----------
 
   private spawnNext(): void {
     const roll = Math.random();
@@ -323,7 +381,7 @@ export class GameScene extends Phaser.Scene {
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
 
     // Gaps grow with speed so the game stays fair as it speeds up
-    const scale = this.speed / SPEED.start;
+    const scale = this.baseSpeed / SPEED.start;
     this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
   }
 
@@ -347,6 +405,16 @@ export class GameScene extends Phaser.Scene {
       body.setAllowGravity(false);
       body.setVelocityX(-this.speed);
     }
+  }
+
+  /** The thrown ball waits on the trail; reaching it finishes the level. */
+  private spawnBall(remainingPx: number): void {
+    this.ballSpawned = true;
+    const ball = this.add.circle(PET.homeX + PET.width / 2 + remainingPx, GROUND_Y - 14, 14, 0xd8e65a);
+    ball.setStrokeStyle(3, 0x7a8a1a);
+    this.decor.add(ball);
+    (ball.body as Body).setVelocityX(-this.speed);
+    this.toast('There’s the ball!', '#1f6f2a');
   }
 
   private collectTreat(t: Rect): void {
@@ -381,57 +449,95 @@ export class GameScene extends Phaser.Scene {
     this.petBody.updateFromGameObject();
   }
 
-  // ---------- Squirrel distraction ----------
+  // ---------- Distractions ----------
 
-  private scheduleSquirrel(delayMs: number): void {
-    this.squirrelTimer?.remove();
-    this.squirrelTimer = this.time.delayedCall(delayMs, () => this.spawnSquirrel());
+  private scheduleDistraction(delayMs: number): void {
+    this.scheduleTimer?.remove();
+    this.scheduleTimer = this.time.delayedCall(delayMs, () => {
+      if (this.state !== 'playing') return;
+      if (!this.distraction) {
+        if (Math.random() < DISTRACTION.chaseChance) this.startChase();
+        else if (Math.random() < 0.5) this.startGawk('bird');
+        else this.startGawk('den');
+      }
+      this.scheduleDistraction(Phaser.Math.Between(DISTRACTION.minEveryMs, DISTRACTION.maxEveryMs));
+    });
   }
 
-  private spawnSquirrel(): void {
-    if (this.state !== 'playing') return;
-    // A squirrel dashes across the trail ahead of the pet
-    this.squirrel?.destroy();
+  /** A squirrel scampers along the trail past the pet, the wrong way. */
+  private startChase(): void {
     const sq = this.add.rectangle(GAME_WIDTH + 30, GROUND_Y - 12, 34, 20, 0x7d6b5d).setDepth(1);
     sq.setStrokeStyle(2, 0x4b3f36);
-    this.squirrel = sq;
-    // It scampers along the trail toward and past your pet, in little hops
-    this.tweens.add({
-      targets: sq,
-      x: -60,
-      duration: 2400,
-      onComplete: () => sq.destroy(),
-    });
-    this.tweens.add({ targets: sq, y: GROUND_Y - 30, duration: 160, yoyo: true, repeat: 7, ease: 'Sine.easeOut' });
+    // Fast enough that it has just dashed past the pet when the warning ends
+    this.tweens.add({ targets: sq, x: -60, duration: 1300, onComplete: () => sq.destroy() });
+    this.tweens.add({ targets: sq, y: GROUND_Y - 30, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
 
-    this.distracted = true;
-    this.alertText.setVisible(true);
+    this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
+      this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
+      this.toast('Squirrel! Swipe up!', '#d6402b');
+      this.hint('chase', 'Your pet turned around! Swipe up to call it back.');
+    });
+  }
+
+  /** Something out of reach: a bird in the sky or a critter in a den hole. */
+  private startGawk(what: 'bird' | 'den'): void {
+    if (what === 'bird') {
+      const bird = this.add.triangle(GAME_WIDTH + 40, 230, 0, 0, 36, 8, 0, 16, 0x3b3b5c).setDepth(1);
+      this.tweens.add({ targets: bird, x: -60, duration: 4200, onComplete: () => bird.destroy() });
+      this.tweens.add({ targets: bird, y: 205, scaleY: 0.4, duration: 220, yoyo: true, repeat: -1 });
+    } else {
+      // A den hole on the hillside, drifting by slower than the trail (it's farther away)
+      const den = this.add.ellipse(GAME_WIDTH + 60, GROUND_Y - 48, 70, 30, 0x3a2a1a).setDepth(0.5);
+      const critter = this.add.rectangle(GAME_WIDTH + 60, GROUND_Y - 56, 24, 26, 0x9a7b5c).setDepth(0.6);
+      critter.setStrokeStyle(2, 0x5e4630);
+      this.tweens.add({ targets: [den, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), critter.destroy()) });
+      this.tweens.add({ targets: critter, y: GROUND_Y - 84, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300 });
+    }
+
+    this.warn('gawk', '?', DISTRACTION.gawkWarnMs, () => {
+      this.setSpeedFactor(DISTRACTION.gawkSpeedFactor, 500);
+      this.toast(what === 'bird' ? 'Bird! Swipe up!' : 'Something in that hole! Swipe up!', '#d6402b');
+      // Eventually the pet loses interest by itself, but you lose the time
+      this.distractionTimer = this.time.delayedCall(DISTRACTION.gawkMaxMs, () => this.clearDistraction());
+    });
+  }
+
+  /** Show the warning, then let the distraction take over if the player doesn't act. */
+  private warn(kind: DistractionKind, mark: string, warnMs: number, onGiveIn: () => void): void {
+    this.distraction = { kind, active: false };
+    this.alertText.setText(mark).setVisible(true);
     this.pet.setFillStyle(0xc9884f);
     this.distractionTimer?.remove();
-    this.distractionTimer = this.time.delayedCall(SQUIRREL.graceMs, () => {
-      if (this.distracted) {
-        this.chasing = true;
-        this.toast('Squirrel! Swipe up!', '#d6402b');
-      }
+    this.distractionTimer = this.time.delayedCall(warnMs, () => {
+      if (!this.distraction || this.state !== 'playing') return;
+      this.distraction.active = true;
+      onGiveIn();
     });
-
-    this.scheduleSquirrel(Phaser.Math.Between(SQUIRREL.minEveryMs, SQUIRREL.maxEveryMs));
   }
 
   private callBack(): void {
-    const quick = this.distracted && !this.chasing;
-    this.distracted = false;
-    this.chasing = false;
-    this.returning = true;
-    this.distractionTimer?.remove();
-    this.alertText.setVisible(false);
-    this.pet.setFillStyle(0xa86b3c);
+    const quick = this.distraction && !this.distraction.active;
+    this.clearDistraction();
     if (quick) {
-      this.bonus += SQUIRREL.focusBonus;
-      this.toast(`Good focus! +${SQUIRREL.focusBonus}`, '#1f6f2a');
+      this.bonus += DISTRACTION.focusBonus;
+      this.toast(`Good focus! +${DISTRACTION.focusBonus}`, '#1f6f2a');
     } else {
       this.toast('Here, pup!', '#1f6f2a');
     }
+  }
+
+  private clearDistraction(): void {
+    this.distraction = undefined;
+    this.returning = true;
+    this.distractionTimer?.remove();
+    this.alertText.setVisible(false);
+    this.pet.setFillStyle(PET_COLOR);
+    this.setSpeedFactor(1, 600);
+  }
+
+  private setSpeedFactor(target: number, ms: number): void {
+    this.tweens.killTweensOf(this);
+    this.tweens.add({ targets: this, speedFactor: target, duration: ms, ease: 'Sine.easeInOut' });
   }
 
   // ---------- Score and HUD ----------
@@ -446,9 +552,10 @@ export class GameScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.scoreText.setText(`Score ${this.score()}   Treats ${this.treatCount}   Best ${this.best}`);
+    this.progressFill.width = 200 * Math.min(1, this.meters() / LEVEL.goalMeters);
   }
 
-  /** Shows a one-time tip the first time each obstacle type appears in a run. */
+  /** Shows a one-time tip the first time each thing appears in a run. */
   private hint(key: string, text: string): void {
     if (this.shownHints.has(key)) return;
     this.shownHints.add(key);
@@ -458,7 +565,7 @@ export class GameScene extends Phaser.Scene {
   private toast(text: string, color: string): void {
     this.toastText.setText(text).setColor(color).setAlpha(1);
     this.tweens.killTweensOf(this.toastText);
-    this.tweens.add({ targets: this.toastText, alpha: 0, delay: 700, duration: 500 });
+    this.tweens.add({ targets: this.toastText, alpha: 0, delay: 900, duration: 500 });
   }
 
   private drawBackground(): void {

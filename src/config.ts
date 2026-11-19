@@ -15,9 +15,13 @@ export const PET = {
 };
 
 export const SPEED = {
-  start: 360, // pixels per second
-  max: 900,
-  gainPerSecond: 9,
+  start: 300, // pixels per second
+  max: 750,
+  gainPerSecond: 6,
+};
+
+export const LEVEL = {
+  goalMeters: 600, // catch the ball here to finish Level 1 (about a minute)
 };
 
 export const SPAWN = {
@@ -26,14 +30,21 @@ export const SPAWN = {
   treatChance: 0.6,
 };
 
-export const SQUIRREL = {
-  firstAfterMs: 7000,
-  minEveryMs: 11000,
-  maxEveryMs: 18000,
-  graceMs: 900, // time to call your pet back before it starts chasing
-  driftSpeed: 70, // how fast the pet drifts back while chasing
-  loseX: 50, // if the pet drifts this far left, the run ends
-  focusBonus: 50,
+export const DISTRACTION = {
+  firstAfterMs: 6000,
+  minEveryMs: 8000,
+  maxEveryMs: 13000,
+  chaseChance: 0.5, // the rest are out-of-reach distractions (bird, den hole)
+  focusBonus: 50, // for calling your pet back before it gives in
+  // Squirrel on the trail: the pet turns around and chases it
+  chaseWarnMs: 900,
+  chaseSpeedFactor: 0.35, // the run slows to this share of full speed
+  chaseDriftSpeed: 90, // how fast the pet runs back toward the squirrel
+  loseX: 50, // if the pet gets this far back, the run ends
+  // Bird or den hole out of reach: the pet stops to stare and slows down
+  gawkWarnMs: 700,
+  gawkSpeedFactor: 0.45,
+  gawkMaxMs: 5000, // after this the pet loses interest on its own (no bonus)
 };
 
 export const SCORE = {
