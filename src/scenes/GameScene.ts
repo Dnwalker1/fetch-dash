@@ -64,6 +64,9 @@ export class GameScene extends Phaser.Scene {
 
   private distraction?: Distraction;
   private returning = false;
+  // A jump or slide pressed while the pet was turned around; done right after the call-back
+  private pendingMove?: { kind: 'jump' | 'slide'; at: number };
+  private downKey?: Phaser.Input.Keyboard.Key;
   private distractionTimer?: Phaser.Time.TimerEvent;
   private scheduleTimer?: Phaser.Time.TimerEvent;
   private alertText!: Phaser.GameObjects.Text;
@@ -164,6 +167,7 @@ export class GameScene extends Phaser.Scene {
   private setupInput(): void {
     const keys = this.input.keyboard;
     keys?.on('keydown-SPACE', () => (this.state === 'ready' ? this.startRun() : this.onTap()));
+    this.downKey = keys?.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
     keys?.on('keydown-DOWN', () => this.onSwipeDown());
     keys?.on('keydown-UP', () => this.onSwipeUp());
     keys?.on('keydown', () => sfx.unlock());
@@ -245,7 +249,12 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.time.now - this.startedAt < 300) return; // the tap that pressed Start
     if (this.state === 'over') return this.restart();
-    if (this.chasing) return; // a pet running the wrong way doesn't listen to jump
+    if (this.chasing) {
+      // A pet running the wrong way doesn't listen yet, but remember the jump
+      // so it happens the moment the pet is called back.
+      this.pendingMove = { kind: 'jump', at: this.time.now };
+      return;
+    }
     if (this.petBody.blocked.down || this.petBody.touching.down) {
       this.stopSlide();
       this.petBody.setVelocityY(PET.jumpVelocity);
@@ -254,7 +263,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onSwipeDown(): void {
-    if (this.state !== 'playing' || this.chasing) return;
+    if (this.state !== 'playing') return;
+    if (this.chasing) {
+      this.pendingMove = { kind: 'slide', at: this.time.now };
+      return;
+    }
     if (!(this.petBody.blocked.down || this.petBody.touching.down)) {
       // Fast-fall when in the air
       this.petBody.setVelocityY(900);
@@ -520,6 +533,12 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.scheduleTimer = this.time.delayedCall(delayMs, () => {
       if (this.state !== 'playing') return;
+      if (!this.distraction && this.obstacleAhead()) {
+        // Wait until the pet has cleared what's coming, so a distraction
+        // never lands right on top of a fence or branch.
+        this.scheduleDistraction(DISTRACTION.retryMs);
+        return;
+      }
       if (!this.distraction) {
         const cat = this.choice.species === 'cat';
         if (Math.random() < DISTRACTION.chaseChance) this.startChase();
@@ -528,6 +547,17 @@ export class GameScene extends Phaser.Scene {
       }
       this.scheduleDistraction(Phaser.Math.Between(DISTRACTION.minEveryMs, DISTRACTION.maxEveryMs));
     });
+  }
+
+  private obstacleAhead(): boolean {
+    const reach = this.pet.x + this.speed * (DISTRACTION.clearAheadMs / 1000);
+    let found = false;
+    this.obstacles.children.each((c) => {
+      const o = c as Img;
+      if (o.x + o.width / 2 > this.pet.x - this.petW / 2 && o.x - o.width / 2 < reach) found = true;
+      return true;
+    });
+    return found;
   }
 
   /** Something on the trail dashes past the pet the wrong way: a squirrel for dogs, a bird for cats. */
@@ -595,12 +625,30 @@ export class GameScene extends Phaser.Scene {
     sfx.whistle();
     const quick = this.distraction && !this.distraction.active;
     this.clearDistraction();
+    this.doPendingMove();
     if (quick) {
       this.bonus += DISTRACTION.focusBonus;
       this.toast(`Good focus! +${DISTRACTION.focusBonus}`, '#1f6f2a');
       sfx.ding();
     } else {
       this.toast(this.choice.species === 'cat' ? 'Here, kitty!' : 'Here, pup!', '#1f6f2a');
+    }
+  }
+
+  /**
+   * Lets the player press up and down (or tap) together, in either order:
+   * a slide or jump pressed just before the call-back happens right after it.
+   * Holding the down arrow also counts.
+   */
+  private doPendingMove(): void {
+    const p = this.pendingMove;
+    this.pendingMove = undefined;
+    const recent = p && this.time.now - p.at < DISTRACTION.comboWindowMs;
+    if (this.downKey?.isDown || (recent && p.kind === 'slide')) {
+      this.startSlide();
+    } else if (recent && p.kind === 'jump' && (this.petBody.blocked.down || this.petBody.touching.down)) {
+      this.petBody.setVelocityY(PET.jumpVelocity);
+      sfx.jump();
     }
   }
 

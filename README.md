@@ -24,6 +24,7 @@ This version uses placeholder shapes only, so we can find out whether the game i
 - Fences and puddles need a jump. Low branches need a slide (or a well-timed jump).
 - Treats are worth 10 points each.
 - Distractions show up every 8 to 13 seconds. Swipe up during the warning ("!" or "?") for a +50 focus bonus.
+- Up and down together (either order, or holding down) calls the pet back and slides right away; a space press just before up does the same with a jump. Distractions also wait until the pet has cleared any fence, puddle or branch right ahead.
   - Squirrel on the trail: if you wait, your pet turns around, the run slows down, and your pet runs back after it. If it gets too far back, the run ends.
   - Bird in the sky or a critter in a den hole: out of reach, so your pet just stops to stare and the run slows down until you call it back.
 - Your best score is saved on your device.

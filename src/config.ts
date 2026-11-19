@@ -46,6 +46,9 @@ export const DISTRACTION = {
   // Bird or den hole out of reach: the pet stops to stare and slows down
   gawkWarnMs: 700,
   gawkSpeedFactor: 0.6,
+  comboWindowMs: 600, // a slide/jump pressed this soon before the call-back still happens
+  clearAheadMs: 1200, // no new distraction if an obstacle arrives within this time
+  retryMs: 400,
   gawkMaxMs: 5000, // after this the pet loses interest on its own (no bonus)
 };
 
