@@ -23,6 +23,8 @@
   font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
   color: var(--ink);
   touch-action: auto;
+  /* The cards are always light, even when the phone or browser is in dark mode */
+  color-scheme: light;
 }
 #ui.open {
   pointer-events: auto;
@@ -129,7 +131,11 @@
   border-radius: 10px;
   border: 2px solid var(--aged);
   background: #fff;
+  color: var(--navy);
+  -webkit-text-fill-color: var(--navy);
+  caret-color: var(--rust);
 }
+#ui .field input.name::placeholder { color: #9a8f78; -webkit-text-fill-color: #9a8f78; opacity: 1; }
 #ui .field input.name:focus { outline: none; border-color: var(--gold); }
 #ui .segs, #ui .chips { display: flex; gap: 0.4em; flex-wrap: wrap; margin-top: 0.25em; }
 #ui .seg {
