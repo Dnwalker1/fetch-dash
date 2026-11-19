@@ -1,10 +1,11 @@
 import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
 import { makeLevelArt } from '../art/levelArt';
+import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
-import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, PET, SCORE, SPAWN } from '../config';
-import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type LevelDef, type ObstacleKind, type Progress } from '../levels';
+import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, SCORE, SPAWN } from '../config';
+import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
 
@@ -38,12 +39,27 @@ const PAWS = 3;
 const STUMBLE_SAFE_MS = 1500;
 const PET_COLOR = 0xa86b3c;
 
-const CHASERS = {
-  squirrel: { label: 'Squirrel', texture: 'squirrel', anim: undefined, lift: 16, hop: 18 },
-  rabbit: { label: 'Bunny', texture: 'rabbit', anim: undefined, lift: 18, hop: 26 },
-  crab: { label: 'Crab', texture: 'crab', anim: undefined, lift: 14, hop: 4 },
-  bird: { label: 'Bird', texture: 'bird-1', anim: 'bird-flap', lift: 14, hop: 20 },
-} as const;
+/** What dashes past on the trail, and the line on the end card if the pet runs off. */
+const CHASERS: Record<ChaserKind, { label: string; texture: string; anim?: string; lift: number; hop: number; ranOff: string }> = {
+  squirrel: { label: 'Squirrel', texture: 'squirrel', lift: 16, hop: 18, ranOff: 'Ran off after the squirrel!' },
+  rabbit: { label: 'Bunny', texture: 'rabbit', lift: 18, hop: 26, ranOff: 'Ran off after the bunny!' },
+  crab: { label: 'Crab', texture: 'crab', lift: 14, hop: 4, ranOff: 'Ran off after the crab!' },
+  bird: { label: 'Bird', texture: 'bird-1', anim: 'bird-flap', lift: 14, hop: 20, ranOff: 'Ran off after the bird!' },
+  cat: { label: 'Cat', texture: 'streetcat', lift: 16, hop: 14, ranOff: 'Ran off after the cat!' },
+  dog: { label: 'Dog', texture: 'streetdog', lift: 19, hop: 10, ranOff: 'Ran away from the dog!' },
+  frog: { label: 'Frog', texture: 'frog', lift: 13, hop: 30, ranOff: 'Ran off after the frog!' },
+  fox: { label: 'Fox', texture: 'fox', lift: 17, hop: 16, ranOff: 'Ran off after the fox!' },
+  cardinal: { label: 'Cardinal', texture: 'cardinal-1', anim: 'cardinal-flap', lift: 14, hop: 20, ranOff: 'Ran off after the cardinal!' },
+};
+
+/** Things that fly by out of reach. */
+const FLYERS: Partial<Record<GawkKind, { texture: string; y: number; ms: number; msg: string }>> = {
+  bird: { texture: 'bird', y: 230, ms: 4200, msg: 'Bird! Swipe up!' },
+  gull: { texture: 'gull', y: 230, ms: 4200, msg: 'Seagull! Swipe up!' },
+  pigeon: { texture: 'pigeon', y: 250, ms: 4600, msg: 'Pigeons! Swipe up!' },
+  duck: { texture: 'duck', y: 220, ms: 4000, msg: 'Ducks! Swipe up!' },
+  owl: { texture: 'owl', y: 200, ms: 5000, msg: 'An owl! Swipe up!' },
+};
 
 /** How each obstacle sits on the ground: its center's height above the ground, and how to beat it. */
 const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean }> = {
@@ -55,6 +71,15 @@ const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean }> = {
   driftwood: { lift: 13, slide: false },
   branch: { lift: 65, slide: true },
   umbrella: { lift: 66, slide: true },
+  trashcan: { lift: 23, slide: false },
+  hydrant: { lift: 19, slide: false },
+  sign: { lift: 22, slide: false },
+  awning: { lift: 64, slide: true },
+  stump: { lift: 18, slide: false },
+  creek: { lift: 5, slide: false },
+  snowman: { lift: 29, slide: false },
+  sled: { lift: 13, slide: false },
+  snowbranch: { lift: 65, slide: true },
 };
 
 /**
@@ -96,6 +121,7 @@ export class GameScene extends Phaser.Scene {
   private groundGfx!: Phaser.GameObjects.Graphics;
   private frameCache = new Map<string, string[]>();
   private darkSky = false;
+  private weather?: Phaser.GameObjects.Particles.ParticleEmitter;
 
   private baseSpeed = 300; // full running speed, rises over time
   private speedFactor = 1; // drops while the pet is distracted
@@ -161,10 +187,13 @@ export class GameScene extends Phaser.Scene {
 
     makeTextures(this);
     makeLevelArt(this);
+    makeLevelArt2(this);
     this.makeAnimations();
     this.choice = loadPet();
     makePetTextures(this, this.choice);
     this.drawBackground();
+    this.weather = undefined;
+    this.startWeather();
 
     // The ground is drawn fresh each frame so it can follow the hills
     this.groundGfx = this.add.graphics().setDepth(0.9);
@@ -656,6 +685,10 @@ export class GameScene extends Phaser.Scene {
     const t = this.level.theme;
     const g = this.groundGfx;
     g.clear();
+    if (t.tufts === 'street') {
+      this.drawStreet();
+      return;
+    }
     const step = 16;
     const tops: { x: number; y: number }[] = [];
     for (let x = -step; x <= GAME_WIDTH + step; x += step) tops.push({ x, y: this.groundAt(x) });
@@ -695,6 +728,14 @@ export class GameScene extends Phaser.Scene {
         g.fillTriangle(x, y + 1, x + 4, y - 7, x + 8, y + 1);
         if (n === 2 || n === 5) g.fillTriangle(x + 6, y + 1, x + 9, y - 5, x + 12, y + 1);
         if (n % 3 === 0) g.fillTriangle(x + 16, y + 64, x + 20, y + 56, x + 24, y + 64);
+      } else if (t.tufts === 'snow') {
+        // soft drifts on top, and a sparkle here and there
+        g.fillStyle(0xffffff, 1);
+        if (n === 2 || n === 5) g.fillEllipse(x + 12, y + 1, 22, 7);
+        if (n % 3 === 1) {
+          g.fillStyle(0xbfd6ff, 1);
+          g.fillCircle(x + 26, y + 60 + n, 1.6);
+        }
       } else {
         g.fillStyle(t.grassDark, 1);
         g.fillEllipse(x + 10, y + 8 + (n % 3) * 3, 16, 3);
@@ -709,13 +750,37 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Main Street: a sidewalk to run on, a curb, and the road below. */
+  private drawStreet(): void {
+    const t = this.level.theme;
+    const g = this.groundGfx;
+    const y = this.groundAt(0); // the street is flat
+    g.fillStyle(t.grass, 1);
+    g.fillRect(0, y, GAME_WIDTH, 24);
+    g.fillStyle(0xd3cfc8, 1);
+    g.fillRect(0, y, GAME_WIDTH, 3);
+    g.fillStyle(t.grassDark, 1);
+    g.fillRect(0, y + 24, GAME_WIDTH, 6);
+    g.fillStyle(t.dirt, 1);
+    g.fillRect(0, y + 30, GAME_WIDTH, GAME_HEIGHT - y - 30);
+    const off = this.distancePx;
+    // sidewalk seams
+    g.fillStyle(t.grassDark, 1);
+    for (let wx = Math.floor(off / 64) * 64; wx < off + GAME_WIDTH + 64; wx += 64) g.fillRect(wx - off, y + 3, 2, 21);
+    // lane paint
+    g.fillStyle(t.dirtDark, 1);
+    for (let wx = Math.floor(off / 140) * 140; wx < off + GAME_WIDTH + 140; wx += 140) g.fillRect(wx - off, y + 64, 60, 5);
+    // a storm drain now and then
+    g.fillStyle(0x3d3f44, 1);
+    for (let wx = Math.floor(off / 700) * 700; wx < off + GAME_WIDTH + 700; wx += 700) g.fillRect(wx - off + 300, y + 31, 40, 5);
+  }
+
   private updatePetPosition(): void {
     if (this.chasing) {
       this.petBody.setVelocityX(-DISTRACTION.chaseDriftSpeed);
       if (this.pet.x <= DISTRACTION.loseX) {
         const species = this.choice.species;
-        const what = CHASERS[species === 'cat' ? this.level.catChaser : this.level.dogChaser].label.toLowerCase();
-        this.endRun(`Ran off after the ${what}!`);
+        this.endRun(CHASERS[species === 'cat' ? this.level.catChaser : this.level.dogChaser].ranOff);
       }
     } else if (this.returning) {
       if (this.pet.x < PET.homeX - 4) {
@@ -791,12 +856,20 @@ export class GameScene extends Phaser.Scene {
       // The trunk stops just above the pet's head, so it can slide under the tree
       this.addDecor(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95));
       this.addDecor(this.add.image(x + 40, gy - 400, 'canopy').setDepth(0.96));
+    } else if (kind === 'snowbranch') {
+      this.addDecor(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setTint(0x8a7a70).setDepth(0.95));
+      this.addDecor(this.add.image(x + 40, gy - 400, 'snowcanopy').setDepth(0.96));
     } else if (kind === 'umbrella') {
       this.addDecor(this.add.image(x, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(6, 90).setDepth(0.95));
+    } else if (kind === 'awning') {
+      // A shop awning on two thin poles: slide under it
+      for (const dx of [-56, 56]) {
+        this.addDecor(this.add.image(x + dx, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(4, 86).setTint(0x2b2b3a).setDepth(0.95));
+      }
     }
     this.addObstacle(x, gy - o.lift, kind);
     if (o.slide) this.hint(`slide-${kind}`, 'Swipe down to slide under!');
-    else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : 'Tap to jump!');
+    else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : kind === 'creek' ? 'Jump the creek!' : 'Tap to jump!');
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
 
     // Gaps grow with speed so the game stays fair as it speeds up
@@ -908,10 +981,10 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private pickGawk(): 'bird' | 'den' | 'butterfly' | 'gull' {
+  private pickGawk(): GawkKind {
     const cat = this.choice.species === 'cat';
-    // Dogs stare into den holes; cats stare at butterflies
-    const options = this.level.gawk.filter((g) => (cat ? g !== 'den' : g !== 'butterfly'));
+    // Dogs stare into den holes and wave back at people; cats stare at butterflies
+    const options = this.level.gawk.filter((g) => (cat ? g !== 'den' && g !== 'person' : g !== 'butterfly'));
     return Phaser.Utils.Array.GetRandom(options.length ? options : ['bird']);
   }
 
@@ -940,7 +1013,7 @@ export class GameScene extends Phaser.Scene {
     // Fast enough that it has just dashed past the pet when the warning ends
     this.tweens.add({ targets: sq, x: -60, duration: 1300, onUpdate: place, onComplete: () => sq.destroy() });
     this.tweens.add({ targets: hop, h: c.hop, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
-    if (c.texture === 'crab') this.tweens.add({ targets: sq, angle: { from: -8, to: 8 }, duration: 90, yoyo: true, repeat: 7 });
+    if (c.texture === 'crab' || c.texture === 'frog') this.tweens.add({ targets: sq, angle: { from: -8, to: 8 }, duration: 90, yoyo: true, repeat: 7 });
 
     this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
@@ -951,18 +1024,28 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Something out of reach: a bird in the sky, a gull, a butterfly or a critter in a den hole. */
-  private startGawk(what: 'bird' | 'den' | 'butterfly' | 'gull'): void {
-    if (what === 'butterfly') {
+  private startGawk(what: GawkKind): void {
+    const flyer = FLYERS[what];
+    if (flyer) {
+      const bird = this.add.sprite(GAME_WIDTH + 40, flyer.y, `${flyer.texture}-0`).setDepth(1).setScale(1.3);
+      bird.play(`${flyer.texture}-flap`);
+      this.tweens.add({ targets: bird, x: -60, duration: flyer.ms, onComplete: () => bird.destroy() });
+      this.tweens.add({ targets: bird, y: flyer.y - 30, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      if (what === 'pigeon' || what === 'duck') {
+        // pigeons and ducks come in pairs
+        const two = this.add.sprite(GAME_WIDTH + 100, flyer.y + 24, `${flyer.texture}-1`).setDepth(1).setScale(1.1).play(`${flyer.texture}-flap`);
+        this.tweens.add({ targets: two, x: 0, duration: flyer.ms, onComplete: () => two.destroy() });
+      }
+    } else if (what === 'person') {
+      // A neighbor strolls by on the sidewalk and waves hello
+      const gy = this.groundAt(GAME_WIDTH + 40);
+      const p = this.add.sprite(GAME_WIDTH + 40, gy + 2, 'person-0').setOrigin(0.5, 1).setDepth(0.85).setScale(1.25).play('person-wave');
+      this.tweens.add({ targets: p, x: -60, duration: 5200, onComplete: () => p.destroy() });
+    } else if (what === 'butterfly') {
       const b = this.add.sprite(GAME_WIDTH + 30, 300, 'butterfly-0').setDepth(1).setScale(1.3);
       b.play('butterfly-flap');
       this.tweens.add({ targets: b, x: -60, duration: 5000, onComplete: () => b.destroy() });
       this.tweens.add({ targets: b, y: 250, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    } else if (what === 'bird' || what === 'gull') {
-      const key = what === 'gull' ? 'gull' : 'bird';
-      const bird = this.add.sprite(GAME_WIDTH + 40, 230, `${key}-0`).setDepth(1).setScale(1.3);
-      bird.play(`${key}-flap`);
-      this.tweens.add({ targets: bird, x: -60, duration: 4200, onComplete: () => bird.destroy() });
-      this.tweens.add({ targets: bird, y: 200, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else {
       // A den hole on the hillside, drifting by slower than the trail (it's farther away)
       const gy = this.groundAt(GAME_WIDTH + 60);
@@ -974,8 +1057,8 @@ export class GameScene extends Phaser.Scene {
 
     this.warn('gawk', '?', DISTRACTION.gawkWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.gawkSpeedFactor, 500);
-      const msg = { bird: 'Bird! Swipe up!', gull: 'Seagull! Swipe up!', den: 'Something in that hole! Swipe up!', butterfly: 'Butterfly! Swipe up!' };
-      this.toast(msg[what], '#d6402b');
+      const msg = flyer?.msg ?? { den: 'Something in that hole! Swipe up!', butterfly: 'Butterfly! Swipe up!', person: 'Someone waving! Swipe up!' }[what as string] ?? 'Look! Swipe up!';
+      this.toast(msg, '#d6402b');
       this.petSound(1);
       // Eventually the pet loses interest by itself, but you lose the time
       this.distractionTimer = this.time.delayedCall(DISTRACTION.gawkMaxMs, () => this.clearDistraction());
@@ -1084,7 +1167,7 @@ export class GameScene extends Phaser.Scene {
   private dust(count: number): void {
     const x = this.pet.x - this.petW / 3;
     const y = this.pet.y + this.pet.height / 2 - 3;
-    const color = this.level.theme.tufts === 'sand' ? 0xf3dfae : 0xd9c3a0;
+    const color = { sand: 0xf3dfae, snow: 0xffffff, street: 0xc8c4bd, grass: 0xd9c3a0 }[this.level.theme.tufts];
     for (let i = 0; i < count; i++) {
       const puff = this.add.circle(x + Phaser.Math.Between(-8, 8), y, Phaser.Math.Between(3, 6), color, 0.8).setDepth(1.5);
       this.tweens.add({
@@ -1221,6 +1304,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.pauseAll();
     this.time.paused = true;
     this.anims.pauseAll();
+    this.weather?.pause();
     this.tweens.killTweensOf(this.toastText);
     this.toastText.setAlpha(0);
     this.centerText.setFontSize(30).setText('Paused\n\nTap or press Space to keep going');
@@ -1234,6 +1318,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.resumeAll();
     this.time.paused = false;
     this.anims.resumeAll();
+    this.weather?.resume();
     this.centerText.setText('');
     this.pauseBtn?.setText('\u23F8\uFE0F');
     this.startedAt = this.time.now;
@@ -1272,28 +1357,84 @@ export class GameScene extends Phaser.Scene {
     const sky = this.add.graphics();
     sky.fillGradientStyle(t.skyTop, t.skyTop, t.skyBottom, t.skyBottom, 1);
     sky.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    // Sun with a soft glow and slow-turning rays
-    const rays = this.add.image(t.sun.x, t.sun.y, 'rays').setScale((t.sun.r * 4) / 400).setAlpha(this.level.id === 3 ? 0.7 : 0.4);
-    this.tweens.add({ targets: rays, angle: 360, duration: 90000, repeat: -1 });
-    this.add.circle(t.sun.x, t.sun.y, t.sun.r * 1.35, t.sun.glow, 0.25);
-    this.add.circle(t.sun.x, t.sun.y, t.sun.r, t.sun.color);
-    this.addLayer('clouds', 20, 160, 0.08).setAlpha(this.level.id === 3 ? 0.55 : 1);
-    if (t.far === 'sea') {
-      this.addLayer('sea', 440 - 130, 130, 0.05);
-      // The low sun's reflection stays put on the water while the waves drift
-      for (let i = 0; i < 9; i++) {
-        const w = t.sun.r * (1.5 - i * 0.12);
-        const glint = this.add.rectangle(t.sun.x, 322 + i * 12, w, 4, 0xffd27a, 0.75 - i * 0.06);
-        this.tweens.add({ targets: glint, scaleX: { from: 0.8, to: 1.15 }, duration: 900 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (t.night) this.addStars();
+    if (t.sun) {
+      const sun = t.sun;
+      // Sun with a soft glow and slow-turning rays (or the moon, on a night level)
+      if (t.raysAlpha > 0) {
+        const rays = this.add.image(sun.x, sun.y, 'rays').setScale((sun.r * 4) / 400).setAlpha(t.raysAlpha);
+        this.tweens.add({ targets: rays, angle: 360, duration: 90000, repeat: -1 });
       }
-    } else {
-      const h = t.far === 'mountains' ? 260 : 220;
-      this.addLayer(t.far, 440 - h, h, 0.2);
+      this.add.circle(sun.x, sun.y, sun.r * 1.9, sun.glow, 0.12);
+      this.add.circle(sun.x, sun.y, sun.r * 1.35, sun.glow, 0.25);
+      this.add.circle(sun.x, sun.y, sun.r, sun.color);
+      if (t.night) {
+        // a few soft craters
+        for (const [dx, dy, r] of [[-12, -8, 7], [10, 6, 9], [-4, 16, 5], [14, -14, 4]]) this.add.circle(sun.x + dx, sun.y + dy, r, 0xd9d6c0, 0.7);
+      }
     }
-    // A pale haze between the far and near layers adds depth
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, t.haze, 0.12).setOrigin(0, 0);
-    const midH = t.mid === 'palms' ? 220 : t.mid === 'pines' ? 170 : 150;
-    this.addLayer(t.mid, 440 - midH - (this.level.hills.height > 0 ? 30 : 0), midH, 0.45);
+    const clouds = this.addLayer('clouds', 20, 160, 0.08).setAlpha(t.cloudsAlpha);
+    if (t.cloudTint !== undefined) clouds.setTint(t.cloudTint);
+    t.layers.forEach((l, i) => {
+      const tile = this.addLayer(l.key, GROUND_Y - l.h - (l.lift ?? 0), l.h, l.factor);
+      if (l.tint !== undefined) tile.setTint(l.tint);
+      if (i > 0) return;
+      if (t.sunGlint && t.sun) {
+        // The low sun's reflection stays put on the water while the waves drift
+        for (let k = 0; k < 9; k++) {
+          const w = t.sun.r * (1.5 - k * 0.12);
+          const glint = this.add.rectangle(t.sun.x, 322 + k * 12, w, 4, 0xffd27a, 0.75 - k * 0.06);
+          this.tweens.add({ targets: glint, scaleX: { from: 0.8, to: 1.15 }, duration: 900 + k * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        }
+      }
+      // A pale haze between the far and near layers adds depth
+      this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, t.haze, 0.12).setOrigin(0, 0);
+    });
+    // Dusk and night get a soft wash over everything behind the trail
+    if (t.night) this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0f1a3a, 0.18).setOrigin(0, 0);
+  }
+
+  /** Twinkling stars for a night sky. */
+  private addStars(): void {
+    const rand = new Phaser.Math.RandomDataGenerator(['stars']);
+    for (let i = 0; i < 70; i++) {
+      const star = this.add.circle(rand.between(0, GAME_WIDTH), rand.between(0, 300), rand.realInRange(0.7, 1.8), 0xffffff, rand.realInRange(0.4, 0.95));
+      if (i % 4 === 0) this.tweens.add({ targets: star, alpha: 0.15, duration: rand.between(700, 1800), yoyo: true, repeat: -1, delay: rand.between(0, 1500) });
+    }
+  }
+
+  /** Rain or snow falling in front of everything but the score. */
+  private startWeather(): void {
+    const w = this.level.theme.weather;
+    if (w === 'rain') {
+      this.weather = this.add
+        .particles(0, -20, 'raindrop', {
+          x: { min: -60, max: GAME_WIDTH + 200 },
+          speedY: { min: 760, max: 920 },
+          speedX: { min: -190, max: -150 },
+          rotate: 11,
+          lifespan: 800,
+          frequency: 14,
+          quantity: 2,
+          alpha: { min: 0.3, max: 0.65 },
+        })
+        .setDepth(3);
+    } else if (w === 'snow') {
+      this.weather = this.add
+        .particles(0, -10, 'snowflake', {
+          x: { min: -40, max: GAME_WIDTH + 260 },
+          speedY: { min: 40, max: 95 },
+          speedX: { min: -90, max: -30 },
+          scale: { min: 0.35, max: 1 },
+          alpha: { min: 0.6, max: 1 },
+          lifespan: 9000,
+          frequency: 55,
+          quantity: 1,
+        })
+        .setDepth(3);
+      // Start with the sky already full of snow
+      this.weather.fastForward(9000, 50);
+    }
   }
 
   private addLayer(key: string, y: number, h: number, factor: number): Phaser.GameObjects.TileSprite {
@@ -1309,5 +1450,10 @@ export class GameScene extends Phaser.Scene {
     flap('butterfly-flap', ['butterfly-0', 'butterfly-1'], 10);
     flap('bird-flap', ['bird-0', 'bird-1'], 8);
     flap('gull-flap', ['gull-0', 'gull-1'], 6);
+    flap('pigeon-flap', ['pigeon-0', 'pigeon-1'], 9);
+    flap('duck-flap', ['duck-0', 'duck-1'], 8);
+    flap('owl-flap', ['owl-0', 'owl-1'], 4);
+    flap('cardinal-flap', ['cardinal-0', 'cardinal-1'], 9);
+    flap('person-wave', ['person-0', 'person-1'], 4);
   }
 }

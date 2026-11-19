@@ -27,6 +27,9 @@ Until the live generator is switched on, the game makes a stand-in portrait on t
 | 1 | Park Trail | 600 m | Fences, puddles, low branches. Squirrels (dogs) and birds (cats). |
 | 2 | Hilltop Trail | 800 m | Rolling hills. Logs and rocks to jump. Bunnies to chase. |
 | 3 | Sunset Beach | 1000 m | Gentle dunes at sunset. Sandcastles, driftwood, beach umbrellas to slide under. Crabs and seagulls. |
+| 4 | Main Street | 1000 m | Downtown at dusk under the street lamps. Trash cans, hydrants and sidewalk signs to jump, shop awnings to slide under. Dogs chase a cat, cats run from a dog, pigeons fly over, and neighbors wave hello (dogs only). |
+| 5 | Rainy Riverside | 1100 m | Rain, willows and a river. Stumps and creeks to jump. Frogs hop past, ducks fly over. |
+| 6 | Snowy Night | 1200 m | Moonlight, stars and falling snow. Snowmen and sleds to jump, snowy branches to slide under. A fox (dogs) or a cardinal (cats), and owls overhead. |
 
 Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`; their art is in `src/art/levelArt.ts`.
 

@@ -6,24 +6,47 @@ import { GROUND_Y } from './config';
  * art in src/art/levelArt.ts).
  */
 
-export type ObstacleKind = 'fence' | 'puddle' | 'branch' | 'log' | 'rock' | 'sandcastle' | 'driftwood' | 'umbrella';
+export type ObstacleKind =
+  | 'fence' | 'puddle' | 'branch' | 'log' | 'rock' | 'sandcastle' | 'driftwood' | 'umbrella'
+  | 'trashcan' | 'hydrant' | 'sign' | 'awning' | 'stump' | 'creek' | 'snowman' | 'sled' | 'snowbranch';
+
+export type ChaserKind = 'squirrel' | 'rabbit' | 'crab' | 'bird' | 'cat' | 'dog' | 'frog' | 'fox' | 'cardinal';
+export type GawkKind = 'bird' | 'den' | 'butterfly' | 'gull' | 'pigeon' | 'person' | 'duck' | 'owl';
+
+/** One scrolling background layer: texture, height in px, scroll speed vs. the trail. */
+export interface Layer {
+  key: string;
+  h: number;
+  factor: number;
+  tint?: number;
+  /** Raise the layer this many px above the usual horizon (for hilly levels). */
+  lift?: number;
+}
 
 export interface Theme {
   skyTop: number;
   skyBottom: number;
-  sun: { x: number; y: number; r: number; color: number; glow: number };
-  /** Background layer texture keys, far to near. */
-  far: string;
-  mid: string;
-  near?: string;
+  /** The sun (or the moon on a night level). Leave out for an overcast sky. */
+  sun?: { x: number; y: number; r: number; color: number; glow: number };
+  /** Background layers, far to near. A haze goes between the first and the rest. */
+  layers: Layer[];
+  /** Sun reflection on the water (the beach). */
+  sunGlint?: boolean;
+  /** How strong the slow-turning sun rays are (0 = none). */
+  raysAlpha: number;
+  cloudsAlpha: number;
+  cloudTint?: number;
+  /** Stars twinkle in the sky. */
+  night?: boolean;
+  weather?: 'rain' | 'snow';
   grass: number;
   grassDark: number;
   dirt: number;
   dirtDark: number;
   /** Tint used for the pale "sky haze" over the farthest layer. */
   haze: number;
-  /** Little marks drawn along the ground: grass tufts or sand ripples. */
-  tufts: 'grass' | 'sand';
+  /** Little marks drawn along the ground. 'street' draws a sidewalk and road instead of a dirt path. */
+  tufts: 'grass' | 'sand' | 'street' | 'snow';
 }
 
 export interface LevelDef {
@@ -37,11 +60,11 @@ export interface LevelDef {
   /** Height of the hills in px (0 = flat) and how long one hill is. */
   hills: { height: number; length: number };
   /** What dashes past on the trail: dogs chase this... */
-  dogChaser: 'squirrel' | 'rabbit' | 'crab';
+  dogChaser: ChaserKind;
   /** ...and cats chase this. */
-  catChaser: 'bird' | 'crab';
+  catChaser: ChaserKind;
   /** Out-of-reach distractions. */
-  gawk: ('bird' | 'den' | 'butterfly' | 'gull')[];
+  gawk: GawkKind[];
   theme: Theme;
 }
 
@@ -61,8 +84,12 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x8fd3ff,
       skyBottom: 0xdff3ff,
       sun: { x: 820, y: 90, r: 44, color: 0xffe08a, glow: 0xffe08a },
-      far: 'hills',
-      mid: 'bushes',
+      layers: [
+        { key: 'hills', h: 220, factor: 0.2 },
+        { key: 'bushes', h: 150, factor: 0.45 },
+      ],
+      raysAlpha: 0.4,
+      cloudsAlpha: 1,
       grass: 0x6fbf5a,
       grassDark: 0x58a446,
       dirt: 0xb98b5a,
@@ -86,8 +113,12 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x6fb8f0,
       skyBottom: 0xfbe9c8,
       sun: { x: 760, y: 120, r: 46, color: 0xffd36b, glow: 0xffc14d },
-      far: 'mountains',
-      mid: 'pines',
+      layers: [
+        { key: 'mountains', h: 260, factor: 0.2 },
+        { key: 'pines', h: 170, factor: 0.45, lift: 30 },
+      ],
+      raysAlpha: 0.4,
+      cloudsAlpha: 1,
       grass: 0x7dbd4f,
       grassDark: 0x5f9c3a,
       dirt: 0xa77b52,
@@ -111,14 +142,112 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x5a4a9c,
       skyBottom: 0xffb36b,
       sun: { x: 700, y: 230, r: 62, color: 0xffd27a, glow: 0xff8a5c },
-      far: 'sea',
-      mid: 'palms',
+      layers: [
+        { key: 'sea', h: 130, factor: 0.05 },
+        { key: 'palms', h: 220, factor: 0.45, lift: 30 },
+      ],
+      sunGlint: true,
+      raysAlpha: 0.7,
+      cloudsAlpha: 0.55,
       grass: 0xf1d79a,
       grassDark: 0xe0bf78,
       dirt: 0xdcb46e,
       dirtDark: 0xc79c55,
       haze: 0xffc89a,
       tufts: 'sand',
+    },
+  },
+  {
+    id: 4,
+    name: 'Main Street',
+    tagline: 'Downtown at dusk, lights coming on',
+    goalMeters: 1000,
+    speed: { start: 330, max: 790, gainPerSecond: 7 },
+    obstacles: { trashcan: 3, hydrant: 3, sign: 2, awning: 3 },
+    hills: { height: 0, length: 1 },
+    dogChaser: 'cat',
+    catChaser: 'dog',
+    gawk: ['pigeon', 'person'],
+    theme: {
+      skyTop: 0x3d3f7a,
+      skyBottom: 0xf2a07a,
+      sun: { x: 300, y: 300, r: 50, color: 0xffc27a, glow: 0xff8a5c },
+      layers: [
+        { key: 'town', h: 240, factor: 0.15 },
+        { key: 'lamps', h: 190, factor: 0.45 },
+      ],
+      raysAlpha: 0.25,
+      cloudsAlpha: 0.45,
+      cloudTint: 0xf3c6c0,
+      grass: 0xb9b4ad, // sidewalk
+      grassDark: 0x8f8a84, // curb
+      dirt: 0x55575d, // road
+      dirtDark: 0xe8c547, // lane paint
+      haze: 0xf2a07a,
+      tufts: 'street',
+    },
+  },
+  {
+    id: 5,
+    name: 'Rainy Riverside',
+    tagline: 'Splash along the river in the rain',
+    goalMeters: 1100,
+    speed: { start: 340, max: 800, gainPerSecond: 7.5 },
+    obstacles: { stump: 3, creek: 3, log: 2, rock: 2, branch: 3 },
+    hills: { height: 40, length: 1300 },
+    dogChaser: 'frog',
+    catChaser: 'frog',
+    gawk: ['duck', 'den'],
+    theme: {
+      skyTop: 0x7d8a99,
+      skyBottom: 0xc9d3d9,
+      layers: [
+        { key: 'mountains', h: 260, factor: 0.12, tint: 0x9fb2a8 },
+        { key: 'willows', h: 190, factor: 0.3, lift: 50 },
+        { key: 'river', h: 80, factor: 0.45 },
+      ],
+      raysAlpha: 0,
+      cloudsAlpha: 0.9,
+      cloudTint: 0xaab4bd,
+      weather: 'rain',
+      grass: 0x5f9e4f,
+      grassDark: 0x4a8240,
+      dirt: 0x7a5a3c,
+      dirtDark: 0x5f4630,
+      haze: 0xc9d3d9,
+      tufts: 'grass',
+    },
+  },
+  {
+    id: 6,
+    name: 'Snowy Night',
+    tagline: 'A moonlit dash through the snow',
+    goalMeters: 1200,
+    speed: { start: 350, max: 820, gainPerSecond: 8 },
+    obstacles: { snowman: 3, sled: 3, snowbranch: 3, rock: 1 },
+    hills: { height: 60, length: 1600 },
+    dogChaser: 'fox',
+    catChaser: 'cardinal',
+    gawk: ['owl', 'den'],
+    theme: {
+      skyTop: 0x0f1a3a,
+      skyBottom: 0x34477a,
+      sun: { x: 760, y: 100, r: 38, color: 0xf4f1dc, glow: 0xc9d6ff },
+      layers: [
+        { key: 'mountains', h: 260, factor: 0.2, tint: 0x6f7fa8 },
+        { key: 'snowpines', h: 190, factor: 0.45, lift: 30 },
+      ],
+      raysAlpha: 0,
+      cloudsAlpha: 0.25,
+      cloudTint: 0x9fb0d6,
+      night: true,
+      weather: 'snow',
+      grass: 0xf4f7fb,
+      grassDark: 0xcfd8e6,
+      dirt: 0xdfe6f0,
+      dirtDark: 0xb9c4d4,
+      haze: 0x34477a,
+      tufts: 'snow',
     },
   },
 ];

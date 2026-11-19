@@ -266,9 +266,10 @@
   flex-direction: column;
   align-items: center;
   gap: 0.1em;
-  padding: 0.45em 0.3em;
+  padding: 0.6em 0.3em 0.45em;
   border-radius: 12px;
   border: 2px solid var(--aged);
+  overflow: hidden;
   background: #fff;
   cursor: pointer;
   color: var(--ink);
@@ -336,6 +337,12 @@
   #ui .setup .runner { height: 12vh; }
   #ui .actions { margin-top: 0.4em; }
   #ui .btn { padding: 0.45em 1em; }
+  /* Six level tiles: drop the taglines and tighten them up */
+  #ui .level { padding: 0.45em 0.2em 0.25em; gap: 0; }
+  #ui .level small.tag { display: none; }
+  #ui .level b { font-size: 1em; }
+  #ui .home .runner { height: 11vh; }
+  #ui .levels { margin-top: 0.4em; gap: 0.35em; }
 }
 
 /* Stars */
@@ -352,3 +359,8 @@
 #ui .goals li::before { content: '○ '; }
 #ui .goals li.ok { color: var(--green); font-weight: bold; }
 #ui .goals li.ok::before { content: '✓ '; }
+
+/* Very small phones (iPhone SE sideways): the level map needs the room */
+@media (max-height: 340px) {
+  #ui .home .runner { display: none; }
+}

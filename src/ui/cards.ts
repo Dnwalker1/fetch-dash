@@ -321,11 +321,14 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
     const locked = l.id > p.unlocked;
     const best = p.best[l.id];
     const done = p.done.includes(l.id);
-    return `<button class="level${locked ? ' locked' : ''}${l.id === p.current ? ' on' : ''}" data-level="${l.id}" ${locked ? 'disabled' : ''}>
+    // A thin strip in the trail's own colors along the top of each tile
+    const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+    const strip = `background: linear-gradient(90deg, ${hex(l.theme.skyTop)}, ${hex(l.theme.skyBottom)} 65%, ${hex(l.theme.grass)}) top / 100% 7px no-repeat, #fff`;
+    return `<button class="level${locked ? ' locked' : ''}${l.id === p.current ? ' on' : ''}" data-level="${l.id}" style="${strip}" ${locked ? 'disabled' : ''}>
       <b>${locked ? '🔒' : done ? '✅' : l.id}</b>
       <span>${l.name}</span>
       ${!locked && done ? `<em class="stars">${starRow(p.stars[l.id] ?? 0)}</em>` : ''}
-      <small>${locked ? `Finish Level ${l.id - 1}` : best ? `Best ${best}` : l.tagline}</small>
+      <small${!locked && !best ? ' class="tag"' : ''}>${locked ? `Finish Level ${l.id - 1}` : best ? `Best ${best}` : l.tagline}</small>
     </button>`;
   }).join('');
 
