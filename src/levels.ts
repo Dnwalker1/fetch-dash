@@ -167,10 +167,11 @@ export interface Progress {
   current: number; // the level to start on
   best: Record<number, number>;
   done: number[]; // levels finished at least once
+  stars: Record<number, number>; // most stars earned on each level (0-3)
 }
 
 export function loadProgress(): Progress {
-  const fresh: Progress = { unlocked: 1, current: 1, best: {}, done: [] };
+  const fresh: Progress = { unlocked: 1, current: 1, best: {}, done: [], stars: {} };
   try {
     const raw = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? 'null');
     if (raw && typeof raw.unlocked === 'number') {
@@ -179,6 +180,7 @@ export function loadProgress(): Progress {
         current: Math.min(LEVELS.length, Math.max(1, raw.current ?? 1)),
         best: raw.best ?? {},
         done: Array.isArray(raw.done) ? raw.done : [],
+        stars: raw.stars ?? {},
       };
     }
     // Carry over the best score from before there were levels
@@ -197,3 +199,6 @@ export function saveProgress(p: Progress): void {
     // Not remembered; fine
   }
 }
+
+/** Share of a level's treats needed for the treat star. */
+export const TREAT_STAR_SHARE = 0.7;

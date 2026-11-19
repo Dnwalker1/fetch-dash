@@ -31,6 +31,14 @@ export interface RunResult {
   newBest: boolean;
   meters: number;
   treats: number;
+  treatsTotal: number;
+  goals: { finish: boolean; treats: boolean; clean: boolean };
+  stars: number;
+  bestStars: number;
+}
+
+function starRow(n: number): string {
+  return [0, 1, 2].map((i) => `<i class="star${i < n ? ' on' : ''}">★</i>`).join('');
 }
 
 const SHOP = 'https://www.goodwookie.com/design-your-pet';
@@ -316,6 +324,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
     return `<button class="level${locked ? ' locked' : ''}${l.id === p.current ? ' on' : ''}" data-level="${l.id}" ${locked ? 'disabled' : ''}>
       <b>${locked ? '🔒' : done ? '✅' : l.id}</b>
       <span>${l.name}</span>
+      ${!locked && done ? `<em class="stars">${starRow(p.stars[l.id] ?? 0)}</em>` : ''}
       <small>${locked ? `Finish Level ${l.id - 1}` : best ? `Best ${best}` : l.tagline}</small>
     </button>`;
   }).join('');
@@ -374,6 +383,14 @@ export function openEnd(host: CardHost, res: RunResult): void {
         <div class="col right">
           <h1>${title}</h1>
           <p class="lead">${level.name}${res.won && !next ? ' · You finished every level!' : ''}</p>
+          <div class="goals">
+            <div class="bigstars">${starRow(res.stars)}</div>
+            <ul>
+              <li class="${res.goals.finish ? 'ok' : ''}">Catch the ball</li>
+              <li class="${res.goals.treats ? 'ok' : ''}">Grab most of the treats (${res.treats} of ${res.treatsTotal})</li>
+              <li class="${res.goals.clean ? 'ok' : ''}">No bumps</li>
+            </ul>
+          </div>
           <div class="stats">
             <div><b>${res.score}</b><span>Score${res.newBest ? ' · new best!' : ''}</span></div>
             <div><b>${Math.min(res.meters, level.goalMeters)} m</b><span>Distance</span></div>

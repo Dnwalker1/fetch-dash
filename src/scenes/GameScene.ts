@@ -4,7 +4,7 @@ import { makeLevelArt } from '../art/levelArt';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, PET, SCORE, SPAWN } from '../config';
-import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, type LevelDef, type ObstacleKind, type Progress } from '../levels';
+import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
 
@@ -26,6 +26,16 @@ interface Distraction {
 }
 
 const SWIPE_PX = 30; // screen pixels
+/** Obstacle hit areas as a share of the picture (see addObstacle). */
+const HITBOX = { width: 0.72, height: 0.8 };
+/** A jump pressed this soon before landing happens on landing. */
+const JUMP_BUFFER_MS = 150;
+/** A jump still works this soon after running off the top of a hill. */
+const COYOTE_MS = 110;
+/** Bumps a run can take: the first ones make the pet stumble, the last one ends the run. */
+const PAWS = 3;
+/** After a stumble, the pet can't be bumped again for this long. */
+const STUMBLE_SAFE_MS = 1500;
 const PET_COLOR = 0xa86b3c;
 
 const CHASERS = {
@@ -65,6 +75,15 @@ export class GameScene extends Phaser.Scene {
   private petH = PET.height;
   private grounded = true;
   private lastJumpAt = -1000;
+  private lastGroundedAt = 0;
+  private jumpQueuedAt = -1000;
+  private paws = PAWS;
+  private safeUntil = 0;
+  private pawIcons: Phaser.GameObjects.Text[] = [];
+  private paused = false;
+  private treatsSpawned = 0;
+  private swipeArrow!: Phaser.GameObjects.Container;
+  private pauseBtn?: Phaser.GameObjects.Text;
   private startedAt = 0;
   private uiTap = false; // set when a tap lands on a game button, so it doesn't also jump or start
   private heroBtn?: Phaser.GameObjects.Container;
@@ -125,6 +144,7 @@ export class GameScene extends Phaser.Scene {
     this.speedFactor = 1;
     this.distancePx = 0;
     this.treatCount = 0;
+    this.treatsSpawned = 0;
     this.bonus = 0;
     this.nextSpawnIn = 600;
     this.ballSpawned = false;
@@ -135,6 +155,9 @@ export class GameScene extends Phaser.Scene {
     this.layers = [];
     this.shownHints = new Set<string>();
     this.heroBtn = undefined;
+    this.paws = PAWS;
+    this.safeUntil = 0;
+    this.paused = false;
 
     makeTextures(this);
     makeLevelArt(this);
@@ -160,7 +183,7 @@ export class GameScene extends Phaser.Scene {
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
     this.treats = this.physics.add.group({ allowGravity: false });
     this.decor = this.physics.add.group({ allowGravity: false });
-    this.physics.add.overlap(this.pet, this.obstacles, () => this.endRun('Bonk!'));
+    this.physics.add.overlap(this.pet, this.obstacles, () => this.bump());
     this.physics.add.overlap(this.pet, this.treats, (_p, t) => this.collectTreat(t as Img));
 
     // HUD
@@ -196,6 +219,8 @@ export class GameScene extends Phaser.Scene {
     this.drawGround();
     this.updatePetSprite();
     this.addMuteButton();
+    this.addPauseAndPaws();
+    this.swipeArrow = this.makeSwipeArrow();
     this.setupInput();
 
     // First visit: make your hero. After that: meet your hero and pick a
@@ -251,10 +276,11 @@ export class GameScene extends Phaser.Scene {
 
   private setupInput(): void {
     const keys = this.input.keyboard;
-    keys?.on('keydown-SPACE', () => {
+    keys?.on('keydown-SPACE', (e: KeyboardEvent) => {
       if (cardsOpen()) return;
-      if (this.state === 'ready') this.startRun();
-      else this.onTap();
+      if (this.paused) this.resume();
+      else if (this.state === 'ready') this.startRun();
+      else this.withTime(e, () => this.onTap());
     });
     this.downKey = keys?.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN, false);
     keys?.on('keydown-DOWN', (e: KeyboardEvent) => {
@@ -262,10 +288,22 @@ export class GameScene extends Phaser.Scene {
       // Holding the key fires it over and over. Those repeats only keep a
       // slide going; they never start one or pull the pet out of a jump.
       if (e.repeat) this.holdSlide();
-      else this.onSwipeDown();
+      else this.withTime(e, () => this.onSwipeDown());
     });
-    keys?.on('keydown-UP', () => !cardsOpen() && this.onSwipeUp());
+    keys?.on('keydown-UP', (e: KeyboardEvent) => !cardsOpen() && this.withTime(e, () => this.onSwipeUp()));
     keys?.on('keydown', () => sfx.unlock());
+    keys?.on('keydown-P', () => !cardsOpen() && this.togglePause());
+    keys?.on('keydown-ESC', () => !cardsOpen() && this.togglePause());
+    // Pause by itself when the phone rings, the tab is hidden or the window loses focus
+    const autoPause = () => {
+      if (document.hidden || !document.hasFocus()) this.pause();
+    };
+    document.addEventListener('visibilitychange', autoPause);
+    window.addEventListener('blur', autoPause);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      document.removeEventListener('visibilitychange', autoPause);
+      window.removeEventListener('blur', autoPause);
+    });
 
     // Touch and mouse are read straight from the page, in screen pixels.
     // Listening on the whole window means a swipe works anywhere on the
@@ -345,6 +383,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (cardsOpen()) return;
+    if (this.paused) {
+      this.resume();
+      return;
+    }
     if (this.state === 'ready') {
       this.startRun();
       return;
@@ -354,28 +396,33 @@ export class GameScene extends Phaser.Scene {
     if (this.chasing) {
       // A pet running the wrong way doesn't listen yet, but remember the jump
       // so it happens the moment the pet is called back.
-      this.pendingMove = { kind: 'jump', at: performance.now() };
+      this.pendingMove = { kind: 'jump', at: this.clock() };
       return;
     }
+    const now = this.clock();
     if (this.grounded) this.jump();
+    // Just ran off the top of a hill: still counts as on the ground
+    else if (now - this.lastGroundedAt < COYOTE_MS && now - this.lastJumpAt > 250) this.jump();
+    // Still in the air: remember it and jump on landing
+    else this.jumpQueuedAt = now;
   }
 
   private jump(): void {
     this.stopSlide();
     this.grounded = false;
-    this.lastJumpAt = performance.now();
+    this.lastJumpAt = this.clock();
     this.petBody.setVelocityY(PET.jumpVelocity);
     sfx.jump();
   }
 
   private onSwipeDown(): void {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' || this.paused) return;
     if (this.chasing) {
-      this.pendingMove = { kind: 'slide', at: performance.now() };
+      this.pendingMove = { kind: 'slide', at: this.clock() };
       return;
     }
     // Down pressed at almost the same moment as a jump: the jump wins
-    if (!this.grounded && performance.now() - this.lastJumpAt < 200) return;
+    if (!this.grounded && this.clock() - this.lastJumpAt < 200) return;
     if (!this.grounded) {
       // Fast-fall when in the air
       this.petBody.setVelocityY(900);
@@ -383,12 +430,31 @@ export class GameScene extends Phaser.Scene {
     this.startSlide();
   }
 
+  /**
+   * When the press really happened. The game reads key presses once per
+   * frame, so on a busy computer two presses a moment apart can be handled
+   * further apart; the key event's own timestamp keeps them honest.
+   */
+  private eventTime?: number;
+  private clock(): number {
+    return this.eventTime ?? performance.now();
+  }
+
+  private withTime(e: KeyboardEvent, fn: () => void): void {
+    this.eventTime = e.timeStamp || undefined;
+    try {
+      fn();
+    } finally {
+      this.eventTime = undefined;
+    }
+  }
+
   private holdSlide(): void {
-    if (this.state === 'playing' && this.sliding && this.grounded && !this.chasing) this.slideLeftPx = PET.slideDistance;
+    if (this.state === 'playing' && !this.paused && this.sliding && this.grounded && !this.chasing) this.slideLeftPx = PET.slideDistance;
   }
 
   private onSwipeUp(): void {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' || this.paused) return;
     if (this.distraction) this.callBack();
   }
 
@@ -426,12 +492,16 @@ export class GameScene extends Phaser.Scene {
     this.centerText.setText('');
     this.heroBtn?.destroy();
     this.heroBtn = undefined;
+    this.pauseBtn?.setVisible(true);
     this.scheduleDistraction(DISTRACTION.firstAfterMs);
   }
 
   private endRun(reason: string, won = false): void {
     if (this.state !== 'playing') return;
     this.state = 'over';
+    this.pauseBtn?.setVisible(false);
+    this.tweens.killTweensOf(this.petSprite);
+    this.petSprite.setAlpha(1);
     this.physics.pause();
     // Freeze what is moving now, but leave the tween manager running so the
     // finish effects (confetti) can still animate.
@@ -441,6 +511,7 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
+    this.swipeArrow.setVisible(false);
     this.petSprite.anims.pause();
     if (!won) this.petSprite.setTint(0x999999);
     if (won) {
@@ -461,6 +532,13 @@ export class GameScene extends Phaser.Scene {
       this.best = score;
       this.progress.best[id] = score;
     }
+    const goals = {
+      finish: won,
+      treats: this.treatsSpawned > 0 && this.treatCount >= Math.ceil(this.treatsSpawned * TREAT_STAR_SHARE),
+      clean: this.paws === PAWS,
+    };
+    const stars = won ? 1 + Number(goals.treats) + Number(goals.clean) : 0;
+    this.progress.stars[id] = Math.max(this.progress.stars[id] ?? 0, stars);
     if (won) {
       if (!this.progress.done.includes(id)) this.progress.done.push(id);
       this.progress.unlocked = Math.max(this.progress.unlocked, Math.min(LEVELS.length, id + 1));
@@ -479,6 +557,10 @@ export class GameScene extends Phaser.Scene {
         newBest,
         meters: this.meters(),
         treats: this.treatCount,
+        treatsTotal: this.treatsSpawned,
+        goals,
+        stars,
+        bestStars: this.progress.stars[id] ?? 0,
       });
     });
   }
@@ -488,9 +570,10 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMs: number): void {
     this.keepOnGround();
     this.alertText.setPosition(this.pet.x, this.pet.y - 62);
+    this.swipeArrow.setPosition(this.pet.x + 46, this.pet.y - 66);
     this.updatePetSprite();
     this.drawGround();
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' || this.paused) return;
     const dt = deltaMs / 1000;
 
     const sp = this.level.speed;
@@ -554,9 +637,16 @@ export class GameScene extends Phaser.Scene {
     const gy = this.groundAt(this.pet.x);
     const stick = this.grounded && b.velocity.y >= 0 ? 12 : 0;
     if (b.bottom >= gy - stick) {
+      const landed = !this.grounded;
       b.y = gy - b.height;
       if (b.velocity.y > 0) b.velocity.y = 0;
       this.grounded = true;
+      this.lastGroundedAt = this.clock();
+      // A jump pressed just before touching down happens now
+      if (landed && this.state === 'playing' && !this.chasing && this.clock() - this.jumpQueuedAt < JUMP_BUFFER_MS) {
+        this.jumpQueuedAt = -1000;
+        this.jump();
+      }
     } else {
       this.grounded = false;
     }
@@ -726,9 +816,24 @@ export class GameScene extends Phaser.Scene {
     body.setAllowGravity(false);
     body.setImmovable(true);
     body.setVelocityX(-this.speed);
+    // Forgiving hit areas: a little smaller than the picture, so brushing a
+    // leaf tip or a fence-post corner doesn't count as a bump. Things to
+    // jump over lose some height from the top; things to slide under keep
+    // their bottom edge where it is, so a standing pet still hits them.
+    const k = OBSTACLES[key as ObstacleKind];
+    const w = r.width * HITBOX.width;
+    if (k?.slide) {
+      body.setSize(w, r.height, false);
+      body.setOffset((r.width - w) / 2, 0);
+    } else {
+      const h = r.height * HITBOX.height;
+      body.setSize(w, h, false);
+      body.setOffset((r.width - w) / 2, r.height - h);
+    }
   }
 
   private spawnTreats(x: number): void {
+    this.treatsSpawned += 4;
     const high = Math.random() < 0.5;
     for (let i = 0; i < 4; i++) {
       const tx = x + i * 45;
@@ -881,6 +986,7 @@ export class GameScene extends Phaser.Scene {
   private warn(kind: DistractionKind, mark: string, warnMs: number, onGiveIn: () => void): void {
     this.distraction = { kind, active: false };
     this.alertText.setText(mark).setVisible(true);
+    this.swipeArrow.setVisible(true);
     sfx.chitter();
     this.distractionTimer?.remove();
     this.distractionTimer = this.time.delayedCall(warnMs, () => {
@@ -912,7 +1018,7 @@ export class GameScene extends Phaser.Scene {
   private doPendingMove(): void {
     const p = this.pendingMove;
     this.pendingMove = undefined;
-    const recent = p && performance.now() - p.at < DISTRACTION.comboWindowMs;
+    const recent = p && this.clock() - p.at < DISTRACTION.comboWindowMs;
     // The most recent press wins; a held down arrow counts as a slide
     if (recent && p.kind === 'jump' && this.grounded) {
       this.jump();
@@ -926,6 +1032,7 @@ export class GameScene extends Phaser.Scene {
     this.returning = true;
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
+    this.swipeArrow.setVisible(false);
     this.setSpeedFactor(1, 600);
   }
 
@@ -1018,6 +1125,118 @@ export class GameScene extends Phaser.Scene {
         ease: 'Sine.easeIn',
       });
     }
+  }
+
+  // ---------- Bumps, paws and pause ----------
+
+  /** Hit an obstacle: stumble while paws are left, otherwise the run ends. */
+  private bump(): void {
+    if (this.state !== 'playing' || this.paused || this.time.now < this.safeUntil) return;
+    this.paws -= 1;
+    this.updatePaws();
+    if (this.paws <= 0) {
+      this.endRun('Bonk!');
+      return;
+    }
+    this.safeUntil = this.time.now + STUMBLE_SAFE_MS;
+    sfx.bonk();
+    this.cameras.main.shake(150, 0.006);
+    this.tweens.add({ targets: this.petSprite, alpha: 0.3, duration: 120, yoyo: true, repeat: 5, onComplete: () => this.petSprite.setAlpha(1) });
+    const lost = this.pawIcons[this.paws];
+    if (lost) this.tweens.add({ targets: lost, scale: { from: 1.6, to: 1 }, duration: 300 });
+    this.toast(this.paws === 1 ? 'Ouch! Last paw!' : `Ouch! ${this.paws} paws left`, '#d6402b');
+    // A stumble slows the pet for a moment (unless a distraction already has)
+    if (!this.distraction?.active) {
+      this.setSpeedFactor(0.55, 120);
+      this.time.delayedCall(700, () => {
+        if (this.state === 'playing' && !this.distraction?.active) this.setSpeedFactor(1, 600);
+      });
+    }
+  }
+
+  /** A bobbing "swipe up" arrow next to the pet while something distracts it. */
+  private makeSwipeArrow(): Phaser.GameObjects.Container {
+    const c = this.add.container(0, 0).setDepth(10).setVisible(false);
+    const g = this.add.graphics();
+    g.fillStyle(0xc79a3e, 1);
+    g.lineStyle(3, 0x16202a, 1);
+    g.beginPath();
+    g.moveTo(0, -24);
+    g.lineTo(18, -4);
+    g.lineTo(7, -4);
+    g.lineTo(7, 18);
+    g.lineTo(-7, 18);
+    g.lineTo(-7, -4);
+    g.lineTo(-18, -4);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+    const label = this.add
+      .text(0, 32, this.sys.game.device.input.touch ? 'Swipe up' : 'Swipe up / \u2191', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '15px',
+        fontStyle: 'bold',
+        color: '#16202a',
+        backgroundColor: 'rgba(255,248,232,0.85)',
+        padding: { x: 5, y: 2 },
+      })
+      .setOrigin(0.5, 0);
+    c.add([g, label]);
+    this.tweens.add({ targets: g, y: -8, duration: 300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    return c;
+  }
+
+  private updatePaws(): void {
+    this.pawIcons.forEach((icon, i) => icon.setAlpha(i < this.paws ? 1 : 0.22));
+  }
+
+  private addPauseAndPaws(): void {
+    this.pawIcons = [];
+    for (let i = 0; i < PAWS; i++) {
+      this.pawIcons.push(this.add.text(132 + i * 30, 70, '\u{1F43E}', { fontSize: '22px' }).setOrigin(0.5).setDepth(20));
+    }
+    this.updatePaws();
+    const btn = this.add
+      .text(84, 70, '\u23F8\uFE0F', { fontSize: '24px' })
+      .setOrigin(0.5)
+      .setDepth(20)
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false);
+    btn.on('pointerdown', () => {
+      this.uiTap = true;
+      this.togglePause();
+    });
+    this.pauseBtn = btn;
+  }
+
+  private togglePause(): void {
+    if (this.paused) this.resume();
+    else this.pause();
+  }
+
+  private pause(): void {
+    if (this.state !== 'playing' || this.paused) return;
+    this.paused = true;
+    this.physics.pause();
+    this.tweens.pauseAll();
+    this.time.paused = true;
+    this.anims.pauseAll();
+    this.tweens.killTweensOf(this.toastText);
+    this.toastText.setAlpha(0);
+    this.centerText.setFontSize(30).setText('Paused\n\nTap or press Space to keep going');
+    this.pauseBtn?.setText('\u25B6\uFE0F');
+  }
+
+  private resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.physics.resume();
+    this.tweens.resumeAll();
+    this.time.paused = false;
+    this.anims.resumeAll();
+    this.centerText.setText('');
+    this.pauseBtn?.setText('\u23F8\uFE0F');
+    this.startedAt = this.time.now;
   }
 
   /** Small speaker button in the top-left corner, under the score. */

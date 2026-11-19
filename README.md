@@ -9,6 +9,7 @@ Your pet runs on its own. You keep it out of trouble and on task:
 | Jump | Tap | Space |
 | Slide (and fast-fall in the air) | Swipe down | Down arrow |
 | Keep your pet on task (call it back) | Swipe up | Up arrow |
+| Pause | Pause button | P or Esc |
 
 ## Your pet is the hero
 
@@ -32,6 +33,10 @@ Finishing a level opens the next one. Best scores are kept per level on the devi
 ## How to play
 
 - The pet speeds up over time. Reach the ball at the end of the trail to finish the level.
+- **Three paws per run.** The first two bumps make your pet stumble and slow down for a moment (and it can't be bumped again for 1.5 seconds). The third bump ends the run. Running off after a critter still ends it right away.
+- **Forgiving controls.** Obstacles' hit areas are a little smaller than their pictures. A jump pressed just before landing happens on landing, and a jump just after running off a hilltop still works.
+- **Pause** with the button next to the speaker, or P / Esc. The game pauses by itself if you switch apps or tabs.
+- **Stars.** Each level has three: catch the ball, grab at least 70% of the treats, and finish with no bumps. Your best stars show on the level map.
 - Low obstacles need a jump. Branches and umbrellas need a slide (or a well-timed jump).
 - Treats are worth 10 points each.
 - Distractions show up every 8 to 13 seconds. Swipe up during the warning ("!" or "?") for a +50 focus bonus.
