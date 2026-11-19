@@ -1,8 +1,12 @@
 import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
+import { makeLevelArt } from '../art/levelArt';
 import * as sfx from '../audio/sfx';
-import { PALETTES, SIZE_SCALE, hasSavedPet, loadPet, makePetTextures, petKey, savePet, type PetChoice, type Size } from '../art/pets';
-import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, LEVEL, PET, SCORE, SPAWN, SPEED } from '../config';
+import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
+import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, PET, SCORE, SPAWN } from '../config';
+import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, type LevelDef, type ObstacleKind, type Progress } from '../levels';
+import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, type CardHost } from '../ui/cards';
+import { loadHero } from '../hero/store';
 
 type State = 'ready' | 'playing' | 'over';
 type Rect = Phaser.GameObjects.Rectangle;
@@ -10,8 +14,8 @@ type Img = Phaser.GameObjects.Image;
 type Body = Phaser.Physics.Arcade.Body;
 
 /**
- * chase: a squirrel on the trail. The pet turns around and runs after it,
- *        and the run ends if it gets too far back.
+ * chase: something dashes past on the trail. The pet turns around and runs
+ *        after it, and the run ends if it gets too far back.
  * gawk:  a bird in the sky or a critter in a den hole, out of reach.
  *        The pet stops to stare and slows down, but the run goes on.
  */
@@ -21,36 +25,59 @@ interface Distraction {
   active: boolean; // false during the short warning, true once the pet gives in
 }
 
-const BEST_KEY = 'fetch-dash-best';
 const SWIPE_PX = 30; // screen pixels
 const PET_COLOR = 0xa86b3c;
 
+const CHASERS = {
+  squirrel: { label: 'Squirrel', texture: 'squirrel', anim: undefined, lift: 16, hop: 18 },
+  rabbit: { label: 'Bunny', texture: 'rabbit', anim: undefined, lift: 18, hop: 26 },
+  crab: { label: 'Crab', texture: 'crab', anim: undefined, lift: 14, hop: 4 },
+  bird: { label: 'Bird', texture: 'bird-1', anim: 'bird-flap', lift: 14, hop: 20 },
+} as const;
+
+/** How each obstacle sits on the ground: its center's height above the ground, and how to beat it. */
+const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean }> = {
+  fence: { lift: 25, slide: false },
+  puddle: { lift: 6, slide: false },
+  log: { lift: 17, slide: false },
+  rock: { lift: 19, slide: false },
+  sandcastle: { lift: 26, slide: false },
+  driftwood: { lift: 13, slide: false },
+  branch: { lift: 65, slide: true },
+  umbrella: { lift: 66, slide: true },
+};
+
 /**
- * Week 1 prototype: placeholder shapes only.
- * The pet runs on its own. Tap to jump, swipe down to slide,
- * swipe up to call the pet back when something distracts it.
- * Reach the ball at the end of the trail to finish Level 1.
+ * The pet runs on its own. Tap to jump, swipe down to slide, swipe up to
+ * call the pet back when something distracts it. Reach the ball at the end
+ * of the trail to finish the level.
  */
 export class GameScene extends Phaser.Scene {
   private state: State = 'ready';
+  private level!: LevelDef;
+  private progress!: Progress;
   private pet!: Rect;
   private petBody!: Body;
   private petSprite!: Phaser.GameObjects.Sprite;
+  private petShadow!: Img;
   private choice!: PetChoice;
   private petW = PET.width;
   private petH = PET.height;
-  private picker?: Phaser.GameObjects.Container;
+  private grounded = true;
   private startedAt = 0;
-  private uiTap = false; // set when a tap lands on a button, so it doesn't also jump or start
-  private changePetBtn?: Phaser.GameObjects.Container;
+  private uiTap = false; // set when a tap lands on a game button, so it doesn't also jump or start
+  private heroBtn?: Phaser.GameObjects.Container;
   private wasOnGround = true;
   private dustTimer = 0;
   private obstacles!: Phaser.Physics.Arcade.Group;
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
   private shownHints = new Set<string>();
+  private groundGfx!: Phaser.GameObjects.Graphics;
+  private frameCache = new Map<string, string[]>();
+  private darkSky = false;
 
-  private baseSpeed = SPEED.start; // full running speed, rises over time
+  private baseSpeed = 300; // full running speed, rises over time
   private speedFactor = 1; // drops while the pet is distracted
   private distancePx = 0;
   private treatCount = 0;
@@ -87,10 +114,13 @@ export class GameScene extends Phaser.Scene {
     return this.baseSpeed * this.speedFactor;
   }
 
-  create(data?: { quickStart?: boolean }): void {
-    this.best = loadBest();
+  create(data?: { level?: number; auto?: boolean }): void {
+    this.progress = loadProgress();
+    this.level = levelById(data?.level ?? this.progress.current);
+    this.progress.current = this.level.id;
+    this.best = this.progress.best[this.level.id] ?? 0;
     this.state = 'ready';
-    this.baseSpeed = SPEED.start;
+    this.baseSpeed = this.level.speed.start;
     this.speedFactor = 1;
     this.distancePx = 0;
     this.treatCount = 0;
@@ -100,28 +130,30 @@ export class GameScene extends Phaser.Scene {
     this.sliding = false;
     this.distraction = undefined;
     this.returning = false;
+    this.grounded = true;
     this.layers = [];
     this.shownHints = new Set<string>();
+    this.heroBtn = undefined;
 
     makeTextures(this);
+    makeLevelArt(this);
     this.makeAnimations();
     this.choice = loadPet();
     makePetTextures(this, this.choice);
     this.drawBackground();
 
-    // Ground (static physics body the pet stands on; the art is a scrolling tile)
-    const ground = this.add.rectangle(GAME_WIDTH / 2, GROUND_Y + 50, GAME_WIDTH, 100, 0x6fbf5a).setVisible(false);
-    this.physics.add.existing(ground, true);
-    this.addLayer('ground', GROUND_Y, 100, 1);
+    // The ground is drawn fresh each frame so it can follow the hills
+    this.groundGfx = this.add.graphics().setDepth(0.9);
 
-    // Pet: an invisible box does the physics, and the dog sprite is drawn on top of it
-    this.pet = this.add.rectangle(PET.homeX, GROUND_Y - PET.height / 2, PET.width, PET.height, PET_COLOR);
+    // Pet: an invisible box does the physics, and the pet sprite is drawn on top of it
+    const gy = this.groundAt(PET.homeX);
+    this.pet = this.add.rectangle(PET.homeX, gy - PET.height / 2, PET.width, PET.height, PET_COLOR);
     this.pet.setVisible(false);
     this.physics.add.existing(this.pet);
     this.petBody = this.pet.body as Body;
     this.petBody.setCollideWorldBounds(false);
-    this.physics.add.collider(this.pet, ground);
-    this.petSprite = this.add.sprite(PET.homeX, GROUND_Y, `${petKey(this.choice)}-run-0`).setOrigin(0.5, 1).setDepth(2);
+    this.petShadow = this.add.image(PET.homeX, gy, 'shadow').setDepth(1.9);
+    this.petSprite = this.add.sprite(PET.homeX, gy, `${petKey(this.choice)}-run-0`).setOrigin(0.5, 1).setDepth(2);
     this.applyPet();
 
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
@@ -132,50 +164,107 @@ export class GameScene extends Phaser.Scene {
 
     // HUD
     const font = { fontFamily: 'Arial, sans-serif', color: '#1d2b1f' };
-    this.scoreText = this.add.text(20, 16, '', { ...font, fontSize: '24px', fontStyle: 'bold' }).setDepth(10);
+    const top = this.level.theme.skyTop;
+    const dark = ((top >> 16) & 255) * 0.3 + ((top >> 8) & 255) * 0.59 + (top & 255) * 0.11 < 120;
+    this.darkSky = dark;
+    this.scoreText = this.add
+      .text(20, 16, '', { ...font, fontSize: '24px', fontStyle: 'bold', color: dark ? '#fff8e8' : '#1d2b1f' })
+      .setDepth(10)
+      .setShadow(0, 2, dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.5)', 0);
     this.add.rectangle(GAME_WIDTH - 220, 30, 200, 14, 0xffffff, 0.7).setOrigin(0, 0.5).setDepth(10);
     this.progressFill = this.add.rectangle(GAME_WIDTH - 220, 30, 0, 14, 0x3f7d3a).setOrigin(0, 0.5).setDepth(10);
     this.add.circle(GAME_WIDTH - 14, 30, 10, 0xd8e65a).setStrokeStyle(2, 0x7a8a1a).setDepth(10);
     this.centerText = this.add
-      .text(GAME_WIDTH / 2, 190, '', { ...font, fontSize: '30px', fontStyle: 'bold', align: 'center' })
+      .text(GAME_WIDTH / 2, 190, '', { ...font, fontSize: '30px', fontStyle: 'bold', align: 'center', color: dark ? '#fff8e8' : '#1d2b1f' })
       .setOrigin(0.5)
-      .setDepth(10);
+      .setDepth(10)
+      .setShadow(0, 2, dark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.6)', 0);
     this.toastText = this.add
       .text(GAME_WIDTH / 2, 110, '', { ...font, fontSize: '28px', fontStyle: 'bold', color: '#1f6f2a' })
       .setOrigin(0.5)
       .setDepth(10)
-      .setAlpha(0);
+      .setAlpha(0)
+      .setShadow(0, 2, 'rgba(255,255,255,0.7)', 0);
     this.alertText = this.add
       .text(0, 0, '!', { ...font, fontSize: '40px', fontStyle: 'bold', color: '#d6402b' })
       .setOrigin(0.5)
       .setDepth(10)
       .setVisible(false);
 
-    // First visit: show the full pet picker. After that (or after a run),
-    // go straight to "Tap to run" with a small Change pet button.
-    if (data?.quickStart || hasSavedPet()) this.showQuickStart();
-    else this.buildPicker();
     this.updateHud();
+    this.drawGround();
     this.updatePetSprite();
     this.addMuteButton();
-
     this.setupInput();
+
+    // First visit: make your hero. After that: meet your hero and pick a
+    // level. Between runs: straight to "Tap to run".
+    if (data?.auto) {
+      this.showReady();
+    } else {
+      this.showReady();
+      if (!loadHero()) openSetup(this.cardHost(), { canGoBack: false });
+      else openHome(this.cardHost());
+    }
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => closeCards());
+  }
+
+  // ---------- Cards (start, home, end) ----------
+
+  private cardHost(): CardHost {
+    return {
+      choice: () => this.choice,
+      setChoice: (c) => {
+        this.choice = c;
+        savePet(c);
+        this.applyPet();
+        this.updatePetSprite();
+      },
+      petFrames: (c) => {
+        const key = petKey(c);
+        const cached = this.frameCache.get(key);
+        if (cached) return cached;
+        makePetTextures(this, c);
+        const frames = [0, 1, 2].map((i) => this.textures.getBase64(`${key}-run-${i}`) as string);
+        this.frameCache.set(key, frames);
+        return frames;
+      },
+      progress: () => this.progress,
+      play: (lvl) => {
+        closeCards();
+        this.progress.current = lvl;
+        saveProgress(this.progress);
+        savePet(this.choice);
+        if (lvl === this.level.id && this.state === 'ready') {
+          this.startedAt = this.time.now;
+          this.showReady();
+        } else {
+          this.scene.restart({ level: lvl, auto: true });
+        }
+      },
+    };
   }
 
   // ---------- Input ----------
 
   private setupInput(): void {
     const keys = this.input.keyboard;
-    keys?.on('keydown-SPACE', () => (this.state === 'ready' ? this.startRun() : this.onTap()));
-    this.downKey = keys?.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
-    keys?.on('keydown-DOWN', () => this.onSwipeDown());
-    keys?.on('keydown-UP', () => this.onSwipeUp());
+    keys?.on('keydown-SPACE', () => {
+      if (cardsOpen()) return;
+      if (this.state === 'ready') this.startRun();
+      else this.onTap();
+    });
+    this.downKey = keys?.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN, false);
+    keys?.on('keydown-DOWN', () => !cardsOpen() && this.onSwipeDown());
+    keys?.on('keydown-UP', () => !cardsOpen() && this.onSwipeUp());
     keys?.on('keydown', () => sfx.unlock());
 
     // Touch and mouse are read straight from the page, in screen pixels.
     // Listening on the whole window means a swipe works anywhere on the
     // screen (not only on the game canvas), and preventDefault stops the
-    // browser or the app around the game from scrolling instead.
+    // browser or the app around the game from scrolling instead. Touches
+    // on the cards are left alone so their buttons and fields work.
     const opts: AddEventListenerOptions = { passive: false };
     const down = (x: number, y: number) => {
       sfx.unlock();
@@ -197,20 +286,25 @@ export class GameScene extends Phaser.Scene {
     };
 
     const onTouchStart = (e: TouchEvent) => {
+      if (isUiEvent(e)) return;
       e.preventDefault();
       const t = e.changedTouches[0];
       down(t.clientX, t.clientY);
     };
     const onTouchMove = (e: TouchEvent) => {
+      if (isUiEvent(e)) return;
       e.preventDefault();
       const t = e.changedTouches[0];
       move(t.clientX, t.clientY);
     };
     const onTouchEnd = (e: TouchEvent) => {
+      if (isUiEvent(e)) return;
       e.preventDefault();
       up();
     };
-    const onMouseDown = (e: MouseEvent) => down(e.clientX, e.clientY);
+    const onMouseDown = (e: MouseEvent) => {
+      if (!isUiEvent(e)) down(e.clientX, e.clientY);
+    };
     const onMouseMove = (e: MouseEvent) => {
       if (e.buttons) move(e.clientX, e.clientY);
     };
@@ -243,23 +337,27 @@ export class GameScene extends Phaser.Scene {
       this.uiTap = false;
       return;
     }
+    if (cardsOpen()) return;
     if (this.state === 'ready') {
-      if (!this.picker) this.startRun();
+      this.startRun();
       return;
     }
     if (this.time.now - this.startedAt < 300) return; // the tap that pressed Start
-    if (this.state === 'over') return this.restart();
+    if (this.state === 'over') return;
     if (this.chasing) {
       // A pet running the wrong way doesn't listen yet, but remember the jump
       // so it happens the moment the pet is called back.
       this.pendingMove = { kind: 'jump', at: this.time.now };
       return;
     }
-    if (this.petBody.blocked.down || this.petBody.touching.down) {
-      this.stopSlide();
-      this.petBody.setVelocityY(PET.jumpVelocity);
-      sfx.jump();
-    }
+    if (this.grounded) this.jump();
+  }
+
+  private jump(): void {
+    this.stopSlide();
+    this.grounded = false;
+    this.petBody.setVelocityY(PET.jumpVelocity);
+    sfx.jump();
   }
 
   private onSwipeDown(): void {
@@ -268,7 +366,7 @@ export class GameScene extends Phaser.Scene {
       this.pendingMove = { kind: 'slide', at: this.time.now };
       return;
     }
-    if (!(this.petBody.blocked.down || this.petBody.touching.down)) {
+    if (!this.grounded) {
       // Fast-fall when in the air
       this.petBody.setVelocityY(900);
     }
@@ -282,15 +380,38 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- Run lifecycle ----------
 
+  /** "Tap to run" with the level name, plus a small My hero button. */
+  private showReady(): void {
+    this.centerText.setFontSize(30);
+    this.centerText.setText(`Level ${this.level.id}  ·  ${this.level.name}\n\nTap to run!`);
+    if (this.heroBtn) return;
+    const btn = this.add.container(GAME_WIDTH - 90, 70).setDepth(20);
+    const bg = this.add
+      .rectangle(0, 0, 150, 36, 0xfbf6ea, 0.95)
+      .setStrokeStyle(2, 0xc79a3e)
+      .setInteractive({ useHandCursor: true });
+    bg.on('pointerdown', () => {
+      this.uiTap = true;
+      openHome(this.cardHost());
+    });
+    btn.add(bg);
+    btn.add(
+      this.add
+        .text(0, 0, '\u{1F43E} My hero', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a' })
+        .setOrigin(0.5),
+    );
+    this.heroBtn = btn;
+  }
+
   private startRun(): void {
+    if (cardsOpen()) return;
     this.state = 'playing';
     this.startedAt = this.time.now;
     savePet(this.choice);
+    saveProgress(this.progress);
     this.centerText.setText('');
-    this.picker?.destroy();
-    this.picker = undefined;
-    this.changePetBtn?.destroy();
-    this.changePetBtn = undefined;
+    this.heroBtn?.destroy();
+    this.heroBtn = undefined;
     this.scheduleDistraction(DISTRACTION.firstAfterMs);
   }
 
@@ -321,33 +442,45 @@ export class GameScene extends Phaser.Scene {
 
     const score = this.score();
     const newBest = score > this.best;
+    const id = this.level.id;
     if (newBest) {
       this.best = score;
-      saveBest(score);
+      this.progress.best[id] = score;
     }
-    this.centerText.setFontSize(30);
-    this.centerText.setText(
-      `${reason}\n\nScore ${score}${newBest ? '  (new best!)' : ''}\n` +
-        `${Math.min(this.meters(), LEVEL.goalMeters)} of ${LEVEL.goalMeters} m  ·  ${this.treatCount} treats\n\n` +
-        (won ? 'Tap to play again' : 'Tap to run again')
-    );
+    if (won) {
+      if (!this.progress.done.includes(id)) this.progress.done.push(id);
+      this.progress.unlocked = Math.max(this.progress.unlocked, Math.min(LEVELS.length, id + 1));
+    }
+    saveProgress(this.progress);
     this.updateHud();
-  }
 
-  private restart(): void {
-    this.physics.resume();
-    this.scene.restart({ quickStart: true });
+    // Give the crash or the cheer a moment before the card slides in
+    this.time.delayedCall(won ? 1100 : 650, () => {
+      openEnd(this.cardHost(), {
+        level: id,
+        won,
+        reason,
+        score,
+        best: this.best,
+        newBest,
+        meters: this.meters(),
+        treats: this.treatCount,
+      });
+    });
   }
 
   // ---------- Main loop ----------
 
   update(_time: number, deltaMs: number): void {
+    this.keepOnGround();
     this.alertText.setPosition(this.pet.x, this.pet.y - 62);
     this.updatePetSprite();
+    this.drawGround();
     if (this.state !== 'playing') return;
     const dt = deltaMs / 1000;
 
-    this.baseSpeed = Math.min(SPEED.max, this.baseSpeed + SPEED.gainPerSecond * dt);
+    const sp = this.level.speed;
+    this.baseSpeed = Math.min(sp.max, this.baseSpeed + sp.gainPerSecond * dt);
     const dx = this.speed * dt;
     this.distancePx += dx;
 
@@ -359,14 +492,14 @@ export class GameScene extends Phaser.Scene {
       g.children.each((c) => {
         const r = c as Img;
         (r.body as Body).setVelocityX(-this.speed);
-        if (r.x < -100) r.destroy();
+        if (r.x < -140) r.destroy();
         return true;
       });
     }
 
-    const remainingPx = LEVEL.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
+    const remainingPx = this.level.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
     if (remainingPx <= 0) {
-      this.endRun('You caught the ball!\nLevel 1 complete', true);
+      this.endRun('You caught the ball!', true);
       return;
     }
     if (!this.ballSpawned && remainingPx <= GAME_WIDTH - PET.homeX) this.spawnBall(remainingPx);
@@ -388,10 +521,98 @@ export class GameScene extends Phaser.Scene {
     this.updateHud();
   }
 
+  // ---------- Ground and hills ----------
+
+  /** Screen y of the top of the ground at a screen x. */
+  private groundAt(screenX: number): number {
+    return groundYAt(this.level, this.distancePx + screenX);
+  }
+
+  /**
+   * Stands the pet on the ground. The ground isn't a physics body (it rolls
+   * up and down on the hilly levels), so this does the landing by hand:
+   * after each physics step, a pet at or below the ground is put back on
+   * top of it. While running downhill it sticks to the slope instead of
+   * floating off it.
+   */
+  private keepOnGround(): void {
+    const b = this.petBody;
+    const gy = this.groundAt(this.pet.x);
+    const stick = this.grounded && b.velocity.y >= 0 ? 12 : 0;
+    if (b.bottom >= gy - stick) {
+      b.y = gy - b.height;
+      if (b.velocity.y > 0) b.velocity.y = 0;
+      this.grounded = true;
+    } else {
+      this.grounded = false;
+    }
+  }
+
+  private drawGround(): void {
+    const t = this.level.theme;
+    const g = this.groundGfx;
+    g.clear();
+    const step = 16;
+    const tops: { x: number; y: number }[] = [];
+    for (let x = -step; x <= GAME_WIDTH + step; x += step) tops.push({ x, y: this.groundAt(x) });
+
+    // grass (or sand) down to the bottom of the screen
+    g.fillStyle(t.grass, 1);
+    g.beginPath();
+    g.moveTo(-step, GAME_HEIGHT);
+    for (const p of tops) g.lineTo(p.x, p.y);
+    g.lineTo(GAME_WIDTH + step, GAME_HEIGHT);
+    g.closePath();
+    g.fillPath();
+
+    // the dirt path band
+    g.fillStyle(t.dirt, 1);
+    g.beginPath();
+    for (const p of tops) g.lineTo(p.x, p.y + 18);
+    for (let i = tops.length - 1; i >= 0; i--) g.lineTo(tops[i].x, tops[i].y + 48);
+    g.closePath();
+    g.fillPath();
+
+    // a darker edge along the top
+    g.lineStyle(4, t.grassDark, 1);
+    g.beginPath();
+    tops.forEach((p, i) => (i ? g.lineTo(p.x, p.y + 1) : g.moveTo(p.x, p.y + 1)));
+    g.strokePath();
+
+    // tufts and pebbles that scroll with the trail
+    const off = this.distancePx;
+    const first = Math.floor(off / 40) * 40;
+    for (let wx = first; wx < off + GAME_WIDTH + 40; wx += 40) {
+      const x = wx - off;
+      const y = this.groundAt(x);
+      const n = (wx / 40) % 7;
+      if (t.tufts === 'grass') {
+        g.fillStyle(t.grassDark, 1);
+        g.fillTriangle(x, y + 1, x + 4, y - 7, x + 8, y + 1);
+        if (n === 2 || n === 5) g.fillTriangle(x + 6, y + 1, x + 9, y - 5, x + 12, y + 1);
+        if (n % 3 === 0) g.fillTriangle(x + 16, y + 64, x + 20, y + 56, x + 24, y + 64);
+      } else {
+        g.fillStyle(t.grassDark, 1);
+        g.fillEllipse(x + 10, y + 8 + (n % 3) * 3, 16, 3);
+        if (n === 3) {
+          g.fillStyle(0xfff2dc, 1);
+          g.fillCircle(x + 22, y + 66, 3); // a shell
+        }
+      }
+      g.fillStyle(t.dirtDark, 1);
+      if (n === 1 || n === 4) g.fillCircle(x + 14, y + 28 + n * 2, 2.5);
+      if (n === 6) g.fillCircle(x + 30, y + 38, 2);
+    }
+  }
+
   private updatePetPosition(): void {
     if (this.chasing) {
       this.petBody.setVelocityX(-DISTRACTION.chaseDriftSpeed);
-      if (this.pet.x <= DISTRACTION.loseX) this.endRun(this.choice.species === 'cat' ? 'Ran off after the bird!' : 'Ran off after the squirrel!');
+      if (this.pet.x <= DISTRACTION.loseX) {
+        const species = this.choice.species;
+        const what = CHASERS[species === 'cat' ? this.level.catChaser : this.level.dogChaser].label.toLowerCase();
+        this.endRun(`Ran off after the ${what}!`);
+      }
     } else if (this.returning) {
       if (this.pet.x < PET.homeX - 4) {
         this.petBody.setVelocityX(260);
@@ -405,15 +626,23 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Keeps the dog sprite on its physics box and picks the right pose. */
+  /** Keeps the pet sprite on its physics box and picks the right pose. */
   private updatePetSprite(): void {
     const sp = this.petSprite;
     sp.setPosition(this.pet.x, this.pet.y + this.pet.height / 2);
+    // Shadow on the ground, smaller the higher the pet is
+    const gy = this.groundAt(this.pet.x);
+    const air = Math.max(0, gy - (this.pet.y + this.pet.height / 2));
+    const s = SIZE_SCALE[this.choice.size] * Math.max(0.35, 1 - air / 220);
+    this.petShadow.setPosition(this.pet.x, gy + 2).setScale(s, s).setAlpha(Math.max(0.3, 1 - air / 260));
     if (this.state !== 'playing') return;
     const d = this.distraction;
-    sp.setFlipX(d?.kind === 'chase' && d.active); // turned around, after the squirrel
-    sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : 0); // looking up at the bird or den
-    const onGround = this.petBody.blocked.down || this.petBody.touching.down;
+    sp.setFlipX(d?.kind === 'chase' && d.active); // turned around, after the critter
+    const onGround = this.grounded;
+    // Lean with the slope of the hill when running on it
+    const slope = (this.groundAt(this.pet.x + 12) - this.groundAt(this.pet.x - 12)) / 24;
+    const lean = onGround ? Phaser.Math.RadToDeg(Math.atan(slope)) * (sp.flipX ? -1 : 1) : 0;
+    sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : lean); // looking up at the bird or den
     if (onGround && !this.wasOnGround) this.dust(5); // landing puff
     this.wasOnGround = onGround;
     if (onGround && !this.distraction) {
@@ -432,32 +661,42 @@ export class GameScene extends Phaser.Scene {
       sp.setTexture(`${key}-jump`);
     } else {
       if (!sp.anims.isPlaying) sp.play(`${key}-run`);
-      sp.anims.timeScale = this.speed / SPEED.start;
+      sp.anims.timeScale = this.speed / this.level.speed.start;
     }
   }
 
   // ---------- Obstacles, treats and the ball ----------
 
-  private spawnNext(): void {
-    const roll = Math.random();
-    const x = GAME_WIDTH + 60;
-    if (roll < 0.4) {
-      this.addObstacle(x, GROUND_Y - 25, 'fence'); // fence: jump
-      this.hint('fence', 'Tap to jump!');
-    } else if (roll < 0.7) {
-      this.addObstacle(x, GROUND_Y - 6, 'puddle'); // puddle: jump
-      this.hint('puddle', 'Tap to jump the puddle!');
-    } else {
-      // Low branch hanging from a tree: slide under it
-      this.addDecor(this.add.image(x + 40, (GROUND_Y - 75) / 2, 'trunk'));
-      this.addDecor(this.add.image(x + 40, 40, 'canopy'));
-      this.addObstacle(x, GROUND_Y - 65, 'branch');
-      this.hint('branch', 'Swipe down to slide under!');
+  private pickObstacle(): ObstacleKind {
+    const entries = Object.entries(this.level.obstacles) as [ObstacleKind, number][];
+    let roll = Math.random() * entries.reduce((s, [, w]) => s + w, 0);
+    for (const [k, w] of entries) {
+      roll -= w;
+      if (roll <= 0) return k;
     }
+    return entries[0][0];
+  }
+
+  private spawnNext(): void {
+    const x = GAME_WIDTH + 60;
+    const kind = this.pickObstacle();
+    const gy = this.groundAt(x);
+    const o = OBSTACLES[kind];
+    if (kind === 'branch') {
+      // Low branch hanging from a tree: slide under it
+      // The trunk stops just above the pet's head, so it can slide under the tree
+      this.addDecor(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95));
+      this.addDecor(this.add.image(x + 40, gy - 400, 'canopy').setDepth(0.96));
+    } else if (kind === 'umbrella') {
+      this.addDecor(this.add.image(x, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(6, 90).setDepth(0.95));
+    }
+    this.addObstacle(x, gy - o.lift, kind);
+    if (o.slide) this.hint(`slide-${kind}`, 'Swipe down to slide under!');
+    else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : 'Tap to jump!');
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
 
     // Gaps grow with speed so the game stays fair as it speeds up
-    const scale = this.baseSpeed / SPEED.start;
+    const scale = this.baseSpeed / this.level.speed.start;
     this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
   }
 
@@ -478,8 +717,10 @@ export class GameScene extends Phaser.Scene {
   private spawnTreats(x: number): void {
     const high = Math.random() < 0.5;
     for (let i = 0; i < 4; i++) {
-      const y = high ? GROUND_Y - 120 - Math.sin((i / 3) * Math.PI) * 50 : GROUND_Y - 30;
-      const t = this.add.image(x + i * 45, y, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1);
+      const tx = x + i * 45;
+      const gy = this.groundAt(tx);
+      const y = high ? gy - 120 - Math.sin((i / 3) * Math.PI) * 50 : gy - 30;
+      const t = this.add.image(tx, y, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1);
       this.treats.add(t);
       const body = t.body as Body;
       body.setAllowGravity(false);
@@ -490,7 +731,8 @@ export class GameScene extends Phaser.Scene {
   /** The thrown ball waits on the trail; reaching it finishes the level. */
   private spawnBall(remainingPx: number): void {
     this.ballSpawned = true;
-    this.addDecor(this.add.image(PET.homeX + this.petW / 2 + remainingPx, GROUND_Y - 14, 'ball').setDepth(1));
+    const x = PET.homeX + this.petW / 2 + remainingPx;
+    this.addDecor(this.add.image(x, this.groundAt(x) - 14, 'ball').setDepth(1));
     this.toast('There’s the ball!', '#1f6f2a');
   }
 
@@ -540,13 +782,18 @@ export class GameScene extends Phaser.Scene {
         return;
       }
       if (!this.distraction) {
-        const cat = this.choice.species === 'cat';
         if (Math.random() < DISTRACTION.chaseChance) this.startChase();
-        else if (Math.random() < 0.5) this.startGawk('bird');
-        else this.startGawk(cat ? 'butterfly' : 'den');
+        else this.startGawk(this.pickGawk());
       }
       this.scheduleDistraction(Phaser.Math.Between(DISTRACTION.minEveryMs, DISTRACTION.maxEveryMs));
     });
+  }
+
+  private pickGawk(): 'bird' | 'den' | 'butterfly' | 'gull' {
+    const cat = this.choice.species === 'cat';
+    // Dogs stare into den holes; cats stare at butterflies
+    const options = this.level.gawk.filter((g) => (cat ? g !== 'den' : g !== 'butterfly'));
+    return Phaser.Utils.Array.GetRandom(options.length ? options : ['bird']);
   }
 
   private obstacleAhead(): boolean {
@@ -560,47 +807,55 @@ export class GameScene extends Phaser.Scene {
     return found;
   }
 
-  /** Something on the trail dashes past the pet the wrong way: a squirrel for dogs, a bird for cats. */
+  /** Something on the trail dashes past the pet the wrong way. */
   private startChase(): void {
     const cat = this.choice.species === 'cat';
-    const sq = cat
-      ? this.add.sprite(GAME_WIDTH + 30, GROUND_Y - 14, 'bird-1').setDepth(1).play('bird-flap')
-      : this.add.image(GAME_WIDTH + 30, GROUND_Y - 16, 'squirrel').setDepth(1);
+    const c = CHASERS[cat ? this.level.catChaser : this.level.dogChaser];
+    const sq = c.anim
+      ? this.add.sprite(GAME_WIDTH + 30, 0, c.texture).setDepth(1).play(c.anim)
+      : this.add.sprite(GAME_WIDTH + 30, 0, c.texture).setDepth(1);
+    // It runs along the ground (over the hills too) with little hops
+    const hop = { h: 0 };
+    const place = () => sq.setY(this.groundAt(sq.x) - c.lift - hop.h);
+    place();
     // Fast enough that it has just dashed past the pet when the warning ends
-    this.tweens.add({ targets: sq, x: -60, duration: 1300, onComplete: () => sq.destroy() });
-    this.tweens.add({ targets: sq, y: GROUND_Y - 34, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: sq, x: -60, duration: 1300, onUpdate: place, onComplete: () => sq.destroy() });
+    this.tweens.add({ targets: hop, h: c.hop, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
+    if (c.texture === 'crab') this.tweens.add({ targets: sq, angle: { from: -8, to: 8 }, duration: 90, yoyo: true, repeat: 7 });
 
     this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
-      this.toast(cat ? 'Bird! Swipe up!' : 'Squirrel! Swipe up!', '#d6402b');
+      this.toast(`${c.label}! Swipe up!`, '#d6402b');
       this.petSound(2);
       this.hint('chase', 'Your pet turned around! Swipe up to call it back.');
     });
   }
 
-  /** Something out of reach: a bird in the sky or a critter in a den hole. */
-  private startGawk(what: 'bird' | 'den' | 'butterfly'): void {
+  /** Something out of reach: a bird in the sky, a gull, a butterfly or a critter in a den hole. */
+  private startGawk(what: 'bird' | 'den' | 'butterfly' | 'gull'): void {
     if (what === 'butterfly') {
       const b = this.add.sprite(GAME_WIDTH + 30, 300, 'butterfly-0').setDepth(1).setScale(1.3);
       b.play('butterfly-flap');
       this.tweens.add({ targets: b, x: -60, duration: 5000, onComplete: () => b.destroy() });
       this.tweens.add({ targets: b, y: 250, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    } else if (what === 'bird') {
-      const bird = this.add.sprite(GAME_WIDTH + 40, 230, 'bird-0').setDepth(1).setScale(1.3);
-      bird.play('bird-flap');
+    } else if (what === 'bird' || what === 'gull') {
+      const key = what === 'gull' ? 'gull' : 'bird';
+      const bird = this.add.sprite(GAME_WIDTH + 40, 230, `${key}-0`).setDepth(1).setScale(1.3);
+      bird.play(`${key}-flap`);
       this.tweens.add({ targets: bird, x: -60, duration: 4200, onComplete: () => bird.destroy() });
       this.tweens.add({ targets: bird, y: 200, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else {
       // A den hole on the hillside, drifting by slower than the trail (it's farther away)
-      const den = this.add.ellipse(GAME_WIDTH + 60, GROUND_Y - 48, 70, 30, 0x3a2a1a).setDepth(0.5);
-      const critter = this.add.image(GAME_WIDTH + 60, GROUND_Y - 58, 'gopher').setDepth(0.6);
+      const gy = this.groundAt(GAME_WIDTH + 60);
+      const den = this.add.ellipse(GAME_WIDTH + 60, gy - 48, 70, 30, 0x3a2a1a).setDepth(0.5);
+      const critter = this.add.image(GAME_WIDTH + 60, gy - 58, 'gopher').setDepth(0.6);
       this.tweens.add({ targets: [den, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), critter.destroy()) });
-      this.tweens.add({ targets: critter, y: GROUND_Y - 84, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300 });
+      this.tweens.add({ targets: critter, y: gy - 84, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300 });
     }
 
     this.warn('gawk', '?', DISTRACTION.gawkWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.gawkSpeedFactor, 500);
-      const msg = { bird: 'Bird! Swipe up!', den: 'Something in that hole! Swipe up!', butterfly: 'Butterfly! Swipe up!' };
+      const msg = { bird: 'Bird! Swipe up!', gull: 'Seagull! Swipe up!', den: 'Something in that hole! Swipe up!', butterfly: 'Butterfly! Swipe up!' };
       this.toast(msg[what], '#d6402b');
       this.petSound(1);
       // Eventually the pet loses interest by itself, but you lose the time
@@ -646,9 +901,8 @@ export class GameScene extends Phaser.Scene {
     const recent = p && this.time.now - p.at < DISTRACTION.comboWindowMs;
     if (this.downKey?.isDown || (recent && p.kind === 'slide')) {
       this.startSlide();
-    } else if (recent && p.kind === 'jump' && (this.petBody.blocked.down || this.petBody.touching.down)) {
-      this.petBody.setVelocityY(PET.jumpVelocity);
-      sfx.jump();
+    } else if (recent && p.kind === 'jump' && this.grounded) {
+      this.jump();
     }
   }
 
@@ -677,18 +931,22 @@ export class GameScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.scoreText.setText(`Score ${this.score()}   Treats ${this.treatCount}   Best ${this.best}`);
-    this.progressFill.width = 200 * Math.min(1, this.meters() / LEVEL.goalMeters);
+    this.progressFill.width = 200 * Math.min(1, this.meters() / this.level.goalMeters);
   }
 
   /** Shows a one-time tip the first time each thing appears in a run. */
   private hint(key: string, text: string): void {
     if (this.shownHints.has(key)) return;
     this.shownHints.add(key);
-    this.toast(text, '#1d2b1f');
+    this.toast(text, this.darkSky ? '#fff8e8' : '#1d2b1f');
   }
 
   private toast(text: string, color: string): void {
-    this.toastText.setText(text).setColor(color).setAlpha(1);
+    this.toastText
+      .setText(text)
+      .setColor(color)
+      .setShadow(0, 2, color === '#fff8e8' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.7)', 0)
+      .setAlpha(1);
     this.tweens.killTweensOf(this.toastText);
     this.tweens.add({ targets: this.toastText, alpha: 0, delay: 900, duration: 500 });
   }
@@ -704,8 +962,9 @@ export class GameScene extends Phaser.Scene {
   private dust(count: number): void {
     const x = this.pet.x - this.petW / 3;
     const y = this.pet.y + this.pet.height / 2 - 3;
+    const color = this.level.theme.tufts === 'sand' ? 0xf3dfae : 0xd9c3a0;
     for (let i = 0; i < count; i++) {
-      const puff = this.add.circle(x + Phaser.Math.Between(-8, 8), y, Phaser.Math.Between(3, 6), 0xd9c3a0, 0.8).setDepth(1.5);
+      const puff = this.add.circle(x + Phaser.Math.Between(-8, 8), y, Phaser.Math.Between(3, 6), color, 0.8).setDepth(1.5);
       this.tweens.add({
         targets: puff,
         x: puff.x - Phaser.Math.Between(20, 45),
@@ -737,7 +996,7 @@ export class GameScene extends Phaser.Scene {
         .setDepth(15);
       this.tweens.add({
         targets: piece,
-        y: GROUND_Y + Phaser.Math.Between(-10, 40),
+        y: this.groundAt(piece.x) + Phaser.Math.Between(-10, 40),
         x: piece.x + Phaser.Math.Between(-80, 80),
         angle: Phaser.Math.Between(-360, 360),
         duration: Phaser.Math.Between(1400, 2600),
@@ -761,7 +1020,7 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  // ---------- Pet picker (start screen) ----------
+  // ---------- Pet and scenery ----------
 
   /** Sizes the physics box and sprite to the chosen pet and starts its run animation. */
   private applyPet(): void {
@@ -774,141 +1033,47 @@ export class GameScene extends Phaser.Scene {
     this.petSprite.play(`${petKey(this.choice)}-run`);
   }
 
-  private choose(change: Partial<PetChoice>): void {
-    this.choice = { ...this.choice, ...change };
-    savePet(this.choice);
-    this.applyPet();
-    this.buildPicker();
-  }
-
-  /** The quick screen between runs: "Tap to run" plus a small Change pet button. */
-  private showQuickStart(): void {
-    this.picker?.destroy();
-    this.picker = undefined;
-    this.centerText.setFontSize(30);
-    this.centerText.setText('Tap to run!\n\nReach the ball at the end of the trail');
-    this.changePetBtn?.destroy();
-    const btn = this.add.container(GAME_WIDTH - 90, 70).setDepth(20);
-    const bg = this.add
-      .rectangle(0, 0, 150, 36, 0xffffff, 0.9)
-      .setStrokeStyle(2, 0x3f7d3a)
-      .setInteractive({ useHandCursor: true });
-    bg.on('pointerdown', () => {
-      this.uiTap = true;
-      btn.destroy();
-      this.changePetBtn = undefined;
-      this.centerText.setText('');
-      this.buildPicker();
-    });
-    btn.add(bg);
-    btn.add(
-      this.add
-        .text(0, 0, '\u{1F43E} Change pet', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#1d2b1f' })
-        .setOrigin(0.5)
-    );
-    this.changePetBtn = btn;
-  }
-
-  private buildPicker(): void {
-    this.picker?.destroy();
-    const c = this.add.container(0, 0).setDepth(20);
-    this.picker = c;
-    const cx = 600;
-    const text = (x: number, y: number, t: string, size: number, color = '#1d2b1f') =>
-      c.add(this.add.text(x, y, t, { fontFamily: 'Arial, sans-serif', fontSize: `${size}px`, fontStyle: 'bold', color }).setOrigin(0.5));
-
-    c.add(this.add.rectangle(cx, 235, 560, 390, 0xffffff, 0.82).setStrokeStyle(3, 0x3f7d3a));
-    text(cx, 70, 'FETCH DASH  ·  Level 1', 34);
-    text(cx, 106, 'Reach the ball at the end of the trail!', 18, '#3f5f3a');
-
-    const button = (x: number, y: number, w: number, label: string, selected: boolean, onClick: () => void) => {
-      const bg = this.add
-        .rectangle(x, y, w, 44, selected ? 0x3f7d3a : 0xffffff)
-        .setStrokeStyle(2, 0x3f7d3a)
-        .setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => {
-        this.uiTap = true;
-        onClick();
-      });
-      c.add(bg);
-      text(x, y, label, 20, selected ? '#ffffff' : '#1d2b1f');
-    };
-
-    text(cx - 200, 155, 'Pet', 20);
-    button(cx - 50, 155, 130, 'Dog', this.choice.species === 'dog', () => this.choose({ species: 'dog' }));
-    button(cx + 100, 155, 130, 'Cat', this.choice.species === 'cat', () => this.choose({ species: 'cat' }));
-
-    text(cx - 200, 213, 'Size', 20);
-    (['small', 'medium', 'large'] as Size[]).forEach((size, i) => {
-      const label = size[0].toUpperCase() + size.slice(1);
-      button(cx - 75 + i * 125, 213, 115, label, this.choice.size === size, () => this.choose({ size }));
-    });
-
-    text(cx - 200, 271, 'Color', 20);
-    Object.entries(PALETTES).forEach(([key, pal], i) => {
-      const x = cx - 100 + i * 62;
-      const selected = this.choice.palette === key;
-      const dot = this.add
-        .circle(x, 271, 20, pal.fur)
-        .setStrokeStyle(selected ? 5 : 2, selected ? 0x3f7d3a : 0x7a7a7a)
-        .setInteractive({ useHandCursor: true });
-      dot.on('pointerdown', () => {
-        this.uiTap = true;
-        this.choose({ palette: key });
-      });
-      c.add(dot);
-    });
-
-    button(cx, 340, 240, 'Start  \u25B6', true, () => this.startRun());
-    text(cx, 395, 'Tap / Space: jump   ·   Swipe down: slide   ·   Swipe up: stay on task', 15, '#3f5f3a');
-  }
-
   private drawBackground(): void {
+    const t = this.level.theme;
     const sky = this.add.graphics();
-    sky.fillGradientStyle(0x8fd3ff, 0x8fd3ff, 0xdff3ff, 0xdff3ff, 1);
-    sky.fillRect(0, 0, GAME_WIDTH, GROUND_Y);
-    this.add.circle(820, 90, 44, 0xffe08a);
-    this.add.circle(820, 90, 58, 0xffe08a, 0.25);
-    this.addLayer('clouds', 20, 160, 0.08);
-    this.addLayer('hills', GROUND_Y - 220, 220, 0.2);
-    this.addLayer('bushes', GROUND_Y - 150, 150, 0.45);
+    sky.fillGradientStyle(t.skyTop, t.skyTop, t.skyBottom, t.skyBottom, 1);
+    sky.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    // Sun with a soft glow and slow-turning rays
+    const rays = this.add.image(t.sun.x, t.sun.y, 'rays').setScale((t.sun.r * 4) / 400).setAlpha(this.level.id === 3 ? 0.7 : 0.4);
+    this.tweens.add({ targets: rays, angle: 360, duration: 90000, repeat: -1 });
+    this.add.circle(t.sun.x, t.sun.y, t.sun.r * 1.35, t.sun.glow, 0.25);
+    this.add.circle(t.sun.x, t.sun.y, t.sun.r, t.sun.color);
+    this.addLayer('clouds', 20, 160, 0.08).setAlpha(this.level.id === 3 ? 0.55 : 1);
+    if (t.far === 'sea') {
+      this.addLayer('sea', 440 - 130, 130, 0.05);
+      // The low sun's reflection stays put on the water while the waves drift
+      for (let i = 0; i < 9; i++) {
+        const w = t.sun.r * (1.5 - i * 0.12);
+        const glint = this.add.rectangle(t.sun.x, 322 + i * 12, w, 4, 0xffd27a, 0.75 - i * 0.06);
+        this.tweens.add({ targets: glint, scaleX: { from: 0.8, to: 1.15 }, duration: 900 + i * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      }
+    } else {
+      const h = t.far === 'mountains' ? 260 : 220;
+      this.addLayer(t.far, 440 - h, h, 0.2);
+    }
+    // A pale haze between the far and near layers adds depth
+    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, t.haze, 0.12).setOrigin(0, 0);
+    const midH = t.mid === 'palms' ? 220 : t.mid === 'pines' ? 170 : 150;
+    this.addLayer(t.mid, 440 - midH - (this.level.hills.height > 0 ? 30 : 0), midH, 0.45);
   }
 
-  private addLayer(key: string, y: number, h: number, factor: number): void {
+  private addLayer(key: string, y: number, h: number, factor: number): Phaser.GameObjects.TileSprite {
     const tile = this.add.tileSprite(0, y, GAME_WIDTH, h, key).setOrigin(0, 0);
     this.layers.push({ tile, factor });
+    return tile;
   }
 
   private makeAnimations(): void {
-    if (!this.anims.exists('dog-run')) {
-      this.anims.create({
-        key: 'dog-run',
-        frames: ['dog-run-0', 'dog-run-1', 'dog-run-2', 'dog-run-1'].map((key) => ({ key })),
-        frameRate: 12,
-        repeat: -1,
-      });
-    }
-    if (!this.anims.exists('butterfly-flap')) {
-      this.anims.create({ key: 'butterfly-flap', frames: [{ key: 'butterfly-0' }, { key: 'butterfly-1' }], frameRate: 10, repeat: -1 });
-    }
-    if (!this.anims.exists('bird-flap')) {
-      this.anims.create({ key: 'bird-flap', frames: [{ key: 'bird-0' }, { key: 'bird-1' }], frameRate: 8, repeat: -1 });
-    }
-  }
-}
-
-function loadBest(): number {
-  try {
-    return Number(localStorage.getItem(BEST_KEY)) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-function saveBest(score: number): void {
-  try {
-    localStorage.setItem(BEST_KEY, String(score));
-  } catch {
-    // Storage can be blocked (private mode); the best score just won't persist.
+    const flap = (key: string, frames: string[], rate: number) => {
+      if (!this.anims.exists(key)) this.anims.create({ key, frames: frames.map((k) => ({ key: k })), frameRate: rate, repeat: -1 });
+    };
+    flap('butterfly-flap', ['butterfly-0', 'butterfly-1'], 10);
+    flap('bird-flap', ['bird-0', 'bird-1'], 8);
+    flap('gull-flap', ['gull-0', 'gull-1'], 6);
   }
 }

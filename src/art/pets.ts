@@ -23,6 +23,8 @@ export const PALETTES: Record<string, Palette> = {
   black: { label: 'Black', fur: 0x3a3330, dark: 0x1f1a18, light: 0xc58b54 },
   white: { label: 'White', fur: 0xf2ece2, dark: 0xc9bfae, light: 0xffffff },
   grey: { label: 'Grey', fur: 0x9a9ea6, dark: 0x6b6f77, light: 0xd9dce0 },
+  ginger: { label: 'Ginger', fur: 0xd9782f, dark: 0xa4541c, light: 0xf6c99a },
+  cream: { label: 'Cream', fur: 0xe9d2a8, dark: 0xbfa477, light: 0xfff6e4 },
 };
 
 export const SIZE_SCALE: Record<Size, number> = { small: 0.8, medium: 1, large: 1.2 };
@@ -62,7 +64,7 @@ function leg(g: G, x1: number, y1: number, x2: number, y2: number, color: number
 
 function outline(p: Palette): number {
   // Light coats need a soft outline so they don't vanish against the sky
-  return p.fur === PALETTES.white.fur ? 0xb5aa98 : p.dark;
+  return p.fur === PALETTES.white.fur || p.fur === PALETTES.cream.fur ? 0xb5aa98 : p.dark;
 }
 
 function drawDog(g: G, p: Palette, f: Feet): void {

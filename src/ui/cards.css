@@ -1,0 +1,339 @@
+/* Cards shown over the game. Goodwookie palette: navy, cream, gold, rust. */
+:root {
+  --navy: #16202a;
+  --slate: #31404c;
+  --cream: #efe3c6;
+  --paper: #fbf6ea;
+  --aged: #d9c8a2;
+  --gold: #c79a3e;
+  --bronze: #7a5a28;
+  --rust: #a85433;
+  --green: #3f7d3a;
+  --ink: #1d2b1f;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+  color: var(--ink);
+  touch-action: auto;
+}
+#ui.open {
+  pointer-events: auto;
+  background: rgba(22, 32, 42, 0.45);
+}
+
+#ui .card {
+  box-sizing: border-box;
+  width: min(900px, 94vw);
+  max-height: 94vh;
+  overflow: auto;
+  background: var(--paper);
+  border: 3px solid var(--gold);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  padding: clamp(10px, 2.4vh, 22px) clamp(14px, 2.6vw, 26px);
+  font-size: clamp(12px, 2.3vh, 16px);
+  animation: pop 0.25s ease-out;
+}
+@keyframes pop {
+  from { transform: scale(0.94); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+#ui h1 {
+  margin: 0 0 0.2em;
+  font-size: clamp(18px, 4.4vh, 32px);
+  line-height: 1.1;
+  color: var(--navy);
+}
+#ui p { margin: 0.3em 0; }
+#ui .head p, #ui .lead { color: var(--slate); }
+#ui .small { font-size: 0.85em; color: var(--slate); text-align: center; }
+#ui .fine { font-size: 0.78em; color: #6a6a6a; text-align: center; margin-top: 0.5em; }
+#ui .error {
+  background: #fbe3dc;
+  border: 1px solid var(--rust);
+  color: #7a2e17;
+  border-radius: 10px;
+  padding: 0.4em 0.8em;
+  text-align: center;
+}
+
+#ui .cols {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(10px, 2.4vw, 24px);
+  align-items: center;
+  margin-top: 0.5em;
+}
+#ui .head + .cols { margin-top: 0.8em; }
+
+/* Photo picker */
+#ui .drop {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  max-height: 50vh;
+  margin: 0 auto;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 3px dashed var(--gold);
+  cursor: pointer;
+  background: var(--cream);
+}
+#ui .drop.has, #ui .drop.used { border-style: solid; }
+#ui .drop img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#ui .drop:not(.has):not(.used) img { opacity: 0.55; }
+#ui .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+#ui .drop .pick {
+  position: absolute;
+  left: 50%;
+  bottom: 10%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--navy);
+  color: var(--cream);
+  font-weight: bold;
+  padding: 0.55em 1.1em;
+  border-radius: 999px;
+  border: 2px solid var(--gold);
+}
+#ui .tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(22, 32, 42, 0.8);
+  color: var(--cream);
+  font-size: 0.75em;
+  padding: 0.2em 0.6em;
+  border-radius: 6px;
+}
+
+/* Form */
+#ui .field { display: block; font-weight: bold; color: var(--navy); margin-bottom: 0.55em; }
+#ui .field input.name {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 0.25em;
+  font: inherit;
+  font-size: 1.1em;
+  padding: 0.4em 0.6em;
+  border-radius: 10px;
+  border: 2px solid var(--aged);
+  background: #fff;
+}
+#ui .field input.name:focus { outline: none; border-color: var(--gold); }
+#ui .segs, #ui .chips { display: flex; gap: 0.4em; flex-wrap: wrap; margin-top: 0.25em; }
+#ui .seg {
+  flex: 1;
+  font: inherit;
+  font-weight: bold;
+  padding: 0.4em 0.5em;
+  border-radius: 10px;
+  border: 2px solid var(--green);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+#ui .seg.on { background: var(--green); color: #fff; }
+#ui .chip.coat {
+  width: 2.1em;
+  height: 2.1em;
+  border-radius: 50%;
+  background: var(--coat);
+  border: 2px solid #8a8a8a;
+  cursor: pointer;
+  padding: 0;
+}
+#ui .chip.coat.on { border: 4px solid var(--green); box-shadow: 0 0 0 2px #fff inset; }
+#ui .note { display: block; font-weight: normal; font-size: 0.82em; color: var(--green); margin-top: 0.2em; }
+
+/* Little running pet */
+#ui .runner {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: clamp(54px, 13vh, 92px);
+  border-radius: 12px;
+  background: linear-gradient(#bfe6ff 0 70%, #6fbf5a 70% 80%, #b98b5a 80%);
+  overflow: hidden;
+}
+#ui .runner span {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  font-size: 0.78em;
+  font-weight: bold;
+  color: var(--slate);
+}
+#ui .runner img { position: absolute; left: 50%; bottom: 23%; transform: translateX(-50%); height: 66%; }
+#ui .runner.big { position: absolute; inset: 18% 8% 26%; background: none; height: auto; }
+#ui .runner.big img { bottom: 0; height: 100%; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.15)); }
+
+/* Buttons */
+#ui .actions { display: flex; gap: 0.6em; justify-content: flex-end; margin-top: 0.8em; flex-wrap: wrap; }
+#ui .btn {
+  font: inherit;
+  font-weight: bold;
+  border-radius: 12px;
+  padding: 0.6em 1.2em;
+  cursor: pointer;
+  border: 2px solid var(--navy);
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+#ui .btn.primary { background: var(--green); border-color: #2c5e28; color: #fff; font-size: 1.08em; flex: 1; }
+#ui .btn.primary:hover { filter: brightness(1.08); }
+#ui .btn.ghost { background: #fff; color: var(--navy); }
+#ui .btn.gold { background: var(--gold); border-color: var(--bronze); color: var(--navy); }
+#ui .btn.link { background: none; border: none; color: var(--slate); text-decoration: underline; padding: 0.3em 0.4em; }
+#ui .btn:disabled { opacity: 0.6; cursor: default; }
+#ui .shoplink { display: block; margin-top: 0.6em; text-align: center; color: var(--rust); font-weight: bold; }
+
+/* Portraits */
+#ui .portrait {
+  position: relative;
+  aspect-ratio: 1;
+  max-height: 62vh;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  background: var(--navy);
+}
+#ui .portrait > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#ui .portrait .tag { left: auto; right: 8px; }
+#ui .portrait.empty .burst {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-conic-gradient(from 0deg at 50% 45%, rgba(255, 240, 200, 0.18) 0deg 7deg, transparent 7deg 16deg),
+    radial-gradient(circle at 50% 45%, #fff3c4 0%, #ffc96b 22%, #c46a8c 52%, #4b3f8f 80%, #1f2350 100%);
+}
+#ui .portrait.empty .plate {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: 7%;
+  background: var(--cream);
+  border: 3px solid var(--gold);
+  color: var(--navy);
+  text-align: center;
+  font: italic 900 clamp(18px, 5vh, 34px) 'Arial Black', Impact, Arial, sans-serif;
+  padding: 0.15em 0;
+  transform: skewY(-2deg);
+}
+#ui .ribbon {
+  position: absolute;
+  top: 7%;
+  left: -12%;
+  right: -12%;
+  transform: rotate(-6deg);
+  background: var(--rust);
+  color: var(--cream);
+  text-align: center;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.35em 0;
+  border-top: 3px solid var(--gold);
+  border-bottom: 3px solid var(--gold);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+#ui .card.won .ribbon { background: var(--green); }
+#ui .reveal .portrait { animation: shine 1.2s ease-out; }
+@keyframes shine {
+  0% { transform: scale(0.6) rotate(-6deg); opacity: 0; }
+  60% { transform: scale(1.04) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* Level map */
+#ui .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.45em; margin-top: 0.7em; }
+#ui .level {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1em;
+  padding: 0.45em 0.3em;
+  border-radius: 12px;
+  border: 2px solid var(--aged);
+  background: #fff;
+  cursor: pointer;
+  color: var(--ink);
+}
+#ui .level b { font-size: 1.2em; }
+#ui .level span { font-weight: bold; font-size: 0.9em; }
+#ui .level small { font-size: 0.72em; color: var(--slate); }
+#ui .level.on { border-color: var(--green); box-shadow: 0 0 0 2px var(--green) inset; }
+#ui .level.locked { opacity: 0.55; cursor: default; }
+
+/* End card */
+#ui .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4em; margin-top: 0.6em; }
+#ui .stats div { background: var(--cream); border-radius: 10px; padding: 0.4em 0.2em; text-align: center; }
+#ui .stats b { display: block; font-size: 1.3em; color: var(--navy); }
+#ui .stats span { font-size: 0.75em; color: var(--slate); }
+#ui .shop {
+  margin-top: 0.8em;
+  padding: 0.6em 0.8em;
+  border-radius: 12px;
+  background: var(--navy);
+  color: var(--cream);
+  text-align: center;
+}
+#ui .shop p { margin: 0 0 0.45em; }
+#ui .shop .btn.gold { width: 100%; box-sizing: border-box; }
+#ui .shop .btn.link { color: var(--aged); font-size: 0.85em; }
+
+/* Making the portrait */
+#ui .card.making { width: min(460px, 90vw); text-align: center; }
+#ui .orb {
+  position: relative;
+  width: min(34vh, 220px);
+  aspect-ratio: 1;
+  margin: 0.4em auto 0.8em;
+}
+#ui .orb img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; filter: saturate(1.3); }
+#ui .orb i {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 6px solid transparent;
+  border-top-color: var(--gold);
+  border-right-color: var(--rust);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#ui .making .step { font-weight: bold; color: var(--rust); min-height: 1.3em; }
+
+/* Narrow screens (phones held upright are asked to turn sideways anyway) */
+@media (max-width: 560px) {
+  #ui .cols { grid-template-columns: 1fr; }
+  #ui .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Short screens (phones held sideways): tighter so the buttons fit without scrolling */
+@media (max-height: 460px) {
+  #ui .card { padding: 8px 14px; }
+  #ui .head p, #ui .fine { display: none; }
+  #ui .head + .cols { margin-top: 0.3em; }
+  #ui .drop { max-height: 46vh; }
+  #ui .field { margin-bottom: 0.2em; }
+  #ui .field input.name { padding: 0.2em 0.5em; }
+  #ui .seg { padding: 0.25em 0.4em; }
+  #ui .chip.coat { width: 1.8em; height: 1.8em; }
+  #ui .setup .runner { height: 12vh; }
+  #ui .actions { margin-top: 0.4em; }
+  #ui .btn { padding: 0.45em 1em; }
+}
