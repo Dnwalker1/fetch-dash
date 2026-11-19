@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
+import { makeLevelArt3 } from '../art/levelArt3';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, SCORE, SPAWN } from '../config';
@@ -50,6 +51,13 @@ const CHASERS: Record<ChaserKind, { label: string; texture: string; anim?: strin
   frog: { label: 'Frog', texture: 'frog', lift: 13, hop: 30, ranOff: 'Ran off after the frog!' },
   fox: { label: 'Fox', texture: 'fox', lift: 17, hop: 16, ranOff: 'Ran off after the fox!' },
   cardinal: { label: 'Cardinal', texture: 'cardinal-1', anim: 'cardinal-flap', lift: 14, hop: 20, ranOff: 'Ran off after the cardinal!' },
+  chipmunk: { label: 'Chipmunk', texture: 'chipmunk', lift: 13, hop: 14, ranOff: 'Ran off after the chipmunk!' },
+  mouse: { label: 'Mouse', texture: 'mouse', lift: 9, hop: 6, ranOff: 'Ran off after the mouse!' },
+  lizard: { label: 'Lizard', texture: 'lizard', lift: 9, hop: 3, ranOff: 'Ran off after the lizard!' },
+  chicken: { label: 'Chicken', texture: 'chicken', lift: 18, hop: 20, ranOff: 'Ran off after the chicken!' },
+  monkey: { label: 'Monkey', texture: 'monkey', lift: 19, hop: 32, ranOff: 'Ran off after the monkey!' },
+  parrot: { label: 'Parrot', texture: 'parrot-1', anim: 'parrot-flap', lift: 20, hop: 22, ranOff: 'Ran off after the parrot!' },
+  seagull: { label: 'Seagull', texture: 'gull-1', anim: 'gull-flap', lift: 16, hop: 22, ranOff: 'Ran off after the seagull!' },
 };
 
 /** Things that fly by out of reach. */
@@ -59,27 +67,51 @@ const FLYERS: Partial<Record<GawkKind, { texture: string; y: number; ms: number;
   pigeon: { texture: 'pigeon', y: 250, ms: 4600, msg: 'Pigeons! Swipe up!' },
   duck: { texture: 'duck', y: 220, ms: 4000, msg: 'Ducks! Swipe up!' },
   owl: { texture: 'owl', y: 200, ms: 5000, msg: 'An owl! Swipe up!' },
+  crow: { texture: 'crow', y: 220, ms: 4200, msg: 'Crows! Swipe up!' },
+  hawk: { texture: 'hawk', y: 170, ms: 4800, msg: 'A hawk! Swipe up!' },
+  parrot: { texture: 'parrot', y: 210, ms: 4200, msg: 'A parrot! Swipe up!' },
+  balloon: { texture: 'balloon', y: 230, ms: 6000, msg: 'A balloon! Swipe up!' },
 };
 
-/** How each obstacle sits on the ground: its center's height above the ground, and how to beat it. */
-const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean }> = {
+/**
+ * How each obstacle sits on the ground: its center's height above the
+ * ground, and how to beat it. Things to slide under can come with a tree
+ * (a trunk and a treetop) or with poles holding them up.
+ */
+type Decor = { tree: string; trunkTint?: number } | { poles: number[]; tint: number; width: number; height: number };
+const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean; decor?: Decor }> = {
   fence: { lift: 25, slide: false },
   puddle: { lift: 6, slide: false },
   log: { lift: 17, slide: false },
   rock: { lift: 19, slide: false },
   sandcastle: { lift: 26, slide: false },
   driftwood: { lift: 13, slide: false },
-  branch: { lift: 65, slide: true },
-  umbrella: { lift: 66, slide: true },
+  branch: { lift: 65, slide: true, decor: { tree: 'canopy' } },
+  umbrella: { lift: 66, slide: true, decor: { poles: [0], tint: 0xffffff, width: 6, height: 90 } },
   trashcan: { lift: 23, slide: false },
   hydrant: { lift: 19, slide: false },
   sign: { lift: 22, slide: false },
-  awning: { lift: 64, slide: true },
+  awning: { lift: 64, slide: true, decor: { poles: [-56, 56], tint: 0x2b2b3a, width: 4, height: 86 } },
   stump: { lift: 18, slide: false },
   creek: { lift: 5, slide: false },
   snowman: { lift: 29, slide: false },
   sled: { lift: 13, slide: false },
-  snowbranch: { lift: 65, slide: true },
+  snowbranch: { lift: 65, slide: true, decor: { tree: 'snowcanopy', trunkTint: 0x8a7a70 } },
+  haybale: { lift: 20, slide: false },
+  pumpkin: { lift: 17, slide: false },
+  autumnbranch: { lift: 65, slide: true, decor: { tree: 'canopy-autumn' } },
+  cactus: { lift: 26, slide: false },
+  tumbleweed: { lift: 19, slide: false },
+  arch: { lift: 64, slide: true, decor: { poles: [-56, 56], tint: 0xc06a44, width: 14, height: 84 } },
+  trough: { lift: 13, slide: false },
+  clothesline: { lift: 64, slide: true, decor: { poles: [-62, 62], tint: 0x8a6a44, width: 5, height: 90 } },
+  lantern: { lift: 23, slide: false },
+  pond: { lift: 5, slide: false },
+  blossombranch: { lift: 65, slide: true, decor: { tree: 'canopy-blossom' } },
+  vines: { lift: 68, slide: true, decor: { tree: 'canopy-jungle' } },
+  crate: { lift: 20, slide: false },
+  barrel: { lift: 22, slide: false },
+  banner: { lift: 63, slide: true, decor: { poles: [-62, 62], tint: 0x4a4a6a, width: 5, height: 90 } },
 };
 
 /**
@@ -121,7 +153,7 @@ export class GameScene extends Phaser.Scene {
   private groundGfx!: Phaser.GameObjects.Graphics;
   private frameCache = new Map<string, string[]>();
   private darkSky = false;
-  private weather?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private weather: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
 
   private baseSpeed = 300; // full running speed, rises over time
   private speedFactor = 1; // drops while the pet is distracted
@@ -197,11 +229,12 @@ export class GameScene extends Phaser.Scene {
     makeTextures(this);
     makeLevelArt(this);
     makeLevelArt2(this);
+    makeLevelArt3(this);
     this.makeAnimations();
     this.choice = loadPet();
     makePetTextures(this, this.choice);
     this.drawBackground();
-    this.weather = undefined;
+    this.weather = [];
     this.startWeather();
 
     // The ground is drawn fresh each frame so it can follow the hills
@@ -698,6 +731,10 @@ export class GameScene extends Phaser.Scene {
       this.drawStreet();
       return;
     }
+    if (t.tufts === 'boards') {
+      this.drawBoardwalk();
+      return;
+    }
     const step = 16;
     const tops: { x: number; y: number }[] = [];
     for (let x = -step; x <= GAME_WIDTH + step; x += step) tops.push({ x, y: this.groundAt(x) });
@@ -737,6 +774,12 @@ export class GameScene extends Phaser.Scene {
         g.fillTriangle(x, y + 1, x + 4, y - 7, x + 8, y + 1);
         if (n === 2 || n === 5) g.fillTriangle(x + 6, y + 1, x + 9, y - 5, x + 12, y + 1);
         if (n % 3 === 0) g.fillTriangle(x + 16, y + 64, x + 20, y + 56, x + 24, y + 64);
+        if (t.speckle !== undefined && n % 2 === 0) {
+          // fallen leaves or petals
+          g.fillStyle(t.speckle, 1);
+          g.fillEllipse(x + 12, y + 6, 7, 4);
+          g.fillEllipse(x + 30, y + 58 + n, 6, 3);
+        }
       } else if (t.tufts === 'snow') {
         // soft drifts on top, and a sparkle here and there
         g.fillStyle(0xffffff, 1);
@@ -756,6 +799,31 @@ export class GameScene extends Phaser.Scene {
       g.fillStyle(t.dirtDark, 1);
       if (n === 1 || n === 4) g.fillCircle(x + 14, y + 28 + n * 2, 2.5);
       if (n === 6) g.fillCircle(x + 30, y + 38, 2);
+    }
+  }
+
+  /** Fireworks Pier: wooden planks over dark water, with posts going down into it. */
+  private drawBoardwalk(): void {
+    const t = this.level.theme;
+    const g = this.groundGfx;
+    const y = this.groundAt(0);
+    g.fillStyle(t.dirt, 1);
+    g.fillRect(0, y, GAME_WIDTH, GAME_HEIGHT - y);
+    const off = this.distancePx;
+    // posts under the pier, then the deck on top
+    g.fillStyle(0x4a3a2a, 1);
+    for (let wx = Math.floor(off / 150) * 150; wx < off + GAME_WIDTH + 150; wx += 150) g.fillRect(wx - off + 40, y + 22, 12, GAME_HEIGHT - y);
+    g.fillStyle(t.grass, 1);
+    g.fillRect(0, y, GAME_WIDTH, 22);
+    g.fillStyle(0xc8a274, 1);
+    g.fillRect(0, y, GAME_WIDTH, 3);
+    g.fillStyle(t.grassDark, 1);
+    g.fillRect(0, y + 20, GAME_WIDTH, 5);
+    for (let wx = Math.floor(off / 36) * 36; wx < off + GAME_WIDTH + 36; wx += 36) g.fillRect(wx - off, y + 3, 2, 17);
+    // little glints of the fireworks on the water
+    g.fillStyle(t.dirtDark, 1);
+    for (let wx = Math.floor(off / 90) * 90; wx < off + GAME_WIDTH + 90; wx += 90) {
+      g.fillRect(wx - off + 10, y + 50 + ((wx / 90) % 3) * 14, 28, 2);
     }
   }
 
@@ -860,25 +928,25 @@ export class GameScene extends Phaser.Scene {
     const kind = this.pickObstacle();
     const gy = this.groundAt(x);
     const o = OBSTACLES[kind];
-    if (kind === 'branch') {
-      // Low branch hanging from a tree: slide under it
-      // The trunk stops just above the pet's head, so it can slide under the tree
-      this.addDecor(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95));
-      this.addDecor(this.add.image(x + 40, gy - 400, 'canopy').setDepth(0.96));
-    } else if (kind === 'snowbranch') {
-      this.addDecor(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setTint(0x8a7a70).setDepth(0.95));
-      this.addDecor(this.add.image(x + 40, gy - 400, 'snowcanopy').setDepth(0.96));
-    } else if (kind === 'umbrella') {
-      this.addDecor(this.add.image(x, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(6, 90).setDepth(0.95));
-    } else if (kind === 'awning') {
-      // A shop awning on two thin poles: slide under it
-      for (const dx of [-56, 56]) {
-        this.addDecor(this.add.image(x + dx, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(4, 86).setTint(0x2b2b3a).setDepth(0.95));
+    const d = o.decor;
+    if (d && 'tree' in d) {
+      // Low branch hanging from a tree. The trunk stops just above the pet's
+      // head, so it can slide under the tree.
+      const trunk = this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95);
+      if (d.trunkTint !== undefined) trunk.setTint(d.trunkTint);
+      this.addDecor(trunk);
+      this.addDecor(this.add.image(x + 40, gy - 400, d.tree).setDepth(0.96));
+    } else if (d) {
+      // An awning, a stone arch, a clothesline or a banner held up on poles
+      for (const dx of d.poles) {
+        const pole = this.add.image(x + dx, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(d.width, d.height).setDepth(0.95);
+        if (d.tint !== 0xffffff) pole.setTint(d.tint);
+        this.addDecor(pole);
       }
     }
     this.addObstacle(x, gy - o.lift, kind);
     if (o.slide) this.hint(`slide-${kind}`, 'Swipe down to slide under!');
-    else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : kind === 'creek' ? 'Jump the creek!' : 'Tap to jump!');
+    else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : kind === 'creek' ? 'Jump the creek!' : kind === 'pond' ? 'Jump the pond!' : 'Tap to jump!');
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
 
     // Gaps grow with speed so the game stays fair as it speeds up
@@ -894,6 +962,7 @@ export class GameScene extends Phaser.Scene {
   private addObstacle(x: number, y: number, key: string): void {
     const r = this.add.image(x, y, key).setDepth(1);
     this.obstacles.add(r);
+    if (key === 'tumbleweed') this.tweens.add({ targets: r, angle: -360, duration: 900, repeat: -1 });
     const body = r.body as Body;
     body.setAllowGravity(false);
     body.setImmovable(true);
@@ -1022,7 +1091,7 @@ export class GameScene extends Phaser.Scene {
     // Fast enough that it has just dashed past the pet when the warning ends
     this.tweens.add({ targets: sq, x: -60, duration: 1300, onUpdate: place, onComplete: () => sq.destroy() });
     this.tweens.add({ targets: hop, h: c.hop, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
-    if (c.texture === 'crab' || c.texture === 'frog') this.tweens.add({ targets: sq, angle: { from: -8, to: 8 }, duration: 90, yoyo: true, repeat: 7 });
+    if (['crab', 'frog', 'lizard'].includes(c.texture)) this.tweens.add({ targets: sq, angle: { from: -8, to: 8 }, duration: 90, yoyo: true, repeat: 7 });
 
     this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
@@ -1176,7 +1245,7 @@ export class GameScene extends Phaser.Scene {
   private dust(count: number): void {
     const x = this.pet.x - this.petW / 3;
     const y = this.pet.y + this.pet.height / 2 - 3;
-    const color = { sand: 0xf3dfae, snow: 0xffffff, street: 0xc8c4bd, grass: 0xd9c3a0 }[this.level.theme.tufts];
+    const color = { sand: 0xf3dfae, snow: 0xffffff, street: 0xc8c4bd, boards: 0xc8a882, grass: 0xd9c3a0 }[this.level.theme.tufts];
     for (let i = 0; i < count; i++) {
       const puff = this.add.circle(x + Phaser.Math.Between(-8, 8), y, Phaser.Math.Between(3, 6), color, 0.8).setDepth(1.5);
       this.tweens.add({
@@ -1313,7 +1382,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.pauseAll();
     this.time.paused = true;
     this.anims.pauseAll();
-    this.weather?.pause();
+    this.weather.forEach((w) => w.pause());
     this.tweens.killTweensOf(this.toastText);
     this.toastText.setAlpha(0);
     this.centerText.setFontSize(30).setText('Paused\n\nTap or press Space to keep going');
@@ -1327,7 +1396,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.resumeAll();
     this.time.paused = false;
     this.anims.resumeAll();
-    this.weather?.resume();
+    this.weather.forEach((w) => w.resume());
     this.centerText.setText('');
     this.pauseBtn?.setText('\u23F8\uFE0F');
     this.startedAt = this.time.now;
@@ -1429,37 +1498,73 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Rain or snow falling in front of everything but the score. */
+  /** Rain, snow, falling leaves or petals, or fireworks over the pier. */
   private startWeather(): void {
     const w = this.level.theme.weather;
     if (w === 'rain') {
-      this.weather = this.add
-        .particles(0, -20, 'raindrop', {
-          x: { min: -60, max: GAME_WIDTH + 200 },
-          speedY: { min: 760, max: 920 },
-          speedX: { min: -190, max: -150 },
-          rotate: 11,
-          lifespan: 800,
-          frequency: 14,
-          quantity: 2,
-          alpha: { min: 0.3, max: 0.65 },
-        })
-        .setDepth(3);
-    } else if (w === 'snow') {
-      this.weather = this.add
-        .particles(0, -10, 'snowflake', {
+      this.weather.push(
+        this.add
+          .particles(0, -20, 'raindrop', {
+            x: { min: -60, max: GAME_WIDTH + 200 },
+            speedY: { min: 760, max: 920 },
+            speedX: { min: -190, max: -150 },
+            rotate: 11,
+            lifespan: 800,
+            frequency: 14,
+            quantity: 2,
+            alpha: { min: 0.3, max: 0.65 },
+          })
+          .setDepth(3),
+      );
+    } else if (w === 'snow' || w === 'leaves' || w === 'petals') {
+      const look = {
+        snow: { texture: 'snowflake', tint: [0xffffff], every: 55, spin: 0, scale: { min: 0.35, max: 1 } },
+        leaves: { texture: 'leaf', tint: [0xd9692a, 0xc9452c, 0xe8b030, 0xb5552a], every: 260, spin: 360, scale: { min: 0.7, max: 1.2 } },
+        petals: { texture: 'petal', tint: [0xf4b6c8, 0xfbdde6, 0xe8a0b8], every: 150, spin: 300, scale: { min: 0.7, max: 1.3 } },
+      }[w];
+      const e = this.add
+        .particles(0, -10, look.texture, {
           x: { min: -40, max: GAME_WIDTH + 260 },
           speedY: { min: 40, max: 95 },
           speedX: { min: -90, max: -30 },
-          scale: { min: 0.35, max: 1 },
-          alpha: { min: 0.6, max: 1 },
+          scale: look.scale,
+          alpha: { min: 0.7, max: 1 },
+          tint: look.tint,
+          rotate: look.spin ? { start: 0, end: look.spin } : 0,
           lifespan: 9000,
-          frequency: 55,
+          frequency: look.every,
           quantity: 1,
         })
         .setDepth(3);
-      // Start with the sky already full of snow
-      this.weather.fastForward(9000, 50);
+      // Start with the air already full
+      e.fastForward(9000, 50);
+      this.weather.push(e);
+    } else if (w === 'fireworks') {
+      const colors = [0xff5a7a, 0xffd25a, 0x5ad0ff, 0x9aff6a, 0xd08aff];
+      const bursts = colors.map((c) =>
+        this.add
+          .particles(0, 0, 'snowflake', {
+            speed: { min: 50, max: 170 },
+            lifespan: 1300,
+            scale: { start: 0.9, end: 0 },
+            alpha: { start: 1, end: 0.2 },
+            gravityY: 70,
+            tint: c,
+            emitting: false,
+          }),
+      );
+      // Bursts go in the sky: behind the sea and the carnival, in front of the stars
+      const firstLayer = this.layers[0]?.tile;
+      if (firstLayer) bursts.forEach((e) => this.children.moveBelow(e as never, firstLayer as never));
+      this.weather.push(...bursts);
+      this.time.addEvent({
+        delay: 1100,
+        loop: true,
+        callback: () => {
+          const b = Phaser.Utils.Array.GetRandom(bursts);
+          b.explode(46, Phaser.Math.Between(80, GAME_WIDTH - 80), Phaser.Math.Between(60, 220));
+        },
+      });
     }
   }
 
@@ -1481,5 +1586,9 @@ export class GameScene extends Phaser.Scene {
     flap('owl-flap', ['owl-0', 'owl-1'], 4);
     flap('cardinal-flap', ['cardinal-0', 'cardinal-1'], 9);
     flap('person-wave', ['person-0', 'person-1'], 4);
+    flap('crow-flap', ['crow-0', 'crow-1'], 8);
+    flap('hawk-flap', ['hawk-0', 'hawk-1'], 4);
+    flap('parrot-flap', ['parrot-0', 'parrot-1'], 10);
+    flap('balloon-flap', ['balloon-0', 'balloon-1'], 2);
   }
 }

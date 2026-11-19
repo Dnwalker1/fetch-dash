@@ -104,7 +104,7 @@ function esc(s: string): string {
 
 /** Cycles the pet's run frames in an <img>, like a tiny flipbook. */
 function startRunner(r: HTMLElement, host: CardHost): void {
-  const imgs = Array.from(r.querySelectorAll<HTMLImageElement>('.runner img'));
+  const imgs = Array.from(r.querySelectorAll<HTMLImageElement>('.runner img, img.flip'));
   if (!imgs.length) return;
   const frames = host.petFrames(host.choice());
   const order = [0, 1, 2, 1];
@@ -313,59 +313,138 @@ function portraitBlock(host: CardHost, hero: Hero | null, ribbon?: string): stri
     </div>`;
 }
 
+/** Where each level sits on the trail map, in a 1000 x 260 box. */
+function mapPoints(n: number): { x: number; y: number }[] {
+  return Array.from({ length: n }, (_, i) => ({
+    x: 70 + (i * 860) / Math.max(1, n - 1),
+    y: 128 + 74 * Math.sin(i * 0.95),
+  }));
+}
+
+/** A smooth trail through the points (Catmull-Rom turned into curves). */
+function trailPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return '';
+  let d = `M${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+    d += ` C${c1.x.toFixed(1)} ${c1.y.toFixed(1)} ${c2.x.toFixed(1)} ${c2.y.toFixed(1)} ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+
+/** The small hero picture in the corner of the map card. */
+function heroMedal(hero: Hero | null): string {
+  if (hero?.portrait) return `<button class="medal" title="See the full portrait"><img src="${esc(hero.portrait)}" alt="Hero portrait" /></button>`;
+  return `<div class="medal empty"><img class="flip" alt="" /></div>`;
+}
+
 export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void {
   const hero = loadHero();
   const p = host.progress();
   const name = displayName(hero, host.choice().species);
-  const tiles = LEVELS.map((l) => {
+  const pts = mapPoints(LEVELS.length);
+  // The trail runs in from the left edge and on to the ball past the last stop
+  const lastPt = pts[pts.length - 1];
+  const full = [{ x: 0, y: pts[0].y + 40 }, ...pts, { x: 985, y: lastPt.y - 30 }];
+  const walked = full.slice(0, Math.min(full.length, p.unlocked + 1));
+  // Each trail gets a soft patch of its own ground color on the map
+  const patches = LEVELS.map((l, i) => {
+    const c = l.theme.grass;
+    const rgba = `rgba(${(c >> 16) & 255}, ${(c >> 8) & 255}, ${c & 255}, 0.55)`;
+    return `radial-gradient(ellipse 9% 38% at ${pts[i].x / 10}% ${pts[i].y / 2.6}%, ${rgba}, transparent)`;
+  }).join(', ');
+  const stops = LEVELS.map((l, i) => {
     const locked = l.id > p.unlocked;
-    const best = p.best[l.id];
     const done = p.done.includes(l.id);
-    // A thin strip in the trail's own colors along the top of each tile
-    const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
-    const strip = `background: linear-gradient(90deg, ${hex(l.theme.skyTop)}, ${hex(l.theme.skyBottom)} 65%, ${hex(l.theme.grass)}) top / 100% 7px no-repeat, #fff`;
-    return `<button class="level${locked ? ' locked' : ''}${l.id === p.current ? ' on' : ''}" data-level="${l.id}" style="${strip}" ${locked ? 'disabled' : ''}>
-      <b>${locked ? '🔒' : done ? '✅' : l.id}</b>
-      <span>${l.name}</span>
-      ${!locked && done ? `<em class="stars">${starRow(p.stars[l.id] ?? 0)}</em>` : ''}
-      <small${!locked && !best ? ' class="tag"' : ''}>${locked ? `Finish Level ${l.id - 1}` : best ? `Best ${best}` : l.tagline}</small>
-    </button>`;
+    const { x, y } = pts[i];
+    const above = y > 128;
+    return `<button class="stop${locked ? ' locked' : ''}${done ? ' done' : ''}${l.id === p.current ? ' on' : ''}" data-level="${l.id}"
+        style="left:${x / 10}%; top:${y / 2.6}%; --ring:${hex(l.theme.grassDark)}" ${locked ? 'disabled' : ''} title="${esc(l.name)}" aria-label="Level ${l.id}: ${esc(l.name)}">
+        <b>${locked ? '🔒' : l.id}</b>
+        ${done ? `<em class="mini">${starRow(p.stars[l.id] ?? 0)}</em>` : ''}
+      </button>
+      <span class="mark" style="left:${x / 10}%; top:${(above ? y - 50 : y + 52) / 2.6}%">${l.icon}</span>`;
   }).join('');
 
   const r = show(
-    `<div class="card home${opts.reveal ? ' reveal' : ''}">
-      <div class="cols">
-        <div class="col left">${portraitBlock(host, hero)}</div>
-        <div class="col right">
+    `<div class="card home mapcard${opts.reveal ? ' reveal' : ''}">
+      <div class="maphead">
+        ${heroMedal(hero)}
+        <div class="who">
           <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(cap(name))}</h1>
-          <p class="lead">${opts.reveal ? 'Your hero is ready. Here’s how they look on the trail:' : 'Ready for the trail.'}</p>
-          <div class="runner"><span>In the game</span><img alt="" /></div>
-          <div class="levels">${tiles}</div>
-          <div class="actions">
-            <button class="btn ghost edit">${hero?.portrait ? 'Edit hero' : '✨ Make a hero portrait'}</button>
-            <button class="btn primary play">Play Level ${p.current} ▶</button>
-          </div>
-          <a class="shoplink" href="${shopUrl('home')}" target="_blank" rel="noopener">Put ${esc(name)} on a shirt at Design Your Pet →</a>
+          <p class="lead">${opts.reveal ? 'Your hero is ready. Pick a trail on the map.' : 'Pick a trail on the map.'}</p>
         </div>
+        <div class="headbtns">
+          <button class="btn ghost edit">${hero?.portrait ? 'Edit hero' : '✨ Make a hero portrait'}</button>
+          <a class="shoplink" href="${shopUrl('home')}" target="_blank" rel="noopener">Put ${esc(name)} on a shirt →</a>
+        </div>
+      </div>
+      <div class="map" style="background: ${patches}, var(--parchment)">
+        <span class="maptitle">Fetch Dash Trail Map</span>
+        <svg viewBox="0 0 1000 260" preserveAspectRatio="none" aria-hidden="true">
+          <path class="road" d="${trailPath(full)}" />
+          <path class="walked" d="${trailPath(walked)}" />
+          <path class="dash" d="${trailPath(full)}" />
+        </svg>
+        ${stops}
+        <span class="ball" style="left:98.5%; top:${(lastPt.y - 30) / 2.6}%">🎾</span>
+        <span class="compass">🧭</span>
+        <div class="mappet"><img class="flip" alt="" /></div>
+      </div>
+      <div class="mapfoot">
+        <div class="info"></div>
+        <button class="btn primary play"></button>
       </div>
     </div>`,
     () => host.play(host.progress().current),
   );
+
+  // Show the picked level's name, stars and best score, and stand the pet on its stop
+  const pick = (id: number) => {
+    const prog = host.progress();
+    prog.current = id;
+    const l = levelById(id);
+    const i = LEVELS.indexOf(l);
+    r.querySelectorAll('.stop').forEach((b) => b.classList.toggle('on', Number((b as HTMLElement).dataset.level) === id));
+    const pet = r.querySelector<HTMLElement>('.mappet');
+    if (pet) {
+      pet.style.left = `${pts[i].x / 10}%`;
+      pet.style.top = `${pts[i].y / 2.6}%`;
+    }
+    const best = prog.best[id];
+    const info = r.querySelector('.info');
+    if (info) {
+      info.innerHTML = `<b>Level ${id} · ${esc(l.name)}</b>
+        <span class="stars">${starRow(prog.stars[id] ?? 0)}</span>
+        <small>${esc(l.tagline)} · ${l.goalMeters} m${best ? ` · Best ${best}` : ''}</small>`;
+    }
+    const play = r.querySelector('.play');
+    if (play) play.textContent = `Play Level ${id} ▶`;
+  };
+  pick(p.current);
   startRunner(r, host);
-  r.querySelectorAll<HTMLButtonElement>('[data-level]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const prog = host.progress();
-      prog.current = Number(b.dataset.level);
-      openHome(host);
-    }),
-  );
+  r.querySelectorAll<HTMLButtonElement>('.stop').forEach((b) => b.addEventListener('click', () => pick(Number(b.dataset.level))));
   r.querySelector('.play')?.addEventListener('click', () => host.play(host.progress().current));
   r.querySelector('.edit')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
+  // Tap the small hero picture to see the whole portrait; tap again to close it
+  const medal = r.querySelector<HTMLButtonElement>('button.medal');
+  medal?.addEventListener('click', () => {
+    const card = r.querySelector('.mapcard');
+    if (!card || !hero?.portrait) return;
+    const big = document.createElement('button');
+    big.className = 'bigportrait';
+    big.innerHTML = `<img src="${esc(hero.portrait)}" alt="Hero portrait" /><span>Tap to close</span>`;
+    big.addEventListener('click', () => big.remove());
+    card.appendChild(big);
+  });
 }
-
-// ---------------------------------------------------------------------------
-// End of the level
-// ---------------------------------------------------------------------------
 
 export function openEnd(host: CardHost, res: RunResult): void {
   const hero = loadHero();

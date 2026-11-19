@@ -14,7 +14,7 @@ Your pet runs on its own. You keep it out of trouble and on task:
 ## Your pet is the hero
 
 1. **Make your hero.** On the first visit, name your pet, choose dog or cat, and add a photo. The game picks the closest in-game coat color from the photo (tap another to change it), then makes a hero portrait in Design Your Pet's "Anime Hero" style with your pet's name on it. Each player gets 3 free portraits. You can skip the photo and just play.
-2. **Meet your hero.** The portrait appears next to the in-game version of your pet, with the level map.
+2. **Pick a trail.** The home card is a trail map: a small picture of your hero at the top, and a winding trail with a stop for each level. Tap a stop to see its name, stars and best score, then press Play.
 3. **Play.** In the run your pet is the drawn character that matches its breed type, size and coat.
 4. **End card.** Win or lose, the full portrait comes back with your score, a button to the Design Your Pet shop, and "Save picture" (the portrait with your result, ready to share).
 
@@ -30,6 +30,12 @@ Until the live generator is switched on, the game makes a stand-in portrait on t
 | 4 | Main Street | 1000 m | Downtown at dusk under the street lamps. Trash cans, hydrants and sidewalk signs to jump, shop awnings to slide under. Dogs chase a cat, cats run from a dog, pigeons fly over, and neighbors wave hello (dogs only). |
 | 5 | Rainy Riverside | 1100 m | Rain, willows and a river. Stumps and creeks to jump. Frogs hop past, ducks fly over. |
 | 6 | Snowy Night | 1200 m | Moonlight, stars and falling snow. Snowmen and sleds to jump, snowy branches to slide under. A fox (dogs) or a cardinal (cats), and owls overhead. |
+| 7 | Autumn Orchard | 1250 m | Falling leaves. Hay bales and pumpkins to jump, autumn branches to slide under. Chipmunks (dogs), mice (cats), crows. |
+| 8 | Desert Canyon | 1300 m | Red rock mesas. Cacti and rolling tumbleweeds to jump, stone arches to slide under. Lizards and hawks. |
+| 9 | Sunny Farm | 1350 m | Red barn and windmill. Hay bales and water troughs to jump, clotheslines to slide under. A chicken (dogs), mice (cats), the farmer waves. |
+| 10 | Blossom Garden | 1400 m | Falling petals. Stone lanterns and koi ponds to jump, blossom branches to slide under. |
+| 11 | Jungle Falls | 1450 m | Big hills and waterfalls. Creeks, logs and stumps to jump, hanging vines to slide under. Monkeys (dogs) and parrots (cats). |
+| 12 | Fireworks Pier | 1500 m | The finale at night on the boardwalk, with fireworks. Crates and barrels to jump, flag banners to slide under. Seagulls and balloons. |
 
 Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`; their art is in `src/art/levelArt.ts`.
 

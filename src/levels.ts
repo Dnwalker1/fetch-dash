@@ -8,10 +8,16 @@ import { GROUND_Y } from './config';
 
 export type ObstacleKind =
   | 'fence' | 'puddle' | 'branch' | 'log' | 'rock' | 'sandcastle' | 'driftwood' | 'umbrella'
-  | 'trashcan' | 'hydrant' | 'sign' | 'awning' | 'stump' | 'creek' | 'snowman' | 'sled' | 'snowbranch';
+  | 'trashcan' | 'hydrant' | 'sign' | 'awning' | 'stump' | 'creek' | 'snowman' | 'sled' | 'snowbranch'
+  | 'haybale' | 'pumpkin' | 'autumnbranch' | 'cactus' | 'tumbleweed' | 'arch' | 'trough' | 'clothesline'
+  | 'lantern' | 'pond' | 'blossombranch' | 'vines' | 'crate' | 'barrel' | 'banner';
 
-export type ChaserKind = 'squirrel' | 'rabbit' | 'crab' | 'bird' | 'cat' | 'dog' | 'frog' | 'fox' | 'cardinal';
-export type GawkKind = 'bird' | 'den' | 'butterfly' | 'gull' | 'pigeon' | 'person' | 'duck' | 'owl';
+export type ChaserKind =
+  | 'squirrel' | 'rabbit' | 'crab' | 'bird' | 'cat' | 'dog' | 'frog' | 'fox' | 'cardinal'
+  | 'chipmunk' | 'mouse' | 'lizard' | 'chicken' | 'monkey' | 'parrot' | 'seagull';
+export type GawkKind =
+  | 'bird' | 'den' | 'butterfly' | 'gull' | 'pigeon' | 'person' | 'duck' | 'owl'
+  | 'crow' | 'hawk' | 'parrot' | 'balloon';
 
 /** One scrolling background layer: texture, height in px, scroll speed vs. the trail. */
 export interface Layer {
@@ -45,7 +51,9 @@ export interface Theme {
   cloudTint?: number;
   /** Stars twinkle in the sky. */
   night?: boolean;
-  weather?: 'rain' | 'snow';
+  weather?: 'rain' | 'snow' | 'leaves' | 'petals' | 'fireworks';
+  /** Little colored bits scattered on the grass (fallen leaves, petals). */
+  speckle?: number;
   grass: number;
   grassDark: number;
   dirt: number;
@@ -53,13 +61,15 @@ export interface Theme {
   /** Tint used for the pale "sky haze" over the farthest layer. */
   haze: number;
   /** Little marks drawn along the ground. 'street' draws a sidewalk and road instead of a dirt path. */
-  tufts: 'grass' | 'sand' | 'street' | 'snow';
+  tufts: 'grass' | 'sand' | 'street' | 'snow' | 'boards';
 }
 
 export interface LevelDef {
   id: number;
   name: string;
   tagline: string;
+  /** Little landmark shown next to the level's stop on the trail map. */
+  icon: string;
   goalMeters: number;
   speed: { start: number; max: number; gainPerSecond: number };
   /** Obstacles and how often each one shows up (weights). */
@@ -80,6 +90,7 @@ export const LEVELS: LevelDef[] = [
     id: 1,
     name: 'Park Trail',
     tagline: 'A sunny run through the park',
+    icon: '🌳',
     goalMeters: 600,
     speed: { start: 300, max: 750, gainPerSecond: 6 },
     obstacles: { fence: 4, puddle: 3, branch: 3 },
@@ -112,6 +123,7 @@ export const LEVELS: LevelDef[] = [
     id: 2,
     name: 'Hilltop Trail',
     tagline: 'Up and down the rolling hills',
+    icon: '⛰️',
     goalMeters: 800,
     speed: { start: 310, max: 760, gainPerSecond: 6.5 },
     obstacles: { log: 3, rock: 3, branch: 3, fence: 1 },
@@ -144,6 +156,7 @@ export const LEVELS: LevelDef[] = [
     id: 3,
     name: 'Sunset Beach',
     tagline: 'Race the sunset along the sand',
+    icon: '🌴',
     goalMeters: 1000,
     speed: { start: 320, max: 780, gainPerSecond: 7 },
     obstacles: { sandcastle: 3, driftwood: 3, umbrella: 3, puddle: 1 },
@@ -174,6 +187,7 @@ export const LEVELS: LevelDef[] = [
     id: 4,
     name: 'Main Street',
     tagline: 'Downtown at dusk, lights coming on',
+    icon: '🏙️',
     goalMeters: 1000,
     speed: { start: 330, max: 790, gainPerSecond: 7 },
     obstacles: { trashcan: 3, hydrant: 3, sign: 2, awning: 3 },
@@ -204,6 +218,7 @@ export const LEVELS: LevelDef[] = [
     id: 5,
     name: 'Rainy Riverside',
     tagline: 'Splash along the river in the rain',
+    icon: '🌧️',
     goalMeters: 1100,
     speed: { start: 340, max: 800, gainPerSecond: 7.5 },
     obstacles: { stump: 3, creek: 3, log: 2, rock: 2, branch: 3 },
@@ -235,6 +250,7 @@ export const LEVELS: LevelDef[] = [
     id: 6,
     name: 'Snowy Night',
     tagline: 'A moonlit dash through the snow',
+    icon: '❄️',
     goalMeters: 1200,
     speed: { start: 350, max: 820, gainPerSecond: 8 },
     obstacles: { snowman: 3, sled: 3, snowbranch: 3, rock: 1 },
@@ -261,6 +277,193 @@ export const LEVELS: LevelDef[] = [
       dirtDark: 0xb9c4d4,
       haze: 0x34477a,
       tufts: 'snow',
+    },
+  },
+  {
+    id: 7,
+    name: 'Autumn Orchard',
+    tagline: 'Crunchy leaves and apple trees',
+    icon: '🍎',
+    goalMeters: 1250,
+    speed: { start: 360, max: 830, gainPerSecond: 8 },
+    obstacles: { haybale: 3, pumpkin: 3, autumnbranch: 3, fence: 1 },
+    hills: { height: 50, length: 1400 },
+    dogChaser: 'chipmunk',
+    catChaser: 'mouse',
+    gawk: ['crow', 'den'],
+    theme: {
+      skyTop: 0x7fb6e0,
+      skyBottom: 0xffe2b0,
+      sun: { x: 780, y: 110, r: 44, color: 0xffd27a, glow: 0xffb04d },
+      layers: [
+        { key: 'autumnhills', h: 220, factor: 0.2 },
+        { key: 'appletrees', h: 170, factor: 0.45, lift: 30 },
+      ],
+      raysAlpha: 0.45,
+      cloudsAlpha: 0.9,
+      weather: 'leaves',
+      speckle: 0xd9692a,
+      grass: 0xa9a24a,
+      grassDark: 0x8a8536,
+      dirt: 0xa8774a,
+      dirtDark: 0x8a5f38,
+      haze: 0xffe2b0,
+      tufts: 'grass',
+    },
+  },
+  {
+    id: 8,
+    name: 'Desert Canyon',
+    tagline: 'Red rocks and rolling tumbleweeds',
+    icon: '🌵',
+    goalMeters: 1300,
+    speed: { start: 365, max: 840, gainPerSecond: 8 },
+    obstacles: { cactus: 3, tumbleweed: 3, rock: 2, arch: 3 },
+    hills: { height: 50, length: 1400 },
+    dogChaser: 'lizard',
+    catChaser: 'lizard',
+    gawk: ['hawk', 'den'],
+    theme: {
+      skyTop: 0x4f9ee8,
+      skyBottom: 0xffd9a0,
+      sun: { x: 300, y: 100, r: 52, color: 0xfff0b0, glow: 0xffc46b },
+      layers: [
+        { key: 'mesas', h: 240, factor: 0.15 },
+        { key: 'cacti', h: 160, factor: 0.45, lift: 30 },
+      ],
+      raysAlpha: 0.6,
+      cloudsAlpha: 0.35,
+      grass: 0xe2b07a,
+      grassDark: 0xc98e58,
+      dirt: 0xc77b4a,
+      dirtDark: 0xa8613a,
+      haze: 0xffd9a0,
+      tufts: 'sand',
+    },
+  },
+  {
+    id: 9,
+    name: 'Sunny Farm',
+    tagline: 'Barns, hay and a very busy chicken',
+    icon: '🐄',
+    goalMeters: 1350,
+    speed: { start: 370, max: 850, gainPerSecond: 8.5 },
+    obstacles: { haybale: 3, trough: 3, fence: 2, clothesline: 3 },
+    hills: { height: 30, length: 1200 },
+    dogChaser: 'chicken',
+    catChaser: 'mouse',
+    gawk: ['bird', 'person', 'butterfly'],
+    theme: {
+      skyTop: 0x6ec4ff,
+      skyBottom: 0xe8f6ff,
+      sun: { x: 820, y: 90, r: 44, color: 0xffe08a, glow: 0xffe08a },
+      layers: [
+        { key: 'fields', h: 200, factor: 0.2 },
+        { key: 'barnyard', h: 190, factor: 0.45, lift: 20 },
+      ],
+      raysAlpha: 0.4,
+      cloudsAlpha: 1,
+      grass: 0x7cc055,
+      grassDark: 0x5f9e3f,
+      dirt: 0xb98b5a,
+      dirtDark: 0xa77b4d,
+      haze: 0xe8f6ff,
+      tufts: 'grass',
+    },
+  },
+  {
+    id: 10,
+    name: 'Blossom Garden',
+    tagline: 'Pink petals and quiet ponds',
+    icon: '🌸',
+    goalMeters: 1400,
+    speed: { start: 375, max: 860, gainPerSecond: 8.5 },
+    obstacles: { lantern: 3, pond: 3, blossombranch: 3, rock: 1 },
+    hills: { height: 30, length: 1100 },
+    dogChaser: 'rabbit',
+    catChaser: 'bird',
+    gawk: ['butterfly', 'den', 'bird'],
+    theme: {
+      skyTop: 0x9fd0f5,
+      skyBottom: 0xffe6ef,
+      sun: { x: 760, y: 110, r: 40, color: 0xfff0d0, glow: 0xffc0d0 },
+      layers: [
+        { key: 'mountains', h: 260, factor: 0.15, tint: 0xe0d0f4 },
+        { key: 'blossoms', h: 180, factor: 0.45, lift: 20 },
+      ],
+      raysAlpha: 0.3,
+      cloudsAlpha: 0.8,
+      cloudTint: 0xffe0ea,
+      weather: 'petals',
+      speckle: 0xf4b6c8,
+      grass: 0x86c46a,
+      grassDark: 0x6aa852,
+      dirt: 0xd2b48c,
+      dirtDark: 0xb89870,
+      haze: 0xffe6ef,
+      tufts: 'grass',
+    },
+  },
+  {
+    id: 11,
+    name: 'Jungle Falls',
+    tagline: 'Vines, waterfalls and cheeky monkeys',
+    icon: '🦜',
+    goalMeters: 1450,
+    speed: { start: 380, max: 870, gainPerSecond: 9 },
+    obstacles: { vines: 3, log: 2, stump: 2, creek: 3 },
+    hills: { height: 70, length: 1500 },
+    dogChaser: 'monkey',
+    catChaser: 'parrot',
+    gawk: ['parrot', 'den'],
+    theme: {
+      skyTop: 0x5fb8d8,
+      skyBottom: 0xdaf2e0,
+      sun: { x: 200, y: 90, r: 40, color: 0xfff4c0, glow: 0xfff0a0 },
+      layers: [
+        { key: 'falls', h: 260, factor: 0.15 },
+        { key: 'jungle', h: 200, factor: 0.45, lift: 30 },
+      ],
+      raysAlpha: 0.35,
+      cloudsAlpha: 0.7,
+      grass: 0x4f9e3e,
+      grassDark: 0x3f8030,
+      dirt: 0x7a5232,
+      dirtDark: 0x5f3e24,
+      haze: 0xdaf2e0,
+      tufts: 'grass',
+    },
+  },
+  {
+    id: 12,
+    name: 'Fireworks Pier',
+    tagline: 'The big finale on the boardwalk',
+    icon: '🎆',
+    goalMeters: 1500,
+    speed: { start: 385, max: 880, gainPerSecond: 9 },
+    obstacles: { crate: 3, barrel: 3, banner: 3, trashcan: 1 },
+    hills: { height: 0, length: 1 },
+    dogChaser: 'seagull',
+    catChaser: 'seagull',
+    gawk: ['balloon', 'person'],
+    theme: {
+      skyTop: 0x0d1436,
+      skyBottom: 0x3a2d6b,
+      layers: [
+        { key: 'sea', h: 130, factor: 0.05, tint: 0x4a5a9a },
+        { key: 'carnival', h: 200, factor: 0.45 },
+      ],
+      raysAlpha: 0,
+      cloudsAlpha: 0.2,
+      cloudTint: 0x6a6aa0,
+      night: true,
+      weather: 'fireworks',
+      grass: 0xb08a5e, // boardwalk planks
+      grassDark: 0x7a5a3a,
+      dirt: 0x1c2a4a, // the water under the pier
+      dirtDark: 0x3a4a7a,
+      haze: 0x3a2d6b,
+      tufts: 'boards',
     },
   },
 ];
