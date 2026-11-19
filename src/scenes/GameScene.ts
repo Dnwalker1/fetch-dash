@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
+import * as sfx from '../audio/sfx';
 import { PALETTES, SIZE_SCALE, hasSavedPet, loadPet, makePetTextures, petKey, savePet, type PetChoice, type Size } from '../art/pets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, LEVEL, PET, SCORE, SPAWN, SPEED } from '../config';
 
@@ -42,6 +43,8 @@ export class GameScene extends Phaser.Scene {
   private startedAt = 0;
   private uiTap = false; // set when a tap lands on a button, so it doesn't also jump or start
   private changePetBtn?: Phaser.GameObjects.Container;
+  private wasOnGround = true;
+  private dustTimer = 0;
   private obstacles!: Phaser.Physics.Arcade.Group;
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
@@ -151,6 +154,7 @@ export class GameScene extends Phaser.Scene {
     else this.buildPicker();
     this.updateHud();
     this.updatePetSprite();
+    this.addMuteButton();
 
     this.setupInput();
   }
@@ -162,6 +166,7 @@ export class GameScene extends Phaser.Scene {
     keys?.on('keydown-SPACE', () => (this.state === 'ready' ? this.startRun() : this.onTap()));
     keys?.on('keydown-DOWN', () => this.onSwipeDown());
     keys?.on('keydown-UP', () => this.onSwipeUp());
+    keys?.on('keydown', () => sfx.unlock());
 
     // Touch and mouse are read straight from the page, in screen pixels.
     // Listening on the whole window means a swipe works anywhere on the
@@ -169,6 +174,7 @@ export class GameScene extends Phaser.Scene {
     // browser or the app around the game from scrolling instead.
     const opts: AddEventListenerOptions = { passive: false };
     const down = (x: number, y: number) => {
+      sfx.unlock();
       this.pointerStart = { x, y, handled: false };
     };
     const move = (x: number, y: number) => {
@@ -243,6 +249,7 @@ export class GameScene extends Phaser.Scene {
     if (this.petBody.blocked.down || this.petBody.touching.down) {
       this.stopSlide();
       this.petBody.setVelocityY(PET.jumpVelocity);
+      sfx.jump();
     }
   }
 
@@ -278,12 +285,26 @@ export class GameScene extends Phaser.Scene {
     if (this.state !== 'playing') return;
     this.state = 'over';
     this.physics.pause();
-    this.tweens.pauseAll();
+    // Freeze what is moving now, but leave the tween manager running so the
+    // finish effects (confetti) can still animate.
+    this.tweens.getTweens().forEach((t) => t.pause());
+    this.tweens.killTweensOf(this.toastText);
+    this.toastText.setAlpha(0);
     this.scheduleTimer?.remove();
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
     this.petSprite.anims.pause();
     if (!won) this.petSprite.setTint(0x999999);
+    if (won) {
+      sfx.cheer();
+      this.petSound(3);
+      this.confetti();
+    } else if (reason.startsWith('Ran off')) {
+      this.petSound(2);
+    } else {
+      sfx.bonk();
+      this.cameras.main.shake(250, 0.012);
+    }
 
     const score = this.score();
     const newBest = score > this.best;
@@ -302,7 +323,6 @@ export class GameScene extends Phaser.Scene {
 
   private restart(): void {
     this.physics.resume();
-    this.tweens.resumeAll();
     this.scene.restart({ quickStart: true });
   }
 
@@ -358,7 +378,7 @@ export class GameScene extends Phaser.Scene {
   private updatePetPosition(): void {
     if (this.chasing) {
       this.petBody.setVelocityX(-DISTRACTION.chaseDriftSpeed);
-      if (this.pet.x <= DISTRACTION.loseX) this.endRun('Ran off after the squirrel!');
+      if (this.pet.x <= DISTRACTION.loseX) this.endRun(this.choice.species === 'cat' ? 'Ran off after the bird!' : 'Ran off after the squirrel!');
     } else if (this.returning) {
       if (this.pet.x < PET.homeX - 4) {
         this.petBody.setVelocityX(260);
@@ -381,6 +401,15 @@ export class GameScene extends Phaser.Scene {
     sp.setFlipX(d?.kind === 'chase' && d.active); // turned around, after the squirrel
     sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : 0); // looking up at the bird or den
     const onGround = this.petBody.blocked.down || this.petBody.touching.down;
+    if (onGround && !this.wasOnGround) this.dust(5); // landing puff
+    this.wasOnGround = onGround;
+    if (onGround && !this.distraction) {
+      this.dustTimer += this.game.loop.delta;
+      if (this.dustTimer > 260) {
+        this.dustTimer = 0;
+        this.dust(1);
+      }
+    }
     const key = petKey(this.choice);
     if (this.sliding) {
       sp.anims.stop();
@@ -454,8 +483,10 @@ export class GameScene extends Phaser.Scene {
 
   private collectTreat(t: Img): void {
     if (!t.active) return;
+    this.treatPop(t.x, t.y);
     t.destroy();
     this.treatCount += 1;
+    sfx.crunch();
   }
 
   // ---------- Slide ----------
@@ -463,6 +494,7 @@ export class GameScene extends Phaser.Scene {
   private startSlide(): void {
     if (!this.sliding) {
       this.sliding = true;
+      sfx.slide();
       this.setPetHeight(Math.round(PET.slideHeight * SIZE_SCALE[this.choice.size]));
     }
     this.slideLeftPx = PET.slideDistance;
@@ -511,6 +543,7 @@ export class GameScene extends Phaser.Scene {
     this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
       this.toast(cat ? 'Bird! Swipe up!' : 'Squirrel! Swipe up!', '#d6402b');
+      this.petSound(2);
       this.hint('chase', 'Your pet turned around! Swipe up to call it back.');
     });
   }
@@ -539,6 +572,7 @@ export class GameScene extends Phaser.Scene {
       this.setSpeedFactor(DISTRACTION.gawkSpeedFactor, 500);
       const msg = { bird: 'Bird! Swipe up!', den: 'Something in that hole! Swipe up!', butterfly: 'Butterfly! Swipe up!' };
       this.toast(msg[what], '#d6402b');
+      this.petSound(1);
       // Eventually the pet loses interest by itself, but you lose the time
       this.distractionTimer = this.time.delayedCall(DISTRACTION.gawkMaxMs, () => this.clearDistraction());
     });
@@ -548,6 +582,7 @@ export class GameScene extends Phaser.Scene {
   private warn(kind: DistractionKind, mark: string, warnMs: number, onGiveIn: () => void): void {
     this.distraction = { kind, active: false };
     this.alertText.setText(mark).setVisible(true);
+    sfx.chitter();
     this.distractionTimer?.remove();
     this.distractionTimer = this.time.delayedCall(warnMs, () => {
       if (!this.distraction || this.state !== 'playing') return;
@@ -557,13 +592,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private callBack(): void {
+    sfx.whistle();
     const quick = this.distraction && !this.distraction.active;
     this.clearDistraction();
     if (quick) {
       this.bonus += DISTRACTION.focusBonus;
       this.toast(`Good focus! +${DISTRACTION.focusBonus}`, '#1f6f2a');
+      sfx.ding();
     } else {
-      this.toast('Here, pup!', '#1f6f2a');
+      this.toast(this.choice.species === 'cat' ? 'Here, kitty!' : 'Here, pup!', '#1f6f2a');
     }
   }
 
@@ -606,6 +643,74 @@ export class GameScene extends Phaser.Scene {
     this.toastText.setText(text).setColor(color).setAlpha(1);
     this.tweens.killTweensOf(this.toastText);
     this.tweens.add({ targets: this.toastText, alpha: 0, delay: 900, duration: 500 });
+  }
+
+  // ---------- Sound and effects ----------
+
+  private petSound(times: number): void {
+    if (this.choice.species === 'cat') sfx.meow();
+    else sfx.bark(times);
+  }
+
+  /** Little dust puffs kicked up behind the pet's feet. */
+  private dust(count: number): void {
+    const x = this.pet.x - this.petW / 3;
+    const y = this.pet.y + this.pet.height / 2 - 3;
+    for (let i = 0; i < count; i++) {
+      const puff = this.add.circle(x + Phaser.Math.Between(-8, 8), y, Phaser.Math.Between(3, 6), 0xd9c3a0, 0.8).setDepth(1.5);
+      this.tweens.add({
+        targets: puff,
+        x: puff.x - Phaser.Math.Between(20, 45),
+        y: y - Phaser.Math.Between(4, 14),
+        scale: 2,
+        alpha: 0,
+        duration: 450,
+        onComplete: () => puff.destroy(),
+      });
+    }
+  }
+
+  /** A sparkle and a floating "+10" where a treat was grabbed. */
+  private treatPop(x: number, y: number): void {
+    const ring = this.add.circle(x, y, 8, 0xffffff, 0).setStrokeStyle(3, 0xffe08a).setDepth(5);
+    this.tweens.add({ targets: ring, scale: 2.5, alpha: 0, duration: 300, onComplete: () => ring.destroy() });
+    const label = this.add
+      .text(x, y - 10, `+${SCORE.treat}`, { fontFamily: 'Arial, sans-serif', fontSize: '20px', fontStyle: 'bold', color: '#b8860b' })
+      .setOrigin(0.5)
+      .setDepth(5);
+    this.tweens.add({ targets: label, y: y - 50, alpha: 0, duration: 700, onComplete: () => label.destroy() });
+  }
+
+  private confetti(): void {
+    const colors = [0xd6402b, 0xf2c14e, 0x3f7d3a, 0x5aa7e6, 0xe07ab8];
+    for (let i = 0; i < 70; i++) {
+      const piece = this.add
+        .rectangle(Phaser.Math.Between(0, GAME_WIDTH), Phaser.Math.Between(-120, -10), 8, 12, colors[i % colors.length])
+        .setDepth(15);
+      this.tweens.add({
+        targets: piece,
+        y: GROUND_Y + Phaser.Math.Between(-10, 40),
+        x: piece.x + Phaser.Math.Between(-80, 80),
+        angle: Phaser.Math.Between(-360, 360),
+        duration: Phaser.Math.Between(1400, 2600),
+        ease: 'Sine.easeIn',
+      });
+    }
+  }
+
+  /** Small speaker button in the top-left corner, under the score. */
+  private addMuteButton(): void {
+    const btn = this.add
+      .text(36, 70, sfx.isMuted() ? '\u{1F507}' : '\u{1F50A}', { fontSize: '26px' })
+      .setOrigin(0.5)
+      .setDepth(20)
+      .setInteractive({ useHandCursor: true });
+    btn.on('pointerdown', () => {
+      this.uiTap = true;
+      sfx.unlock();
+      sfx.setMuted(!sfx.isMuted());
+      btn.setText(sfx.isMuted() ? '\u{1F507}' : '\u{1F50A}');
+    });
   }
 
   // ---------- Pet picker (start screen) ----------
