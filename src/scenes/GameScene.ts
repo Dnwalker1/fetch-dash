@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
+import { makeTextures } from '../art/textures';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, LEVEL, PET, SCORE, SPAWN, SPEED } from '../config';
 
 type State = 'ready' | 'playing' | 'over';
 type Rect = Phaser.GameObjects.Rectangle;
+type Img = Phaser.GameObjects.Image;
 type Body = Phaser.Physics.Arcade.Body;
 
 /**
@@ -31,7 +33,7 @@ export class GameScene extends Phaser.Scene {
   private state: State = 'ready';
   private pet!: Rect;
   private petBody!: Body;
-  private nose!: Rect;
+  private petSprite!: Phaser.GameObjects.Sprite;
   private obstacles!: Phaser.Physics.Arcade.Group;
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
@@ -59,7 +61,7 @@ export class GameScene extends Phaser.Scene {
   private centerText!: Phaser.GameObjects.Text;
   private toastText!: Phaser.GameObjects.Text;
   private progressFill!: Rect;
-  private groundStripes: Rect[] = [];
+  private layers: { tile: Phaser.GameObjects.TileSprite; factor: number }[] = [];
 
   private pointerStart?: { x: number; y: number; handled: boolean };
 
@@ -84,33 +86,33 @@ export class GameScene extends Phaser.Scene {
     this.sliding = false;
     this.distraction = undefined;
     this.returning = false;
-    this.groundStripes = [];
+    this.layers = [];
     this.shownHints = new Set<string>();
 
+    makeTextures(this);
+    this.makeAnimations();
     this.drawBackground();
 
-    // Ground (static physics body the pet stands on)
-    const ground = this.add.rectangle(GAME_WIDTH / 2, GROUND_Y + 50, GAME_WIDTH, 100, 0x6fbf5a);
+    // Ground (static physics body the pet stands on; the art is a scrolling tile)
+    const ground = this.add.rectangle(GAME_WIDTH / 2, GROUND_Y + 50, GAME_WIDTH, 100, 0x6fbf5a).setVisible(false);
     this.physics.add.existing(ground, true);
-    for (let x = 0; x < GAME_WIDTH + 80; x += 80) {
-      this.groundStripes.push(this.add.rectangle(x, GROUND_Y + 6, 40, 6, 0x5aa648));
-    }
+    this.addLayer('ground', GROUND_Y, 100, 1);
 
-    // Pet (placeholder: a brown block; the dark "nose" shows where it's looking)
+    // Pet: an invisible box does the physics, and the dog sprite is drawn on top of it
     this.pet = this.add.rectangle(PET.homeX, GROUND_Y - PET.height / 2, PET.width, PET.height, PET_COLOR);
-    this.pet.setStrokeStyle(3, 0x5c3a1e);
+    this.pet.setVisible(false);
     this.physics.add.existing(this.pet);
-    this.pet.setDepth(2);
     this.petBody = this.pet.body as Body;
     this.petBody.setCollideWorldBounds(false);
     this.physics.add.collider(this.pet, ground);
-    this.nose = this.add.rectangle(0, 0, 12, 12, 0x2b1a0d).setDepth(3);
+    this.petSprite = this.add.sprite(PET.homeX, GROUND_Y, 'dog-run-0').setOrigin(0.5, 1).setDepth(2);
+    this.petSprite.play('dog-run');
 
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
     this.treats = this.physics.add.group({ allowGravity: false });
     this.decor = this.physics.add.group({ allowGravity: false });
     this.physics.add.overlap(this.pet, this.obstacles, () => this.endRun('Bonk!'));
-    this.physics.add.overlap(this.pet, this.treats, (_p, t) => this.collectTreat(t as Rect));
+    this.physics.add.overlap(this.pet, this.treats, (_p, t) => this.collectTreat(t as Img));
 
     // HUD
     const font = { fontFamily: 'Arial, sans-serif', color: '#1d2b1f' };
@@ -140,7 +142,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.centerText.setFontSize(24);
     this.updateHud();
-    this.updateNose();
+    this.updatePetSprite();
 
     this.setupInput();
   }
@@ -258,7 +260,8 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
-    if (!won) this.pet.setFillStyle(0x8a8a8a);
+    this.petSprite.anims.pause();
+    if (!won) this.petSprite.setTint(0x999999);
 
     const score = this.score();
     const newBest = score > this.best;
@@ -285,7 +288,7 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     this.alertText.setPosition(this.pet.x, this.pet.y - 62);
-    this.updateNose();
+    this.updatePetSprite();
     if (this.state !== 'playing') return;
     const dt = deltaMs / 1000;
 
@@ -293,16 +296,13 @@ export class GameScene extends Phaser.Scene {
     const dx = this.speed * dt;
     this.distancePx += dx;
 
-    // Scroll ground stripes for a sense of speed
-    for (const s of this.groundStripes) {
-      s.x -= dx;
-      if (s.x < -40) s.x += this.groundStripes.length * 80;
-    }
+    // Scroll the background layers; farther layers move slower
+    for (const l of this.layers) l.tile.tilePositionX += dx * l.factor;
 
     // Keep moving things in step with the current speed
     for (const g of [this.obstacles, this.treats, this.decor]) {
       g.children.each((c) => {
-        const r = c as Rect;
+        const r = c as Img;
         (r.body as Body).setVelocityX(-this.speed);
         if (r.x < -100) r.destroy();
         return true;
@@ -350,17 +350,24 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** The nose shows where the pet is looking: ahead, back at a squirrel, or up. */
-  private updateNose(): void {
-    const halfW = this.pet.width / 2;
-    const halfH = this.pet.height / 2;
+  /** Keeps the dog sprite on its physics box and picks the right pose. */
+  private updatePetSprite(): void {
+    const sp = this.petSprite;
+    sp.setPosition(this.pet.x, this.pet.y + this.pet.height / 2);
+    if (this.state !== 'playing') return;
     const d = this.distraction;
-    if (d?.active && d.kind === 'chase') {
-      this.nose.setPosition(this.pet.x - halfW, this.pet.y - halfH + 14);
-    } else if (d?.active && d.kind === 'gawk') {
-      this.nose.setPosition(this.pet.x + halfW - 10, this.pet.y - halfH);
+    sp.setFlipX(d?.kind === 'chase' && d.active); // turned around, after the squirrel
+    sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : 0); // looking up at the bird or den
+    const onGround = this.petBody.blocked.down || this.petBody.touching.down;
+    if (this.sliding) {
+      sp.anims.stop();
+      sp.setTexture('dog-slide');
+    } else if (!onGround) {
+      sp.anims.stop();
+      sp.setTexture('dog-jump');
     } else {
-      this.nose.setPosition(this.pet.x + halfW, this.pet.y - halfH + 14);
+      if (!sp.anims.isPlaying) sp.play('dog-run');
+      sp.anims.timeScale = this.speed / SPEED.start;
     }
   }
 
@@ -370,17 +377,16 @@ export class GameScene extends Phaser.Scene {
     const roll = Math.random();
     const x = GAME_WIDTH + 60;
     if (roll < 0.4) {
-      this.addObstacle(x, GROUND_Y - 25, 34, 50, 0x8b5a2b); // fence: jump
+      this.addObstacle(x, GROUND_Y - 25, 'fence'); // fence: jump
       this.hint('fence', 'Tap to jump!');
     } else if (roll < 0.7) {
-      this.addObstacle(x, GROUND_Y - 6, 90, 12, 0x4a90d9); // puddle: jump
+      this.addObstacle(x, GROUND_Y - 6, 'puddle'); // puddle: jump
       this.hint('puddle', 'Tap to jump the puddle!');
     } else {
       // Low branch hanging from a tree: slide under it
-      const trunk = this.add.rectangle(x + 40, (GROUND_Y - 75) / 2, 26, GROUND_Y - 75, 0x6b4423);
-      this.decor.add(trunk);
-      (trunk.body as Body).setVelocityX(-this.speed);
-      this.addObstacle(x, GROUND_Y - 65, 110, 50, 0x3f7d3a);
+      this.addDecor(this.add.image(x + 40, (GROUND_Y - 75) / 2, 'trunk'));
+      this.addDecor(this.add.image(x + 40, 40, 'canopy'));
+      this.addObstacle(x, GROUND_Y - 65, 'branch');
       this.hint('branch', 'Swipe down to slide under!');
     }
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
@@ -390,8 +396,13 @@ export class GameScene extends Phaser.Scene {
     this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
   }
 
-  private addObstacle(x: number, y: number, w: number, h: number, color: number): void {
-    const r = this.add.rectangle(x, y, w, h, color);
+  private addDecor(img: Img): void {
+    this.decor.add(img);
+    (img.body as Body).setVelocityX(-this.speed);
+  }
+
+  private addObstacle(x: number, y: number, key: string): void {
+    const r = this.add.image(x, y, key).setDepth(1);
     this.obstacles.add(r);
     const body = r.body as Body;
     body.setAllowGravity(false);
@@ -403,8 +414,7 @@ export class GameScene extends Phaser.Scene {
     const high = Math.random() < 0.5;
     for (let i = 0; i < 4; i++) {
       const y = high ? GROUND_Y - 120 - Math.sin((i / 3) * Math.PI) * 50 : GROUND_Y - 30;
-      const t = this.add.rectangle(x + i * 45, y, 16, 16, 0xf2c14e);
-      t.setStrokeStyle(2, 0xa47a12);
+      const t = this.add.image(x + i * 45, y, 'bone').setDepth(1);
       this.treats.add(t);
       const body = t.body as Body;
       body.setAllowGravity(false);
@@ -415,14 +425,11 @@ export class GameScene extends Phaser.Scene {
   /** The thrown ball waits on the trail; reaching it finishes the level. */
   private spawnBall(remainingPx: number): void {
     this.ballSpawned = true;
-    const ball = this.add.circle(PET.homeX + PET.width / 2 + remainingPx, GROUND_Y - 14, 14, 0xd8e65a);
-    ball.setStrokeStyle(3, 0x7a8a1a);
-    this.decor.add(ball);
-    (ball.body as Body).setVelocityX(-this.speed);
+    this.addDecor(this.add.image(PET.homeX + PET.width / 2 + remainingPx, GROUND_Y - 14, 'ball').setDepth(1));
     this.toast('There’s the ball!', '#1f6f2a');
   }
 
-  private collectTreat(t: Rect): void {
+  private collectTreat(t: Img): void {
     if (!t.active) return;
     t.destroy();
     this.treatCount += 1;
@@ -469,11 +476,10 @@ export class GameScene extends Phaser.Scene {
 
   /** A squirrel scampers along the trail past the pet, the wrong way. */
   private startChase(): void {
-    const sq = this.add.rectangle(GAME_WIDTH + 30, GROUND_Y - 12, 34, 20, 0x7d6b5d).setDepth(1);
-    sq.setStrokeStyle(2, 0x4b3f36);
+    const sq = this.add.image(GAME_WIDTH + 30, GROUND_Y - 16, 'squirrel').setDepth(1);
     // Fast enough that it has just dashed past the pet when the warning ends
     this.tweens.add({ targets: sq, x: -60, duration: 1300, onComplete: () => sq.destroy() });
-    this.tweens.add({ targets: sq, y: GROUND_Y - 30, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: sq, y: GROUND_Y - 34, duration: 130, yoyo: true, repeat: 4, ease: 'Sine.easeOut' });
 
     this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
@@ -485,14 +491,14 @@ export class GameScene extends Phaser.Scene {
   /** Something out of reach: a bird in the sky or a critter in a den hole. */
   private startGawk(what: 'bird' | 'den'): void {
     if (what === 'bird') {
-      const bird = this.add.triangle(GAME_WIDTH + 40, 230, 0, 0, 36, 8, 0, 16, 0x3b3b5c).setDepth(1);
+      const bird = this.add.sprite(GAME_WIDTH + 40, 230, 'bird-0').setDepth(1).setScale(1.3);
+      bird.play('bird-flap');
       this.tweens.add({ targets: bird, x: -60, duration: 4200, onComplete: () => bird.destroy() });
-      this.tweens.add({ targets: bird, y: 205, scaleY: 0.4, duration: 220, yoyo: true, repeat: -1 });
+      this.tweens.add({ targets: bird, y: 200, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else {
       // A den hole on the hillside, drifting by slower than the trail (it's farther away)
       const den = this.add.ellipse(GAME_WIDTH + 60, GROUND_Y - 48, 70, 30, 0x3a2a1a).setDepth(0.5);
-      const critter = this.add.rectangle(GAME_WIDTH + 60, GROUND_Y - 56, 24, 26, 0x9a7b5c).setDepth(0.6);
-      critter.setStrokeStyle(2, 0x5e4630);
+      const critter = this.add.image(GAME_WIDTH + 60, GROUND_Y - 58, 'gopher').setDepth(0.6);
       this.tweens.add({ targets: [den, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), critter.destroy()) });
       this.tweens.add({ targets: critter, y: GROUND_Y - 84, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300 });
     }
@@ -509,7 +515,6 @@ export class GameScene extends Phaser.Scene {
   private warn(kind: DistractionKind, mark: string, warnMs: number, onGiveIn: () => void): void {
     this.distraction = { kind, active: false };
     this.alertText.setText(mark).setVisible(true);
-    this.pet.setFillStyle(0xc9884f);
     this.distractionTimer?.remove();
     this.distractionTimer = this.time.delayedCall(warnMs, () => {
       if (!this.distraction || this.state !== 'playing') return;
@@ -534,7 +539,6 @@ export class GameScene extends Phaser.Scene {
     this.returning = true;
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
-    this.pet.setFillStyle(PET_COLOR);
     this.setSpeedFactor(1, 600);
   }
 
@@ -572,10 +576,33 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    // Simple hills and a sun, placeholders for the Backyard world art
+    const sky = this.add.graphics();
+    sky.fillGradientStyle(0x8fd3ff, 0x8fd3ff, 0xdff3ff, 0xdff3ff, 1);
+    sky.fillRect(0, 0, GAME_WIDTH, GROUND_Y);
     this.add.circle(820, 90, 44, 0xffe08a);
-    this.add.ellipse(200, GROUND_Y + 10, 700, 220, 0x9fd88c);
-    this.add.ellipse(760, GROUND_Y + 20, 800, 260, 0x8ccd7a);
+    this.add.circle(820, 90, 58, 0xffe08a, 0.25);
+    this.addLayer('clouds', 20, 160, 0.08);
+    this.addLayer('hills', GROUND_Y - 220, 220, 0.2);
+    this.addLayer('bushes', GROUND_Y - 150, 150, 0.45);
+  }
+
+  private addLayer(key: string, y: number, h: number, factor: number): void {
+    const tile = this.add.tileSprite(0, y, GAME_WIDTH, h, key).setOrigin(0, 0);
+    this.layers.push({ tile, factor });
+  }
+
+  private makeAnimations(): void {
+    if (!this.anims.exists('dog-run')) {
+      this.anims.create({
+        key: 'dog-run',
+        frames: ['dog-run-0', 'dog-run-1', 'dog-run-2', 'dog-run-1'].map((key) => ({ key })),
+        frameRate: 12,
+        repeat: -1,
+      });
+    }
+    if (!this.anims.exists('bird-flap')) {
+      this.anims.create({ key: 'bird-flap', frames: [{ key: 'bird-0' }, { key: 'bird-1' }], frameRate: 8, repeat: -1 });
+    }
   }
 }
 
