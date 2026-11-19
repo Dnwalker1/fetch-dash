@@ -68,5 +68,10 @@ export function countPortrait(): void {
 
 export function displayName(h: Hero | null, species: 'dog' | 'cat'): string {
   const n = h?.name.trim();
-  return n || (species === 'cat' ? 'Your cat' : 'Your pup');
+  return n || (species === 'cat' ? 'your cat' : 'your pup');
+}
+
+/** Capitalizes the first letter, for a name at the start of a sentence. */
+export function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

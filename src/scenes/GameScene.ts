@@ -64,6 +64,7 @@ export class GameScene extends Phaser.Scene {
   private petW = PET.width;
   private petH = PET.height;
   private grounded = true;
+  private lastJumpAt = -1000;
   private startedAt = 0;
   private uiTap = false; // set when a tap lands on a game button, so it doesn't also jump or start
   private heroBtn?: Phaser.GameObjects.Container;
@@ -256,7 +257,13 @@ export class GameScene extends Phaser.Scene {
       else this.onTap();
     });
     this.downKey = keys?.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN, false);
-    keys?.on('keydown-DOWN', () => !cardsOpen() && this.onSwipeDown());
+    keys?.on('keydown-DOWN', (e: KeyboardEvent) => {
+      if (cardsOpen()) return;
+      // Holding the key fires it over and over. Those repeats only keep a
+      // slide going; they never start one or pull the pet out of a jump.
+      if (e.repeat) this.holdSlide();
+      else this.onSwipeDown();
+    });
     keys?.on('keydown-UP', () => !cardsOpen() && this.onSwipeUp());
     keys?.on('keydown', () => sfx.unlock());
 
@@ -347,7 +354,7 @@ export class GameScene extends Phaser.Scene {
     if (this.chasing) {
       // A pet running the wrong way doesn't listen yet, but remember the jump
       // so it happens the moment the pet is called back.
-      this.pendingMove = { kind: 'jump', at: this.time.now };
+      this.pendingMove = { kind: 'jump', at: performance.now() };
       return;
     }
     if (this.grounded) this.jump();
@@ -356,6 +363,7 @@ export class GameScene extends Phaser.Scene {
   private jump(): void {
     this.stopSlide();
     this.grounded = false;
+    this.lastJumpAt = performance.now();
     this.petBody.setVelocityY(PET.jumpVelocity);
     sfx.jump();
   }
@@ -363,14 +371,20 @@ export class GameScene extends Phaser.Scene {
   private onSwipeDown(): void {
     if (this.state !== 'playing') return;
     if (this.chasing) {
-      this.pendingMove = { kind: 'slide', at: this.time.now };
+      this.pendingMove = { kind: 'slide', at: performance.now() };
       return;
     }
+    // Down pressed at almost the same moment as a jump: the jump wins
+    if (!this.grounded && performance.now() - this.lastJumpAt < 200) return;
     if (!this.grounded) {
       // Fast-fall when in the air
       this.petBody.setVelocityY(900);
     }
     this.startSlide();
+  }
+
+  private holdSlide(): void {
+    if (this.state === 'playing' && this.sliding && this.grounded && !this.chasing) this.slideLeftPx = PET.slideDistance;
   }
 
   private onSwipeUp(): void {
@@ -898,11 +912,12 @@ export class GameScene extends Phaser.Scene {
   private doPendingMove(): void {
     const p = this.pendingMove;
     this.pendingMove = undefined;
-    const recent = p && this.time.now - p.at < DISTRACTION.comboWindowMs;
-    if (this.downKey?.isDown || (recent && p.kind === 'slide')) {
-      this.startSlide();
-    } else if (recent && p.kind === 'jump' && this.grounded) {
+    const recent = p && performance.now() - p.at < DISTRACTION.comboWindowMs;
+    // The most recent press wins; a held down arrow counts as a slide
+    if (recent && p.kind === 'jump' && this.grounded) {
       this.jump();
+    } else if ((recent && p.kind === 'slide') || this.downKey?.isDown) {
+      this.startSlide();
     }
   }
 

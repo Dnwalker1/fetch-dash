@@ -178,7 +178,7 @@ function stylize(img: HTMLImageElement, size: number): HTMLCanvasElement {
   c.width = size;
   c.height = size;
   const g = c.getContext('2d', { willReadFrequently: true })!;
-  const side = Math.min(img.width, img.height) * 0.92;
+  const side = Math.min(img.width, img.height);
   g.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
   const data = g.getImageData(0, 0, size, size);
   const px = data.data;
@@ -191,13 +191,13 @@ function stylize(img: HTMLImageElement, size: number): HTMLCanvasElement {
     blurred[i * 3 + 1] = px[i * 4 + 1];
     blurred[i * 3 + 2] = px[i * 4 + 2];
   }
-  for (let pass = 0; pass < 2; pass++) boxBlur(blurred, size, 2);
+  for (let pass = 0; pass < 3; pass++) boxBlur(blurred, size, 3);
 
   // Luminance for the edge lines
   const lum = new Float32Array(n);
   for (let i = 0; i < n; i++) lum[i] = 0.299 * blurred[i * 3] + 0.587 * blurred[i * 3 + 1] + 0.114 * blurred[i * 3 + 2];
 
-  const levels = 6;
+  const levels = 7;
   const step = 255 / (levels - 1);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -219,7 +219,7 @@ function stylize(img: HTMLImageElement, size: number): HTMLCanvasElement {
         const gy = lum[i + size - 1] + 2 * lum[i + size] + lum[i + size + 1] - lum[i - size - 1] - 2 * lum[i - size] - lum[i - size + 1];
         edge = Math.sqrt(gx * gx + gy * gy);
       }
-      const ink = Math.min(1, Math.max(0, (edge - 70) / 60));
+      const ink = Math.min(1, Math.max(0, (edge - 110) / 70)) * 0.85;
       px[i * 4] = r * (1 - ink) + 22 * ink;
       px[i * 4 + 1] = gr * (1 - ink) + 32 * ink;
       px[i * 4 + 2] = b * (1 - ink) + 42 * ink;

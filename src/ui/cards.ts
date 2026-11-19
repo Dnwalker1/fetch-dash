@@ -3,7 +3,7 @@ import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { LEVELS, levelById, type Progress } from '../levels';
 import { HeroError, LIVE, generateLive, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
-import { FREE_PORTRAITS, countPortrait, displayName, loadHero, portraitsLeft, saveHero, type Hero } from '../hero/store';
+import { FREE_PORTRAITS, cap, countPortrait, displayName, loadHero, portraitsLeft, saveHero, type Hero } from '../hero/store';
 
 /**
  * The cards shown over the game: make your hero (start), meet your hero
@@ -153,7 +153,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
         <div class="col left">${photoBox}</div>
         <div class="col right">
           <label class="field">Name
-            <input class="name" maxlength="14" placeholder="Chewy" value="${esc(name)}" autocomplete="off" />
+            <input class="name" maxlength="14" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" />
           </label>
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
           <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
@@ -233,6 +233,16 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     keepName();
     void makeHero(host, opts);
   });
+  // The portrait letters the name, so it needs one before it can be made
+  const go = r.querySelector<HTMLButtonElement>('.go');
+  const nameNeeded = () => {
+    if (!go) return;
+    const empty = !nameInput.value.trim();
+    go.disabled = empty;
+    go.textContent = empty ? 'Type a name first' : '✨ Make my hero';
+  };
+  nameInput.addEventListener('input', nameNeeded);
+  nameNeeded();
   if (!opts.canGoBack && !name) nameInput.focus({ preventScroll: true });
 }
 
@@ -315,7 +325,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
       <div class="cols">
         <div class="col left">${portraitBlock(host, hero)}</div>
         <div class="col right">
-          <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(name)}</h1>
+          <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(cap(name))}</h1>
           <p class="lead">${opts.reveal ? 'Your hero is ready. Here’s how they look on the trail:' : 'Ready for the trail.'}</p>
           <div class="runner"><span>In the game</span><img alt="" /></div>
           <div class="levels">${tiles}</div>
@@ -352,7 +362,7 @@ export function openEnd(host: CardHost, res: RunResult): void {
   const name = displayName(hero, host.choice().species);
   const ribbon = res.won ? `Level ${level.id} complete!` : `${Math.min(res.meters, level.goalMeters)} of ${level.goalMeters} m`;
   const title = res.won
-    ? `${esc(name)} caught the ball!`
+    ? `${esc(cap(name))} caught the ball!`
     : esc(res.reason.replace('!', '')) + '!';
   const primary = res.won && next ? `Level ${next.id}: ${next.name} ▶` : res.won ? 'Play again ▶' : 'Run again ▶';
   const primaryLevel = res.won && next ? next.id : res.level;
@@ -418,7 +428,8 @@ async function savePicture(hero: Hero, name: string, levelName: string, res: Run
     g.fillStyle = '#EFE3C6';
     g.textAlign = 'center';
     g.font = 'bold 44px Arial, sans-serif';
-    g.fillText(res.won ? `${name} finished ${levelName}!` : `${name} ran ${res.meters} m on ${levelName}`, S / 2, S + 66);
+    const who = cap(name);
+    g.fillText(res.won ? `${who} finished ${levelName}!` : `${who} ran ${res.meters} m on ${levelName}`, S / 2, S + 66);
     g.font = '28px Arial, sans-serif';
     g.fillStyle = '#D9C8A2';
     g.fillText(`Score ${res.score}  ·  Fetch Dash by Goodwookie`, S / 2, S + 116);
