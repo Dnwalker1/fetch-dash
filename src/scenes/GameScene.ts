@@ -47,7 +47,7 @@ export class GameScene extends Phaser.Scene {
   private ballSpawned = false;
 
   private sliding = false;
-  private slideTimer?: Phaser.Time.TimerEvent;
+  private slideLeftPx = 0;
 
   private distraction?: Distraction;
   private returning = false;
@@ -320,6 +320,11 @@ export class GameScene extends Phaser.Scene {
     this.nextSpawnIn -= dx;
     if (this.nextSpawnIn <= 0 && remainingPx > GAME_WIDTH + 200) this.spawnNext();
 
+    if (this.sliding) {
+      this.slideLeftPx -= dx;
+      if (this.slideLeftPx <= 0) this.stopSlide();
+    }
+
     this.updatePetPosition();
 
     // Falling off the bottom should never happen, but just in case
@@ -430,12 +435,10 @@ export class GameScene extends Phaser.Scene {
       this.sliding = true;
       this.setPetHeight(PET.slideHeight);
     }
-    this.slideTimer?.remove();
-    this.slideTimer = this.time.delayedCall(PET.slideMs, () => this.stopSlide());
+    this.slideLeftPx = PET.slideDistance;
   }
 
   private stopSlide(): void {
-    this.slideTimer?.remove();
     if (!this.sliding) return;
     this.sliding = false;
     this.setPetHeight(PET.height);

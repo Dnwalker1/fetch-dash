@@ -11,7 +11,9 @@ export const PET = {
   height: 56,
   slideHeight: 26,
   jumpVelocity: -850,
-  slideMs: 900,
+  // A slide covers a set stretch of trail, so it still clears a branch
+  // when a distraction has slowed the run down.
+  slideDistance: 320,
 };
 
 export const SPEED = {
@@ -38,12 +40,12 @@ export const DISTRACTION = {
   focusBonus: 50, // for calling your pet back before it gives in
   // Squirrel on the trail: the pet turns around and chases it
   chaseWarnMs: 900,
-  chaseSpeedFactor: 0.35, // the run slows to this share of full speed
+  chaseSpeedFactor: 0.5, // the run slows to this share of full speed
   chaseDriftSpeed: 90, // how fast the pet runs back toward the squirrel
   loseX: 50, // if the pet gets this far back, the run ends
   // Bird or den hole out of reach: the pet stops to stare and slows down
   gawkWarnMs: 700,
-  gawkSpeedFactor: 0.45,
+  gawkSpeedFactor: 0.6,
   gawkMaxMs: 5000, // after this the pet loses interest on its own (no bonus)
 };
 
