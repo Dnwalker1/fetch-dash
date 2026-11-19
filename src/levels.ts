@@ -16,7 +16,12 @@ export type GawkKind = 'bird' | 'den' | 'butterfly' | 'gull' | 'pigeon' | 'perso
 /** One scrolling background layer: texture, height in px, scroll speed vs. the trail. */
 export interface Layer {
   key: string;
-  h: number;
+  /** Height in px. Painted layers (with `src`) work it out from the picture. */
+  h?: number;
+  /** A painted picture for this layer (in public/), instead of drawn-in-code art. */
+  src?: string;
+  /** How much to shrink or grow the painted picture. */
+  scale?: number;
   factor: number;
   tint?: number;
   /** Raise the layer this many px above the usual horizon (for hilly levels). */
@@ -28,6 +33,8 @@ export interface Theme {
   skyBottom: number;
   /** The sun (or the moon on a night level). Leave out for an overcast sky. */
   sun?: { x: number; y: number; r: number; color: number; glow: number };
+  /** A painted sky picture (in public/) that fills the screen, sun and clouds included. */
+  skyImage?: string;
   /** Background layers, far to near. A haze goes between the first and the rest. */
   layers: Layer[];
   /** Sun reflection on the water (the beach). */
@@ -84,16 +91,19 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x8fd3ff,
       skyBottom: 0xdff3ff,
       sun: { x: 820, y: 90, r: 44, color: 0xffe08a, glow: 0xffe08a },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l1/sky.webp',
       layers: [
-        { key: 'hills', h: 220, factor: 0.2 },
-        { key: 'bushes', h: 150, factor: 0.45 },
+        { key: 'l1-far', src: 'art/l1/far.webp', scale: 1.5, factor: 0.2 },
+        { key: 'l1-mid', src: 'art/l1/mid.webp', scale: 0.7, factor: 0.45 },
       ],
       raysAlpha: 0.4,
       cloudsAlpha: 1,
-      grass: 0x6fbf5a,
-      grassDark: 0x58a446,
-      dirt: 0xb98b5a,
-      dirtDark: 0xa77b4d,
+      // matched to the painted grass
+      grass: 0x8fb04a,
+      grassDark: 0x6f8f36,
+      dirt: 0xbf9f6e,
+      dirtDark: 0xa3855a,
       haze: 0xdff3ff,
       tufts: 'grass',
     },

@@ -160,6 +160,15 @@ export class GameScene extends Phaser.Scene {
     return this.baseSpeed * this.speedFactor;
   }
 
+  /** Painted pictures for the levels that have them (only fetched once). */
+  preload(): void {
+    for (const l of LEVELS) {
+      const t = l.theme;
+      if (t.skyImage && !this.textures.exists(`sky-${l.id}`)) this.load.image(`sky-${l.id}`, t.skyImage);
+      for (const layer of t.layers) if (layer.src && !this.textures.exists(layer.key)) this.load.image(layer.key, layer.src);
+    }
+  }
+
   create(data?: { level?: number; auto?: boolean }): void {
     this.progress = loadProgress();
     this.level = levelById(data?.level ?? this.progress.current);
@@ -1354,6 +1363,40 @@ export class GameScene extends Phaser.Scene {
 
   private drawBackground(): void {
     const t = this.level.theme;
+    if (t.skyImage && this.textures.exists(`sky-${this.level.id}`)) {
+      // A painted sky already has its sun and clouds
+      this.add.image(0, 0, `sky-${this.level.id}`).setOrigin(0, 0).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    } else {
+      this.drawSky();
+    }
+    t.layers.forEach((l, i) => {
+      const scale = l.scale ?? 1;
+      // Painted strips have 4 clear rows on top. Showing from row 2 to just short of
+      // the bottom keeps the strip's top and bottom edges from bleeding into each other.
+      const h = l.src ? Math.round((this.textures.get(l.key).getSourceImage().height - 4) * scale) : (l.h ?? 0);
+      const tile = this.addLayer(l.key, GROUND_Y - h - (l.lift ?? 0), h, l.factor);
+      if (scale !== 1) tile.setTileScale(scale);
+      if (l.src) tile.tilePositionY = 2;
+      if (l.tint !== undefined) tile.setTint(l.tint);
+      if (i > 0) return;
+      if (t.sunGlint && t.sun) {
+        // The low sun's reflection stays put on the water while the waves drift
+        for (let k = 0; k < 9; k++) {
+          const w = t.sun.r * (1.5 - k * 0.12);
+          const glint = this.add.rectangle(t.sun.x, 322 + k * 12, w, 4, 0xffd27a, 0.75 - k * 0.06);
+          this.tweens.add({ targets: glint, scaleX: { from: 0.8, to: 1.15 }, duration: 900 + k * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        }
+      }
+      // A pale haze between the far and near layers adds depth
+      this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, t.haze, 0.12).setOrigin(0, 0);
+    });
+    // Night gets a soft wash over everything behind the trail
+    if (t.night) this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0f1a3a, 0.18).setOrigin(0, 0);
+  }
+
+  /** Sky drawn in code: gradient, stars, sun or moon, drifting clouds. */
+  private drawSky(): void {
+    const t = this.level.theme;
     const sky = this.add.graphics();
     sky.fillGradientStyle(t.skyTop, t.skyTop, t.skyBottom, t.skyBottom, 1);
     sky.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -1375,23 +1418,6 @@ export class GameScene extends Phaser.Scene {
     }
     const clouds = this.addLayer('clouds', 20, 160, 0.08).setAlpha(t.cloudsAlpha);
     if (t.cloudTint !== undefined) clouds.setTint(t.cloudTint);
-    t.layers.forEach((l, i) => {
-      const tile = this.addLayer(l.key, GROUND_Y - l.h - (l.lift ?? 0), l.h, l.factor);
-      if (l.tint !== undefined) tile.setTint(l.tint);
-      if (i > 0) return;
-      if (t.sunGlint && t.sun) {
-        // The low sun's reflection stays put on the water while the waves drift
-        for (let k = 0; k < 9; k++) {
-          const w = t.sun.r * (1.5 - k * 0.12);
-          const glint = this.add.rectangle(t.sun.x, 322 + k * 12, w, 4, 0xffd27a, 0.75 - k * 0.06);
-          this.tweens.add({ targets: glint, scaleX: { from: 0.8, to: 1.15 }, duration: 900 + k * 130, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-        }
-      }
-      // A pale haze between the far and near layers adds depth
-      this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, t.haze, 0.12).setOrigin(0, 0);
-    });
-    // Dusk and night get a soft wash over everything behind the trail
-    if (t.night) this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0f1a3a, 0.18).setOrigin(0, 0);
   }
 
   /** Twinkling stars for a night sky. */
