@@ -6,7 +6,7 @@ type Rect = Phaser.GameObjects.Rectangle;
 type Body = Phaser.Physics.Arcade.Body;
 
 const BEST_KEY = 'fetch-dash-best';
-const SWIPE_PX = 40;
+const SWIPE_PX = 30; // screen pixels
 
 /**
  * Week 1 prototype: placeholder shapes only.
@@ -19,6 +19,8 @@ export class GameScene extends Phaser.Scene {
   private petBody!: Body;
   private obstacles!: Phaser.Physics.Arcade.Group;
   private treats!: Phaser.Physics.Arcade.Group;
+  private decor!: Phaser.Physics.Arcade.Group;
+  private shownHints = new Set<string>();
 
   private speed = SPEED.start;
   private distancePx = 0;
@@ -62,6 +64,7 @@ export class GameScene extends Phaser.Scene {
     this.chasing = false;
     this.returning = false;
     this.groundStripes = [];
+    this.shownHints = new Set<string>();
 
     this.drawBackground();
 
@@ -76,12 +79,14 @@ export class GameScene extends Phaser.Scene {
     this.pet = this.add.rectangle(PET.homeX, GROUND_Y - PET.height / 2, PET.width, PET.height, 0xa86b3c);
     this.pet.setStrokeStyle(3, 0x5c3a1e);
     this.physics.add.existing(this.pet);
+    this.pet.setDepth(2);
     this.petBody = this.pet.body as Body;
     this.petBody.setCollideWorldBounds(false);
     this.physics.add.collider(this.pet, ground);
 
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
     this.treats = this.physics.add.group({ allowGravity: false });
+    this.decor = this.physics.add.group({ allowGravity: false });
     this.physics.add.overlap(this.pet, this.obstacles, () => this.endRun('Bonk!'));
     this.physics.add.overlap(this.pet, this.treats, (_p, t) => this.collectTreat(t as Rect));
 
@@ -120,25 +125,64 @@ export class GameScene extends Phaser.Scene {
     keys?.on('keydown-DOWN', () => this.onSwipeDown());
     keys?.on('keydown-UP', () => this.onSwipeUp());
 
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.pointerStart = { x: p.x, y: p.y, handled: false };
-    });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+    // Touch and mouse are read straight from the page, in screen pixels.
+    // Listening on the whole window means a swipe works anywhere on the
+    // screen (not only on the game canvas), and preventDefault stops the
+    // browser or the app around the game from scrolling instead.
+    const opts: AddEventListenerOptions = { passive: false };
+    const down = (x: number, y: number) => {
+      this.pointerStart = { x, y, handled: false };
+    };
+    const move = (x: number, y: number) => {
       const s = this.pointerStart;
-      if (!s || s.handled || !p.isDown) return;
-      const dy = p.y - s.y;
-      if (dy > SWIPE_PX) {
-        s.handled = true;
-        this.onSwipeDown();
-      } else if (dy < -SWIPE_PX) {
-        s.handled = true;
-        this.onSwipeUp();
-      }
-    });
-    this.input.on('pointerup', () => {
+      if (!s || s.handled) return;
+      const dy = y - s.y;
+      if (Math.abs(dy) < SWIPE_PX || Math.abs(dy) < Math.abs(x - s.x)) return;
+      s.handled = true;
+      if (dy > 0) this.onSwipeDown();
+      else this.onSwipeUp();
+    };
+    const up = () => {
       const s = this.pointerStart;
       this.pointerStart = undefined;
       if (s && !s.handled) this.onTap();
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      down(t.clientX, t.clientY);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const t = e.changedTouches[0];
+      move(t.clientX, t.clientY);
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      up();
+    };
+    const onMouseDown = (e: MouseEvent) => down(e.clientX, e.clientY);
+    const onMouseMove = (e: MouseEvent) => {
+      if (e.buttons) move(e.clientX, e.clientY);
+    };
+
+    window.addEventListener('touchstart', onTouchStart, opts);
+    window.addEventListener('touchmove', onTouchMove, opts);
+    window.addEventListener('touchend', onTouchEnd, opts);
+    window.addEventListener('touchcancel', onTouchEnd, opts);
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', up);
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', up);
     });
   }
 
@@ -220,7 +264,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Keep moving things in step with the current speed
-    for (const g of [this.obstacles, this.treats]) {
+    for (const g of [this.obstacles, this.treats, this.decor]) {
       g.children.each((c) => {
         const r = c as Rect;
         (r.body as Body).setVelocityX(-this.speed);
@@ -264,10 +308,17 @@ export class GameScene extends Phaser.Scene {
     const x = GAME_WIDTH + 60;
     if (roll < 0.4) {
       this.addObstacle(x, GROUND_Y - 25, 34, 50, 0x8b5a2b); // fence: jump
+      this.hint('fence', 'Tap to jump!');
     } else if (roll < 0.7) {
       this.addObstacle(x, GROUND_Y - 6, 90, 12, 0x4a90d9); // puddle: jump
+      this.hint('puddle', 'Tap to jump the puddle!');
     } else {
-      this.addObstacle(x, GROUND_Y - 75, 120, 70, 0x3f7d3a); // low branch: slide
+      // Low branch hanging from a tree: slide under it
+      const trunk = this.add.rectangle(x + 40, (GROUND_Y - 75) / 2, 26, GROUND_Y - 75, 0x6b4423);
+      this.decor.add(trunk);
+      (trunk.body as Body).setVelocityX(-this.speed);
+      this.addObstacle(x, GROUND_Y - 65, 110, 50, 0x3f7d3a);
+      this.hint('branch', 'Swipe down to slide under!');
     }
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
 
@@ -341,17 +392,17 @@ export class GameScene extends Phaser.Scene {
     if (this.state !== 'playing') return;
     // A squirrel dashes across the trail ahead of the pet
     this.squirrel?.destroy();
-    const sq = this.add.rectangle(GAME_WIDTH + 30, GROUND_Y - 150, 34, 22, 0x7d6b5d).setDepth(5);
+    const sq = this.add.rectangle(GAME_WIDTH + 30, GROUND_Y - 12, 34, 20, 0x7d6b5d).setDepth(1);
     sq.setStrokeStyle(2, 0x4b3f36);
     this.squirrel = sq;
+    // It scampers along the trail toward and past your pet, in little hops
     this.tweens.add({
       targets: sq,
       x: -60,
-      y: GROUND_Y - 200,
-      duration: 2600,
-      ease: 'Sine.easeInOut',
+      duration: 2400,
       onComplete: () => sq.destroy(),
     });
+    this.tweens.add({ targets: sq, y: GROUND_Y - 30, duration: 160, yoyo: true, repeat: 7, ease: 'Sine.easeOut' });
 
     this.distracted = true;
     this.alertText.setVisible(true);
@@ -395,6 +446,13 @@ export class GameScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.scoreText.setText(`Score ${this.score()}   Treats ${this.treatCount}   Best ${this.best}`);
+  }
+
+  /** Shows a one-time tip the first time each obstacle type appears in a run. */
+  private hint(key: string, text: string): void {
+    if (this.shownHints.has(key)) return;
+    this.shownHints.add(key);
+    this.toast(text, '#1d2b1f');
   }
 
   private toast(text: string, color: string): void {

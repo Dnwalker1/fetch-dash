@@ -11,7 +11,7 @@ export const PET = {
   height: 56,
   slideHeight: 26,
   jumpVelocity: -850,
-  slideMs: 650,
+  slideMs: 900,
 };
 
 export const SPEED = {
