@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
-import { PALETTES, SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice, type Size } from '../art/pets';
+import { PALETTES, SIZE_SCALE, hasSavedPet, loadPet, makePetTextures, petKey, savePet, type PetChoice, type Size } from '../art/pets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, LEVEL, PET, SCORE, SPAWN, SPEED } from '../config';
 
 type State = 'ready' | 'playing' | 'over';
@@ -40,6 +40,8 @@ export class GameScene extends Phaser.Scene {
   private petH = PET.height;
   private picker?: Phaser.GameObjects.Container;
   private startedAt = 0;
+  private uiTap = false; // set when a tap lands on a button, so it doesn't also jump or start
+  private changePetBtn?: Phaser.GameObjects.Container;
   private obstacles!: Phaser.Physics.Arcade.Group;
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
@@ -79,7 +81,7 @@ export class GameScene extends Phaser.Scene {
     return this.baseSpeed * this.speedFactor;
   }
 
-  create(): void {
+  create(data?: { quickStart?: boolean }): void {
     this.best = loadBest();
     this.state = 'ready';
     this.baseSpeed = SPEED.start;
@@ -143,7 +145,10 @@ export class GameScene extends Phaser.Scene {
       .setDepth(10)
       .setVisible(false);
 
-    this.buildPicker();
+    // First visit: show the full pet picker. After that (or after a run),
+    // go straight to "Tap to run" with a small Change pet button.
+    if (data?.quickStart || hasSavedPet()) this.showQuickStart();
+    else this.buildPicker();
     this.updateHud();
     this.updatePetSprite();
 
@@ -224,7 +229,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onTap(): void {
-    if (this.state === 'ready') return; // the Start button begins the run
+    if (this.uiTap) {
+      this.uiTap = false;
+      return;
+    }
+    if (this.state === 'ready') {
+      if (!this.picker) this.startRun();
+      return;
+    }
     if (this.time.now - this.startedAt < 300) return; // the tap that pressed Start
     if (this.state === 'over') return this.restart();
     if (this.chasing) return; // a pet running the wrong way doesn't listen to jump
@@ -253,9 +265,12 @@ export class GameScene extends Phaser.Scene {
   private startRun(): void {
     this.state = 'playing';
     this.startedAt = this.time.now;
+    savePet(this.choice);
     this.centerText.setText('');
     this.picker?.destroy();
     this.picker = undefined;
+    this.changePetBtn?.destroy();
+    this.changePetBtn = undefined;
     this.scheduleDistraction(DISTRACTION.firstAfterMs);
   }
 
@@ -288,7 +303,7 @@ export class GameScene extends Phaser.Scene {
   private restart(): void {
     this.physics.resume();
     this.tweens.resumeAll();
-    this.scene.restart();
+    this.scene.restart({ quickStart: true });
   }
 
   // ---------- Main loop ----------
@@ -613,6 +628,34 @@ export class GameScene extends Phaser.Scene {
     this.buildPicker();
   }
 
+  /** The quick screen between runs: "Tap to run" plus a small Change pet button. */
+  private showQuickStart(): void {
+    this.picker?.destroy();
+    this.picker = undefined;
+    this.centerText.setFontSize(30);
+    this.centerText.setText('Tap to run!\n\nReach the ball at the end of the trail');
+    this.changePetBtn?.destroy();
+    const btn = this.add.container(GAME_WIDTH - 90, 70).setDepth(20);
+    const bg = this.add
+      .rectangle(0, 0, 150, 36, 0xffffff, 0.9)
+      .setStrokeStyle(2, 0x3f7d3a)
+      .setInteractive({ useHandCursor: true });
+    bg.on('pointerdown', () => {
+      this.uiTap = true;
+      btn.destroy();
+      this.changePetBtn = undefined;
+      this.centerText.setText('');
+      this.buildPicker();
+    });
+    btn.add(bg);
+    btn.add(
+      this.add
+        .text(0, 0, '\u{1F43E} Change pet', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#1d2b1f' })
+        .setOrigin(0.5)
+    );
+    this.changePetBtn = btn;
+  }
+
   private buildPicker(): void {
     this.picker?.destroy();
     const c = this.add.container(0, 0).setDepth(20);
@@ -630,7 +673,10 @@ export class GameScene extends Phaser.Scene {
         .rectangle(x, y, w, 44, selected ? 0x3f7d3a : 0xffffff)
         .setStrokeStyle(2, 0x3f7d3a)
         .setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', onClick);
+      bg.on('pointerdown', () => {
+        this.uiTap = true;
+        onClick();
+      });
       c.add(bg);
       text(x, y, label, 20, selected ? '#ffffff' : '#1d2b1f');
     };
@@ -653,7 +699,10 @@ export class GameScene extends Phaser.Scene {
         .circle(x, 271, 20, pal.fur)
         .setStrokeStyle(selected ? 5 : 2, selected ? 0x3f7d3a : 0x7a7a7a)
         .setInteractive({ useHandCursor: true });
-      dot.on('pointerdown', () => this.choose({ palette: key }));
+      dot.on('pointerdown', () => {
+        this.uiTap = true;
+        this.choose({ palette: key });
+      });
       c.add(dot);
     });
 

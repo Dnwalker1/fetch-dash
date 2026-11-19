@@ -217,6 +217,14 @@ export function loadPet(): PetChoice {
   return { ...DEFAULT_PET };
 }
 
+export function hasSavedPet(): boolean {
+  try {
+    return localStorage.getItem(STORE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function savePet(c: PetChoice): void {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(c));
