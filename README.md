@@ -10,6 +10,12 @@ Your pet runs on its own. You keep it out of trouble and on task:
 | Slide (and fast-fall in the air) | Swipe down | Down arrow |
 | Keep your pet on task (call it back) | Swipe up | Up arrow |
 
+## Pick your pet
+
+On the start screen, choose a dog or a cat, a size (small, medium or large) and a fur color. The game remembers your choice on that device. Dogs collect bones and get distracted by squirrels, birds and den holes. Cats collect fish and get distracted by birds on the trail, birds in the sky and butterflies. Size changes the pet's hit box too, so a large pet is a little easier to bump.
+
+Pet art lives in `src/art/pets.ts`; everything else is in `src/art/textures.ts`.
+
 ## Week 1 prototype
 
 This version uses placeholder shapes only, so we can find out whether the game is fun before adding art.

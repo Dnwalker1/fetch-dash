@@ -8,11 +8,6 @@ import { GAME_WIDTH, GROUND_Y } from '../config';
  */
 
 const C = {
-  fur: 0xb07040,
-  furDark: 0x7a4a26,
-  furLight: 0xe8c39a,
-  nose: 0x2b1a0d,
-  collar: 0xd6402b,
   wood: 0xc08a52,
   woodDark: 0x7d5530,
   leaf: 0x4f9a43,
@@ -43,80 +38,7 @@ function make(scene: Phaser.Scene, key: string, w: number, h: number, draw: (g: 
   g.destroy();
 }
 
-function leg(g: G, x1: number, y1: number, x2: number, y2: number, color: number): void {
-  g.lineStyle(6, color, 1);
-  g.lineBetween(x1, y1, x2, y2);
-  g.fillStyle(color, 1);
-  g.fillCircle(x2, y2 - 1, 3.5);
-}
-
-/** Dog facing right on a 64x56 canvas; feet touch the bottom edge. */
-function dog(g: G, feet: { bf: [number, number]; bn: [number, number]; ff: [number, number]; fn: [number, number] }): void {
-  // far legs (darker), behind the body
-  leg(g, 18, 34, feet.bf[0], feet.bf[1], C.furDark);
-  leg(g, 42, 34, feet.ff[0], feet.ff[1], C.furDark);
-  // tail
-  g.lineStyle(5, C.furDark, 1);
-  g.beginPath();
-  g.moveTo(10, 26);
-  g.lineTo(4, 18);
-  g.lineTo(6, 10);
-  g.strokePath();
-  // body
-  g.fillStyle(C.fur, 1);
-  g.fillEllipse(29, 30, 42, 22);
-  g.fillStyle(C.furLight, 1);
-  g.fillEllipse(34, 35, 22, 10);
-  // near legs
-  leg(g, 16, 36, feet.bn[0], feet.bn[1], C.fur);
-  leg(g, 40, 36, feet.fn[0], feet.fn[1], C.fur);
-  // collar
-  g.fillStyle(C.collar, 1);
-  g.fillRect(41, 20, 6, 12);
-  // head
-  g.fillStyle(C.fur, 1);
-  g.fillCircle(49, 17, 12);
-  g.fillStyle(C.furLight, 1);
-  g.fillEllipse(58, 21, 13, 10);
-  g.fillStyle(C.nose, 1);
-  g.fillCircle(63, 18.5, 3);
-  // ear
-  g.fillStyle(C.furDark, 1);
-  g.fillEllipse(43, 15, 9, 17);
-  // eye
-  g.fillStyle(0x1a1a1a, 1);
-  g.fillCircle(52, 13, 2.4);
-  g.fillStyle(0xffffff, 1);
-  g.fillCircle(52.8, 12.2, 0.9);
-}
-
 export function makeTextures(scene: Phaser.Scene): void {
-  // ---- Dog: run frames, jump and slide ----
-  make(scene, 'dog-run-0', 64, 56, (g) => dog(g, { bf: [12, 53], bn: [6, 53], ff: [48, 53], fn: [56, 53] }));
-  make(scene, 'dog-run-1', 64, 56, (g) => dog(g, { bf: [16, 53], bn: [14, 53], ff: [42, 53], fn: [46, 53] }));
-  make(scene, 'dog-run-2', 64, 56, (g) => dog(g, { bf: [22, 53], bn: [24, 53], ff: [36, 53], fn: [34, 53] }));
-  make(scene, 'dog-jump', 64, 56, (g) => dog(g, { bf: [6, 42], bn: [2, 44], ff: [58, 40], fn: [62, 42] }));
-  make(scene, 'dog-slide', 70, 30, (g) => {
-    g.lineStyle(5, C.furDark, 1);
-    g.lineBetween(8, 16, 0, 10);
-    g.fillStyle(C.fur, 1);
-    g.fillEllipse(30, 19, 46, 15);
-    leg(g, 14, 22, 2, 27, C.fur);
-    leg(g, 42, 22, 60, 27, C.fur);
-    g.fillStyle(C.collar, 1);
-    g.fillRect(44, 12, 5, 10);
-    g.fillStyle(C.fur, 1);
-    g.fillCircle(54, 14, 10);
-    g.fillStyle(C.furLight, 1);
-    g.fillEllipse(62, 17, 11, 8);
-    g.fillStyle(C.nose, 1);
-    g.fillCircle(67, 15.5, 2.5);
-    g.fillStyle(C.furDark, 1);
-    g.fillEllipse(48, 9, 14, 7);
-    g.fillStyle(0x1a1a1a, 1);
-    g.fillCircle(57, 11, 2);
-  });
-
   // ---- Obstacles ----
   make(scene, 'fence', 34, 50, (g) => {
     g.fillStyle(C.wood, 1);
@@ -198,7 +120,37 @@ export function makeTextures(scene: Phaser.Scene): void {
     g.strokeCircle(14, 14, 13);
   });
 
+  make(scene, 'fish', 26, 14, (g) => {
+    g.fillStyle(0xf28c5a, 1);
+    g.fillEllipse(11, 7, 20, 12);
+    g.fillTriangle(19, 7, 26, 1, 26, 13);
+    g.fillStyle(0x1a1a1a, 1);
+    g.fillCircle(6, 5.5, 1.5);
+    g.lineStyle(1.5, 0xc0622f, 1);
+    g.strokeEllipse(11, 7, 20, 12);
+  });
+
   // ---- Critters ----
+  make(scene, 'butterfly-0', 26, 22, (g) => {
+    g.fillStyle(0xf2a33a, 1);
+    g.fillEllipse(7, 7, 12, 12);
+    g.fillEllipse(19, 7, 12, 12);
+    g.fillStyle(0xe0782a, 1);
+    g.fillEllipse(8, 16, 9, 9);
+    g.fillEllipse(18, 16, 9, 9);
+    g.fillStyle(0x2b1a0d, 1);
+    g.fillRect(12, 4, 2, 16);
+  });
+  make(scene, 'butterfly-1', 26, 22, (g) => {
+    g.fillStyle(0xf2a33a, 1);
+    g.fillEllipse(9, 9, 6, 12);
+    g.fillEllipse(17, 9, 6, 12);
+    g.fillStyle(0xe0782a, 1);
+    g.fillEllipse(10, 16, 5, 8);
+    g.fillEllipse(16, 16, 5, 8);
+    g.fillStyle(0x2b1a0d, 1);
+    g.fillRect(12, 4, 2, 16);
+  });
   make(scene, 'squirrel', 44, 32, (g) => {
     // facing left; big bushy tail on the right
     g.fillStyle(C.squirrelDark, 1);
