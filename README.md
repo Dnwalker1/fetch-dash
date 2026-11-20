@@ -37,7 +37,7 @@ Until the live generator is switched on, the game makes a stand-in portrait on t
 | 11 | Jungle Falls | 1450 m | Big hills and waterfalls. Creeks, logs and stumps to jump, hanging vines to slide under. Monkeys (dogs) and parrots (cats). |
 | 12 | Fireworks Pier | 1500 m | The finale at night on the boardwalk, with fireworks. Crates and barrels to jump, flag banners to slide under. Seagulls and balloons. |
 
-Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`; their art is in `src/art/levelArt.ts`.
+Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`. Levels 1 to 6 use painted backgrounds made in Grok (`public/art/l1` to `l6`: sky, far and mid strips, keyed and made seamless); the other levels, and all the critters and obstacles, are drawn in code in `src/art/`.
 
 ## How to play
 

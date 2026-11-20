@@ -1434,7 +1434,9 @@ export class GameScene extends Phaser.Scene {
     const t = this.level.theme;
     if (t.skyImage && this.textures.exists(`sky-${this.level.id}`)) {
       // A painted sky already has its sun and clouds
-      this.add.image(0, 0, `sky-${this.level.id}`).setOrigin(0, 0).setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+      const sky = this.add.image(0, 0, `sky-${this.level.id}`).setOrigin(0, 0);
+      if (t.skyFit) sky.setPosition(t.skyFit.x, t.skyFit.y).setScale(t.skyFit.scale * (1280 / sky.width));
+      else sky.setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
     } else {
       this.drawSky();
     }

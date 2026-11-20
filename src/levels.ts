@@ -41,6 +41,12 @@ export interface Theme {
   sun?: { x: number; y: number; r: number; color: number; glow: number };
   /** A painted sky picture (in public/) that fills the screen, sun and clouds included. */
   skyImage?: string;
+  /**
+   * Where the painted sky sits, when it shouldn't just fill the screen: its scale
+   * (from the 1280 px wide picture) and top-left corner. Used to set a low sun
+   * right on the horizon. It only has to reach down to the ground line.
+   */
+  skyFit?: { scale: number; x: number; y: number };
   /** Background layers, far to near. A haze goes between the first and the rest. */
   layers: Layer[];
   /** Sun reflection on the water (the beach). */
@@ -168,17 +174,21 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x5a4a9c,
       skyBottom: 0xffb36b,
       sun: { x: 700, y: 230, r: 62, color: 0xffd27a, glow: 0xff8a5c },
+      // Painted art, made in Grok from the art prompt sheet. The sky is moved up
+      // so the sun sits half set on the sea.
+      skyImage: 'art/l3/sky.webp',
+      skyFit: { scale: 0.8, x: -32, y: -120 },
       layers: [
-        { key: 'sea', h: 130, factor: 0.05 },
-        { key: 'palms', h: 220, factor: 0.45, lift: 30 },
+        { key: 'l3-far', src: 'art/l3/far.webp', scale: 0.75, factor: 0.05 },
+        { key: 'l3-mid', src: 'art/l3/mid.webp', scale: 0.6, factor: 0.45 },
       ],
-      sunGlint: true,
       raysAlpha: 0.7,
       cloudsAlpha: 0.55,
-      grass: 0xf1d79a,
-      grassDark: 0xe0bf78,
-      dirt: 0xdcb46e,
-      dirtDark: 0xc79c55,
+      // matched to the painted sand
+      grass: 0xe2a65a,
+      grassDark: 0xc98c47,
+      dirt: 0xcf9550,
+      dirtDark: 0xb07a3e,
       haze: 0xffc89a,
       tufts: 'sand',
     },
@@ -199,15 +209,18 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x3d3f7a,
       skyBottom: 0xf2a07a,
       sun: { x: 300, y: 300, r: 50, color: 0xffc27a, glow: 0xff8a5c },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l4/sky.webp',
+      skyFit: { scale: 0.85, x: -64, y: -172 },
       layers: [
-        { key: 'town', h: 240, factor: 0.15 },
-        { key: 'lamps', h: 190, factor: 0.45 },
+        { key: 'l4-far', src: 'art/l4/far.webp', scale: 0.75, factor: 0.15 },
+        { key: 'l4-mid', src: 'art/l4/mid.webp', scale: 0.55, factor: 0.45 },
       ],
       raysAlpha: 0.25,
       cloudsAlpha: 0.45,
       cloudTint: 0xf3c6c0,
-      grass: 0xb9b4ad, // sidewalk
-      grassDark: 0x8f8a84, // curb
+      grass: 0xd8b98a, // sidewalk, matched to the painted one
+      grassDark: 0x8f8170, // curb
       dirt: 0x55575d, // road
       dirtDark: 0xe8c547, // lane paint
       haze: 0xf2a07a,
@@ -229,19 +242,22 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x7d8a99,
       skyBottom: 0xc9d3d9,
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l5/sky.webp',
       layers: [
-        { key: 'mountains', h: 260, factor: 0.12, tint: 0x9fb2a8 },
-        { key: 'willows', h: 190, factor: 0.3, lift: 50 },
-        { key: 'river', h: 80, factor: 0.45 },
+        { key: 'l5-far', src: 'art/l5/far.webp', scale: 0.75, factor: 0.12, lift: 60 },
+        { key: 'l5-mid', src: 'art/l5/mid.webp', scale: 0.65, factor: 0.3, lift: 90 },
+        { key: 'l5-river', src: 'art/l5/river.webp', scale: 0.3, factor: 0.45 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0.9,
       cloudTint: 0xaab4bd,
       weather: 'rain',
-      grass: 0x5f9e4f,
-      grassDark: 0x4a8240,
-      dirt: 0x7a5a3c,
-      dirtDark: 0x5f4630,
+      // matched to the painted reeds
+      grass: 0x6b8a4c,
+      grassDark: 0x56733c,
+      dirt: 0x6e5a40,
+      dirtDark: 0x58472f,
       haze: 0xc9d3d9,
       tufts: 'grass',
     },
@@ -262,19 +278,22 @@ export const LEVELS: LevelDef[] = [
       skyTop: 0x0f1a3a,
       skyBottom: 0x34477a,
       sun: { x: 760, y: 100, r: 38, color: 0xf4f1dc, glow: 0xc9d6ff },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l6/sky.webp',
       layers: [
-        { key: 'mountains', h: 260, factor: 0.2, tint: 0x6f7fa8 },
-        { key: 'snowpines', h: 190, factor: 0.45, lift: 30 },
+        { key: 'l6-far', src: 'art/l6/far.webp', scale: 0.85, factor: 0.2, lift: 50 },
+        { key: 'l6-mid', src: 'art/l6/mid.webp', scale: 0.65, factor: 0.45 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0.25,
       cloudTint: 0x9fb0d6,
       night: true,
       weather: 'snow',
-      grass: 0xf4f7fb,
-      grassDark: 0xcfd8e6,
-      dirt: 0xdfe6f0,
-      dirtDark: 0xb9c4d4,
+      // matched to the painted snow
+      grass: 0xdfe2f4,
+      grassDark: 0xbcc2e2,
+      dirt: 0xd0d5ee,
+      dirtDark: 0xa9b0d6,
       haze: 0x34477a,
       tufts: 'snow',
     },
