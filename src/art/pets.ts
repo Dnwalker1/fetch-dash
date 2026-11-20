@@ -34,6 +34,10 @@ export interface PetChoice {
   species: Species;
   size: Size;
   palette: keyof typeof PALETTES;
+  /** a painted sheet to draw the pet with (see sheets.ts); none = the code-drawn pet */
+  look?: string;
+  /** marking layers to show on a painted sheet that has them, e.g. 'chest', 'socks' */
+  markings?: string[];
 }
 
 export const DEFAULT_PET: PetChoice = { species: 'dog', size: 'medium', palette: 'brown' };
@@ -399,7 +403,10 @@ export function loadPet(): PetChoice {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null');
     if (raw && (raw.species === 'dog' || raw.species === 'cat') && raw.size in SIZE_SCALE && raw.palette in PALETTES) {
-      return raw as PetChoice;
+      const c: PetChoice = { species: raw.species, size: raw.size, palette: raw.palette };
+      if (typeof raw.look === 'string') c.look = raw.look;
+      if (Array.isArray(raw.markings)) c.markings = raw.markings.filter((m: unknown) => typeof m === 'string');
+      return c;
     }
   } catch {
     // fall through to the default

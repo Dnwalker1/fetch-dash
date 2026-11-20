@@ -10,16 +10,33 @@ import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
-import { RUN_FRAMES, SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
+import { PALETTES, RUN_FRAMES, SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
+import { makeSheetAnim, marksFor, queueSheet, sheetFor, sheetFrameUrls, sheetKeys, sheetReady } from '../art/sheets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
-import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, type CardHost } from '../ui/cards';
+import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
 
 type State = 'ready' | 'playing' | 'over';
 type Rect = Phaser.GameObjects.Rectangle;
 type Img = Phaser.GameObjects.Image;
 type Body = Phaser.Physics.Arcade.Body;
+
+/** The textures the pet is drawn with right now (a painted sheet, or the code-drawn pet). */
+interface PetLook {
+  anim: string;
+  idle: string;
+  jump: string;
+  slide: string;
+  /** sprite scale at Size 'medium' */
+  scale: number;
+  /** where the hit box center sits across the picture */
+  originX: number;
+  /** coat color for a tinted sheet */
+  tint?: number;
+  /** marking layers drawn over the coat */
+  marks: { run: string; jump: string; slide: string }[];
+}
 
 /**
  * chase: something dashes past on the trail. The pet turns around and runs
@@ -139,6 +156,9 @@ export class GameScene extends Phaser.Scene {
   private pet!: Rect;
   private petBody!: Body;
   private petSprite!: Phaser.GameObjects.Sprite;
+  private petMarks: Phaser.GameObjects.Sprite[] = [];
+  private look!: PetLook;
+  private petDim = false;
   private petShadow!: Img;
   private choice!: PetChoice;
   private petW = PET.width;
@@ -213,6 +233,10 @@ export class GameScene extends Phaser.Scene {
     const t = l.theme;
     if (t.skyImage && !this.textures.exists(`sky-${l.id}`)) this.load.image(`sky-${l.id}`, t.skyImage);
     for (const layer of t.layers) if (layer.src && !this.textures.exists(layer.key)) this.load.image(layer.key, layer.src);
+    // the pet's painted sprites, if it has them
+    const pet = loadPet();
+    const sheet = sheetFor(pet);
+    if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
@@ -280,6 +304,8 @@ export class GameScene extends Phaser.Scene {
     this.petBody.setCollideWorldBounds(false);
     this.petShadow = this.add.image(PET.homeX, gy, 'shadow').setDepth(1.9);
     this.petSprite = this.add.sprite(PET.homeX, gy, `${petKey(this.choice)}-run-0`).setOrigin(0.5, 1).setDepth(2);
+    this.petMarks = [];
+    this.petDim = false;
     this.applyPet();
 
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
@@ -349,13 +375,22 @@ export class GameScene extends Phaser.Scene {
         savePet(c);
         this.applyPet();
         this.updatePetSprite();
+        this.loadLook();
       },
       petFrames: (c) => {
-        const key = petKey(c);
+        const sheet = sheetFor(c);
+        const marks = sheet ? marksFor(sheet, c) : [];
+        const painted = sheet && sheetReady(this, sheet, marks);
+        const key = painted ? `${sheet.id}|${sheet.coat === 'tint' ? c.palette : ''}|${marks.join(',')}` : petKey(c);
         const cached = this.frameCache.get(key);
         if (cached) return cached;
-        makePetTextures(this, c);
-        const frames = Array.from({ length: RUN_FRAMES }, (_, i) => this.textures.getBase64(`${key}-run-${i}`) as string);
+        let frames: string[];
+        if (painted) {
+          frames = sheetFrameUrls(this, sheet, sheet.coat === 'tint' ? PALETTES[c.palette].fur : undefined, marks);
+        } else {
+          makePetTextures(this, c);
+          frames = Array.from({ length: RUN_FRAMES }, (_, i) => this.textures.getBase64(`${key}-run-${i}`) as string);
+        }
         this.frameCache.set(key, frames);
         return frames;
       },
@@ -616,7 +651,10 @@ export class GameScene extends Phaser.Scene {
     this.alertText.setVisible(false);
     this.swipeArrow.setVisible(false);
     this.petSprite.anims.pause();
-    if (!won) this.petSprite.setTint(0x999999);
+    if (!won) {
+      this.petDim = true;
+      this.petSprite.setTint(dim(this.look.tint ?? 0xffffff));
+    }
     if (won) {
       sfx.cheer();
       this.petSound(3);
@@ -675,6 +713,7 @@ export class GameScene extends Phaser.Scene {
     this.alertText.setPosition(this.pet.x, this.pet.y - 62);
     this.swipeArrow.setPosition(this.pet.x + 46, this.pet.y - 66);
     this.updatePetSprite();
+    this.syncMarks();
     this.drawGround();
     if (this.state !== 'playing' || this.paused) return;
     const dt = deltaMs / 1000;
@@ -817,15 +856,15 @@ export class GameScene extends Phaser.Scene {
         this.dust(1);
       }
     }
-    const key = petKey(this.choice);
+    const look = this.look;
     if (this.sliding) {
       sp.anims.stop();
-      sp.setTexture(`${key}-slide`);
+      sp.setTexture(look.slide);
     } else if (!onGround) {
       sp.anims.stop();
-      sp.setTexture(`${key}-jump`);
+      sp.setTexture(look.jump);
     } else {
-      if (!sp.anims.isPlaying) sp.play(`${key}-run`);
+      if (!sp.anims.isPlaying) sp.play(look.anim);
       sp.anims.timeScale = this.speed / this.level.speed.start;
     }
   }
@@ -1388,13 +1427,69 @@ export class GameScene extends Phaser.Scene {
 
   /** Sizes the physics box and sprite to the chosen pet and starts its run animation. */
   private applyPet(): void {
-    makePetTextures(this, this.choice);
+    this.look = this.petLook();
     const scale = SIZE_SCALE[this.choice.size];
     this.petW = Math.round(PET.width * scale);
     this.petH = Math.round(PET.height * scale);
     this.setPetHeight(this.petH);
-    this.petSprite.setScale(artScale(this, `${petKey(this.choice)}-run-0`, scale)).clearTint();
-    this.petSprite.play(`${petKey(this.choice)}-run`);
+    this.petSprite.setOrigin(this.look.originX, 1).setScale(this.look.scale * scale).clearTint();
+    if (this.look.tint !== undefined) this.petSprite.setTint(this.look.tint);
+    this.petSprite.play(this.look.anim);
+    // one sprite per marking layer, kept in step with the pet (see syncMarks)
+    this.petMarks.forEach((m) => m.destroy());
+    this.petMarks = this.look.marks.map((k) => this.add.sprite(this.petSprite.x, this.petSprite.y, k.run, 0).setOrigin(this.look.originX, 1).setDepth(2.01));
+    this.syncMarks();
+  }
+
+  /** How the pet is drawn now: its painted sheet once that's loaded, otherwise the code-drawn pet. */
+  private petLook(): PetLook {
+    const c = this.choice;
+    const sheet = sheetFor(c);
+    const marks = sheet ? marksFor(sheet, c) : [];
+    if (sheet && sheetReady(this, sheet, marks)) {
+      makeSheetAnim(this, sheet);
+      const k = sheetKeys(sheet);
+      return {
+        anim: k.anim,
+        idle: k.run,
+        jump: k.jump,
+        slide: k.slide,
+        scale: sheet.fit / sheet.res,
+        originX: sheet.originX,
+        tint: sheet.coat === 'tint' ? PALETTES[c.palette].fur : undefined,
+        marks: marks.map((m) => sheetKeys(sheet, m)),
+      };
+    }
+    makePetTextures(this, c);
+    const key = petKey(c);
+    return { anim: `${key}-run`, idle: `${key}-run-0`, jump: `${key}-jump`, slide: `${key}-slide`, scale: artScale(this, `${key}-run-0`), originX: 0.5, marks: [] };
+  }
+
+  /** Fetches the chosen pet's painted sprites if they aren't here yet, then switches to them. */
+  private loadLook(): void {
+    const sheet = sheetFor(this.choice);
+    if (!sheet || !queueSheet(this, sheet, marksFor(sheet, this.choice))) return;
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      if (!this.sys.isActive() || !this.petSprite?.active) return;
+      this.applyPet();
+      this.updatePetSprite();
+      refreshPetFrames(this.cardHost());
+    });
+    this.load.start();
+  }
+
+  /** Marking layers follow the pet: same picture frame, place, size, tilt and fade. */
+  private syncMarks(): void {
+    const sp = this.petSprite;
+    const base = sp.texture.key;
+    this.petMarks.forEach((m, i) => {
+      const k = this.look.marks[i];
+      if (base === this.look.jump) m.setTexture(k.jump);
+      else if (base === this.look.slide) m.setTexture(k.slide);
+      else m.setTexture(k.run, sp.frame.name);
+      m.setPosition(sp.x, sp.y).setScale(sp.scaleX, sp.scaleY).setAngle(sp.angle).setFlipX(sp.flipX).setAlpha(sp.alpha).setVisible(sp.visible);
+      m.setTint(this.petDim ? dim(0xffffff) : 0xffffff);
+    });
   }
 
   private drawBackground(): void {
@@ -1579,4 +1674,10 @@ export class GameScene extends Phaser.Scene {
     flap('parrot-flap', ['parrot-0', 'parrot-1'], 10);
     flap('balloon-flap', ['balloon-0', 'balloon-1'], 2);
   }
+}
+
+/** A pet color dimmed for the game-over moment. */
+function dim(color: number): number {
+  const f = 0.6;
+  return (Math.round(((color >> 16) & 255) * f) << 16) | (Math.round(((color >> 8) & 255) * f) << 8) | Math.round((color & 255) * f);
 }

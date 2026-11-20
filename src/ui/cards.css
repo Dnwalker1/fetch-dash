@@ -470,6 +470,7 @@
   #ui .seg { padding: 0.25em 0.4em; }
   #ui .chip.coat { width: 1.8em; height: 1.8em; }
   #ui .setup .runner { height: 12vh; }
+  #ui .setup .field .note { display: none; }
   #ui .actions { margin-top: 0.4em; }
   #ui .btn { padding: 0.45em 1em; }
   /* Six level tiles: drop the taglines and tighten them up */

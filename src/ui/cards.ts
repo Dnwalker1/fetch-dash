@@ -1,5 +1,6 @@
 import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
+import { sheetFor, sheetsFor } from '../art/sheets';
 import { LEVELS, levelById, type Progress } from '../levels';
 import { HeroError, LIVE, generateLive, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
@@ -102,6 +103,12 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
+/** Restarts the open card's flipbook, e.g. once the pet's painted sprites have loaded. */
+export function refreshPetFrames(host: CardHost): void {
+  const root = document.getElementById('ui');
+  if (root && cardsOpen()) startRunner(root, host);
+}
+
 /** Cycles the pet's run frames in an <img>, like a tiny flipbook. */
 function startRunner(r: HTMLElement, host: CardHost): void {
   const imgs = Array.from(r.querySelectorAll<HTMLImageElement>('.runner img, img.flip'));
@@ -135,6 +142,12 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     .join('');
   const seg = (field: string, value: string, items: [string, string][]) =>
     items.map(([v, label]) => `<button class="seg${value === v ? ' on' : ''}" data-${field}="${v}">${label}</button>`).join('');
+  // Painted sprites for this species, if any are made yet
+  const looks = sheetsFor(c.species);
+  const look = sheetFor(c);
+  const lookRow = looks.length
+    ? `<div class="field">Look <div class="segs">${seg('look', look?.id ?? 'drawn', [['drawn', 'Drawn'], ...looks.map((l): [string, string] => [l.id, `\u{1F3A8} ${esc(l.label)}`])])}</div></div>`
+    : '';
 
   const photoBox = left > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
@@ -164,8 +177,9 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
           </label>
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
           <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
+          ${lookRow}
           <div class="field">Coat <div class="chips">${chips}</div>
-            ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>
+            ${look?.coat === 'fixed' ? `<span class="note">This look is painted in ${esc(look.label)}'s own colors.</span>` : hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>
           <div class="runner"><span>In the game</span><img alt="" /></div>
         </div>
       </div>
@@ -197,6 +211,14 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     b.addEventListener('click', () => {
       keepName();
       host.setChoice({ ...host.choice(), size: b.dataset.size as Size });
+      openSetup(host, opts);
+    }),
+  );
+  r.querySelectorAll<HTMLButtonElement>('[data-look]').forEach((b) =>
+    b.addEventListener('click', () => {
+      keepName();
+      const id = b.dataset.look;
+      host.setChoice({ ...host.choice(), look: id === 'drawn' ? undefined : id });
       openSetup(host, opts);
     }),
   );
