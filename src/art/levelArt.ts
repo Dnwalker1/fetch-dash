@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 import { GAME_WIDTH } from '../config';
 
 /**
- * Art for Level 2 (Hilltop Trail) and Level 3 (Sunset Beach), drawn in code
- * like the rest of the game. Background layers are GAME_WIDTH wide and tile
- * sideways, so anything near an edge is drawn again one width over.
+ * Code-drawn background layers still used by the later levels (mountains,
+ * sea) and the sun's rays. Layers are GAME_WIDTH wide and tile sideways, so
+ * anything near an edge is drawn again one width over.
  */
 
 type G = Phaser.GameObjects.Graphics;
@@ -24,7 +24,7 @@ function wrap(draw: (dx: number) => void): void {
 }
 
 export function makeLevelArt(scene: Phaser.Scene): void {
-  // ---------- Level 2: Hilltop Trail ----------
+  // mountains (Fireworks Pier and the levels without painted art)
   make(scene, 'mountains', W, 260, (g) => {
     const peak = (x: number, w: number, h: number, c: number, snow: boolean) =>
       wrap((dx) => {
@@ -49,26 +49,8 @@ export function makeLevelArt(scene: Phaser.Scene): void {
     peak(520, 520, 140, 0x7cb183, false);
     peak(860, 460, 110, 0x86b98a, false);
   });
-  make(scene, 'rabbit', 40, 36, (g) => {
-    // facing left
-    g.fillStyle(0xa48a74, 1);
-    g.fillEllipse(23, 25, 26, 18);
-    g.fillCircle(10, 18, 8);
-    g.fillEllipse(10, 6, 5, 16);
-    g.fillEllipse(15, 6, 5, 16);
-    g.fillStyle(0xe8b8b8, 1);
-    g.fillEllipse(10, 6, 2, 10);
-    g.fillEllipse(15, 6, 2, 10);
-    g.fillStyle(0xffffff, 1);
-    g.fillCircle(36, 22, 5);
-    g.fillStyle(0x1a1a1a, 1);
-    g.fillCircle(7, 17, 1.6);
-    g.fillStyle(0x84695a, 1);
-    g.fillEllipse(30, 33, 12, 5);
-    g.fillEllipse(14, 33, 6, 4);
-  });
 
-  // ---------- Level 3: Sunset Beach ----------
+  // the sea (Fireworks Pier)
   make(scene, 'sea', W, 130, (g) => {
     // Bands from the hazy horizon down to the deeper water near the beach
     // (gradient fills don't work when baking a texture, so it's stripes)
@@ -94,48 +76,6 @@ export function makeLevelArt(scene: Phaser.Scene): void {
     // foam where the waves meet the sand
     g.fillStyle(0xffffff, 0.8);
     for (let x = 0; x < W; x += 48) g.fillEllipse(x + 24, 128, 52, 8);
-  });
-  make(scene, 'crab', 42, 28, (g) => {
-    const c = 0xe0603a;
-    g.fillStyle(c, 1);
-    g.fillEllipse(21, 18, 26, 14);
-    g.lineStyle(2.5, c, 1);
-    for (const s of [-1, 1]) {
-      g.lineBetween(21 + s * 10, 20, 21 + s * 17, 27);
-      g.lineBetween(21 + s * 7, 22, 21 + s * 12, 28);
-      g.lineBetween(21 + s * 11, 14, 21 + s * 16, 6);
-    }
-    g.fillStyle(c, 1);
-    g.fillCircle(5, 6, 5);
-    g.fillCircle(37, 6, 5);
-    g.lineStyle(1.5, 0x9c3b22, 1);
-    g.lineBetween(17, 12, 16, 5);
-    g.lineBetween(25, 12, 26, 5);
-    g.fillStyle(0x111111, 1);
-    g.fillCircle(16, 5, 2);
-    g.fillCircle(26, 5, 2);
-  });
-  make(scene, 'gull-0', 44, 24, (g) => {
-    g.fillStyle(0xffffff, 1);
-    g.fillEllipse(22, 15, 26, 10);
-    g.fillCircle(9, 12, 5);
-    g.fillStyle(0xb8c0cc, 1);
-    g.fillTriangle(16, 13, 30, 13, 26, 0); // wing up
-    g.fillStyle(0x333333, 1);
-    g.fillCircle(8, 11, 1.2);
-    g.fillStyle(0xf2b33a, 1);
-    g.fillTriangle(4, 12, 0, 13, 4, 14);
-  });
-  make(scene, 'gull-1', 44, 24, (g) => {
-    g.fillStyle(0xffffff, 1);
-    g.fillEllipse(22, 11, 26, 10);
-    g.fillCircle(9, 8, 5);
-    g.fillStyle(0xb8c0cc, 1);
-    g.fillTriangle(16, 11, 30, 11, 24, 24); // wing down
-    g.fillStyle(0x333333, 1);
-    g.fillCircle(8, 7, 1.2);
-    g.fillStyle(0xf2b33a, 1);
-    g.fillTriangle(4, 8, 0, 9, 4, 10);
   });
 
   // ---------- Shared ----------

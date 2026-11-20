@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
 import { paintProps } from '../art/props';
+import { paintCritters } from '../art/critters';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
@@ -230,6 +231,7 @@ export class GameScene extends Phaser.Scene {
 
     // Painted props go first; the flat-shape art fills in whatever they don't cover
     paintProps(this);
+    paintCritters(this);
     makeTextures(this);
     makeLevelArt(this);
     makeLevelArt2(this);
