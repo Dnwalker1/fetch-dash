@@ -260,12 +260,48 @@ const HY = DEN_H - DEN_HOLE_UP;
 const HRX = 15;
 const HRY = 9.5;
 
+/** A den's two pictures, and where the hole is in them (game pixels, from the bottom edge). */
+export interface Den {
+  back: string;
+  lip: string;
+  /** Middle of the hole, up from the bottom edge. */
+  holeUp: number;
+  /** Half the hole's height: the critter is cut off at holeUp - holeHalf. */
+  holeHalf: number;
+  /** Middle of the hole across the picture. */
+  holeX: number;
+}
+
+/** The kind of earth a level's den is dug in. */
+export function denEarth(t: Theme): 'dirt' | 'sand' | 'snow' {
+  return t.tufts === 'snow' ? 'snow' : t.tufts === 'sand' ? 'sand' : 'dirt';
+}
+
+/** Den keys painted from files, one mound per kind of earth (see artFiles.ts). */
+export function denFiles(t: Theme): [string, string] {
+  const e = denEarth(t);
+  return [`den-${e}`, `den-${e}-lip`];
+}
+
+/** Where the hole is in each painted mound, measured from the pictures. */
+const PAINTED_HOLES: Record<'dirt' | 'sand' | 'snow', { holeUp: number; holeHalf: number; holeX: number }> = {
+  dirt: { holeUp: 14.2, holeHalf: 9.2, holeX: 41 },
+  sand: { holeUp: 12.8, holeHalf: 5.8, holeX: 41.5 },
+  snow: { holeUp: 13.2, holeHalf: 5.2, holeX: 41 },
+};
+
 /**
- * Paints the den for a level, in that level's earth: dirt and grass, sand,
- * or snow. Two pictures: the mound with its hole (behind the critter), and
- * the mound's front lip (in front of it), so the critter pops up out of the hole.
+ * The den for a level, in that level's earth: dirt and grass, sand, or snow.
+ * Two pictures: the mound with its hole (behind the critter), and the
+ * mound's front lip (in front of it), so the critter pops up out of the hole.
+ * Uses the painted mound for that earth when it's loaded, and otherwise
+ * paints one for the level in code.
  */
-export function paintDen(scene: Phaser.Scene, levelId: number, t: Theme): { back: string; lip: string } {
+export function paintDen(scene: Phaser.Scene, levelId: number, t: Theme): Den {
+  const [fileBack, fileLip] = denFiles(t);
+  if (scene.textures.exists(fileBack) && scene.textures.exists(fileLip)) {
+    return { back: fileBack, lip: fileLip, ...PAINTED_HOLES[denEarth(t)] };
+  }
   const back = `den-${levelId}`;
   const lip = `den-${levelId}-lip`;
   const look =
@@ -348,7 +384,7 @@ export function paintDen(scene: Phaser.Scene, levelId: number, t: Theme): { back
     c.stroke();
     grain(c, DEN_W, DEN_H, 0.06, 0, 61, 64);
   });
-  return { back, lip };
+  return { back, lip, holeUp: DEN_HOLE_UP, holeHalf: 9, holeX: HX };
 }
 
 // ---------- Level 7: Autumn Orchard ----------

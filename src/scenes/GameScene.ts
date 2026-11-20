@@ -3,9 +3,9 @@ import { makeTextures } from '../art/textures';
 import { paintProps } from '../art/props';
 import { paintCritters } from '../art/critters';
 import { paintCritters2 } from '../art/critters2';
-import { DEN_HOLE_UP, paintDen, paintProps2 } from '../art/props2';
+import { DEN_W, denFiles, paintDen, paintProps2 } from '../art/props2';
 import { artScale, resized, resOf, rimOf } from '../art/paint';
-import { artBox, markProps, queueProps } from '../art/propArt';
+import { artBox, markArt, queueArt } from '../art/artFiles';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { makeLevelArt } from '../art/levelArt';
@@ -239,8 +239,8 @@ export class GameScene extends Phaser.Scene {
     const pet = loadPet();
     const sheet = sheetFor(pet);
     if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
-    // the painted props this level uses (anything without a file is painted in code)
-    queueProps(this, propKeys(Object.keys(l.obstacles) as ObstacleKind[]));
+    // the painted props and critters this level uses (anything without a file is painted in code)
+    queueArt(this, [...propKeys(Object.keys(l.obstacles) as ObstacleKind[]), ...critterKeys(l)]);
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
@@ -272,8 +272,8 @@ export class GameScene extends Phaser.Scene {
     this.paused = false;
 
     // Painted props go first; the flat-shape art fills in whatever they don't cover.
-    // Props with a picture file use it, and the code paints the rest.
-    markProps(this);
+    // Props and critters with a picture file use it, and the code paints the rest.
+    markArt(this);
     paintProps(this);
     paintProps2(this);
     paintCritters(this);
@@ -1118,12 +1118,13 @@ export class GameScene extends Phaser.Scene {
       // cut off at the hole's lower edge, and the mound's lip sits in front.
       const x = GAME_WIDTH + 60;
       const base = this.groundAt(x) - DEN_BASE_UP;
-      const { back, lip } = paintDen(this, this.level.id, this.level.theme);
-      const den = this.art(this.add.image(x, base, back).setOrigin(0.5, 1).setDepth(0.5), DEN_SCALE);
-      const front = this.art(this.add.image(x, base, lip).setOrigin(0.5, 1).setDepth(0.6), DEN_SCALE);
-      const holeY = base - DEN_HOLE_UP * DEN_SCALE;
-      const holeBottom = holeY + 9 * DEN_SCALE;
-      const critter = this.art(this.add.image(x, holeY + 26, 'gopher').setDepth(0.55));
+      const d = paintDen(this, this.level.id, this.level.theme);
+      const den = this.art(this.add.image(x, base, d.back).setOrigin(0.5, 1).setDepth(0.5), DEN_SCALE);
+      const front = this.art(this.add.image(x, base, d.lip).setOrigin(0.5, 1).setDepth(0.6), DEN_SCALE);
+      const holeY = base - d.holeUp * DEN_SCALE;
+      const holeBottom = holeY + d.holeHalf * DEN_SCALE;
+      const holeX = x + (d.holeX - DEN_W / 2) * DEN_SCALE;
+      const critter = this.art(this.add.image(holeX, holeY + 26, 'gopher').setDepth(0.55));
       const crop = () => {
         // how much of it is above the hole's lower edge, in game pixels, then in the texture's
         const h = Math.min(critter.displayHeight, holeBottom - (critter.y - critter.displayHeight / 2));
@@ -1131,7 +1132,7 @@ export class GameScene extends Phaser.Scene {
         if (h > 0.5) critter.setCrop(0, 0, critter.width, h / critter.scaleY);
       };
       crop();
-      this.tweens.add({ targets: [den, front, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), front.destroy(), critter.destroy()) });
+      this.tweens.add({ targets: [den, front, critter], x: `-=${x + 80}`, duration: 6000, onComplete: () => (den.destroy(), front.destroy(), critter.destroy()) });
       this.tweens.add({ targets: critter, y: holeY - 6, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300, onUpdate: crop });
     }
 
@@ -1668,8 +1669,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private makeAnimations(): void {
+    // Made once all its pictures exist: a level loads only the painted critters it uses
     const flap = (key: string, frames: string[], rate: number) => {
-      if (!this.anims.exists(key)) this.anims.create({ key, frames: frames.map((k) => ({ key: k })), frameRate: rate, repeat: -1 });
+      if (!frames.every((k) => this.textures.exists(k))) return;
+      const made = this.anims.get(key);
+      if (made && made.frames.length === frames.length) return;
+      if (made) this.anims.remove(key);
+      this.anims.create({ key, frames: frames.map((k) => ({ key: k })), frameRate: rate, repeat: -1 });
     };
     flap('butterfly-flap', ['butterfly-0', 'butterfly-1'], 10);
     flap('bird-flap', ['bird-0', 'bird-1'], 8);
@@ -1700,6 +1706,25 @@ function propKeys(kinds: ObstacleKind[]): string[] {
     const d = (OBSTACLES as Record<string, ObstacleDef | undefined>)[kind]?.decor;
     if (d && 'tree' in d) keys.push('trunk', d.tree);
     else if (d) keys.push(d.pole ?? 'umbrella-pole');
+  }
+  return keys;
+}
+
+/** The critters a level can show (both pets' chasers, its gawks and its den), so their pictures load. */
+function critterKeys(l: LevelDef): string[] {
+  const keys: string[] = [];
+  // a two-frame critter needs both frames
+  const add = (t: string) => {
+    const pair = /^(.*)-[01]$/.exec(t);
+    if (pair) keys.push(`${pair[1]}-0`, `${pair[1]}-1`);
+    else keys.push(t);
+  };
+  for (const c of [l.dogChaser, l.catChaser]) add(CHASERS[c].texture);
+  for (const g of l.gawk) {
+    const f = FLYERS[g];
+    if (f) add(`${f.texture}-0`);
+    else if (g === 'den') keys.push('gopher', ...denFiles(l.theme));
+    else add(`${g}-0`);
   }
   return keys;
 }

@@ -1,53 +1,75 @@
 import Phaser from 'phaser';
 
 /**
- * Painted props: pictures of the treats and the things on the trail, one per
- * texture key in public/art/props/<key>.webp. Each is painted at twice the
- * size the code paints that key (a 24x14 bone is 48x28), sitting on the
- * bottom edge of the picture, centered, with clear space around it.
+ * Painted pictures that replace code-painted textures, one file per texture
+ * key: props (treats and the things on the trail) in public/art/props/ and
+ * critters (and the dens) in public/art/critters/. Each is painted at twice
+ * the size the code paints that key (a 24x14 bone is 48x28), centered, with
+ * things that stand on the ground sitting on the bottom edge.
  *
  * A key listed here is loaded from its file, and the code-painted version is
  * made only if the file fails to load. A key not listed is painted in code.
  */
-export const PROP_FILES: ReadonlySet<string> = new Set([
+const PROPS = [
   'arch', 'arch-leg', 'autumnbranch', 'awning', 'ball', 'banner', 'barrel', 'blossombranch',
   'bone', 'branch', 'cactus', 'canopy', 'canopy-autumn', 'canopy-blossom', 'canopy-jungle',
   'clothesline', 'crate', 'creek', 'driftwood', 'fence', 'fish', 'haybale', 'hydrant', 'lantern',
   'log', 'pier-pole', 'pond', 'puddle', 'pumpkin', 'rock', 'sandcastle', 'sign', 'sled',
   'snowbranch', 'snowcanopy', 'snowman', 'stump', 'trashcan', 'trough', 'trunk', 'tumbleweed',
   'umbrella', 'umbrella-pole', 'vines', 'wood-post',
+];
+/** Two-frame critters: -0 is wings up (or the arm up), -1 is down. */
+const FLAPPERS = ['balloon', 'bird', 'butterfly', 'cardinal', 'crow', 'duck', 'gull', 'hawk', 'owl', 'parrot', 'person', 'pigeon'];
+const CRITTERS = [
+  ...FLAPPERS.flatMap((k) => [`${k}-0`, `${k}-1`]),
+  'chicken', 'chipmunk', 'crab', 'fox', 'frog', 'gopher', 'lizard', 'monkey', 'mouse', 'rabbit',
+  'squirrel', 'streetcat', 'streetdog',
+  ...['dirt', 'sand', 'snow'].flatMap((e) => [`den-${e}`, `den-${e}-lip`]),
+];
+const FILES = new Map<string, string>([
+  ...PROPS.map((k): [string, string] => [k, 'props']),
+  ...CRITTERS.map((k): [string, string] => [k, 'critters']),
 ]);
 
-/** Picture pixels per game pixel in a painted prop file. */
-const PROP_RES = 2;
+/** Picture pixels per game pixel in a painted file. */
+const FILE_RES = 2;
 
 const failed = new Set<string>();
 const onError = (file: Phaser.Loader.File): void => {
-  if (PROP_FILES.has(file.key)) failed.add(file.key);
+  if (FILES.has(file.key)) failed.add(file.key);
 };
 
 /** True when a key's picture comes from its file, so the code shouldn't paint it. */
-export function propFromFile(key: string): boolean {
-  return PROP_FILES.has(key) && !failed.has(key);
+export function artFromFile(key: string): boolean {
+  return FILES.has(key) && !failed.has(key);
 }
 
 /** Queues the files for these keys (the ones not loaded yet). Call from preload. */
-export function queueProps(scene: Phaser.Scene, keys: Iterable<string>): void {
+export function queueArt(scene: Phaser.Scene, keys: Iterable<string>): void {
   scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
   scene.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
   for (const key of new Set(keys)) {
-    if (propFromFile(key) && !scene.textures.exists(key)) scene.load.image(key, `art/props/${key}.webp`);
+    if (artFromFile(key) && !scene.textures.exists(key)) scene.load.image(key, `art/${FILES.get(key)}/${key}.webp`);
   }
 }
 
 /**
- * Marks the loaded prop pictures as 2x, so art() and artScale() show them at
+ * Marks the loaded pictures as 2x, so art() and artScale() show them at
  * their size in the game. Call from create, before anything uses them.
  */
-export function markProps(scene: Phaser.Scene): void {
-  for (const key of PROP_FILES) {
-    if (!propFromFile(key) || !scene.textures.exists(key)) continue;
-    (scene.textures.get(key).customData as { res?: number }).res = PROP_RES;
+export function markArt(scene: Phaser.Scene): void {
+  // a flap is painted in code as a pair if either picture failed, so both frames match
+  for (const k of FLAPPERS) {
+    const pair = [`${k}-0`, `${k}-1`];
+    if (!pair.some((p) => failed.has(p))) continue;
+    for (const p of pair) {
+      failed.add(p);
+      if (scene.textures.exists(p) && scene.textures.get(p).getSourceImage() instanceof HTMLImageElement) scene.textures.remove(p);
+    }
+  }
+  for (const key of FILES.keys()) {
+    if (!artFromFile(key) || !scene.textures.exists(key)) continue;
+    (scene.textures.get(key).customData as { res?: number }).res = FILE_RES;
   }
 }
 
@@ -70,7 +92,7 @@ export function artBox(scene: Phaser.Scene, key: string): ArtBox {
   if (data.box) return data.box;
   const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
   let box: ArtBox = { x: 0, y: 0, w: src.width, h: src.height };
-  if (propFromFile(key) && src instanceof HTMLImageElement) box = measure(src) ?? box;
+  if (artFromFile(key) && src instanceof HTMLImageElement) box = measure(src) ?? box;
   data.box = box;
   return box;
 }
