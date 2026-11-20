@@ -3,7 +3,7 @@ import { circle, css, ellipse, fillOut, grain, lin, line, paint, rad, roundX, ro
 
 /**
  * Pet art, painted in code for each species and fur color (see paint.ts).
- * Each pet gets three run frames plus a jump and a slide pose. Later the in-game pet
+ * Each pet gets a run cycle (RUN_FRAMES frames) plus a jump and a slide pose. Later the in-game pet
  * stays a drawn character like this (matched to the player's breed),
  * while the AI portrait goes on the start and end cards.
  */
@@ -41,13 +41,41 @@ export const DEFAULT_PET: PetChoice = { species: 'dog', size: 'medium', palette:
 const NOSE = 0x2b1a0d;
 const COLLAR = 0xd6402b;
 
-type Feet = { bf: [number, number]; bn: [number, number]; ff: [number, number]; fn: [number, number] };
+/** Where each paw is (back far, back near, front far, front near), and how far the body bobs. */
+type Feet = { bf: [number, number]; bn: [number, number]; ff: [number, number]; fn: [number, number]; bob?: number };
 
-const RUN_FEET: Feet[] = [
-  { bf: [12, 53], bn: [6, 53], ff: [48, 53], fn: [56, 53] },
-  { bf: [16, 53], bn: [14, 53], ff: [42, 53], fn: [46, 53] },
-  { bf: [22, 53], bn: [24, 53], ff: [36, 53], fn: [34, 53] },
-];
+/** Frames in one full stride of the run. */
+export const RUN_FRAMES = 8;
+const GROUND = 53;
+
+/**
+ * One paw's path through a stride. For the first half it's planted and drives
+ * back along the ground; for the second half it lifts and swings forward.
+ */
+function stride(phase: number, fwd: number, back: number, lift: number): [number, number] {
+  const t = ((phase % 1) + 1) % 1;
+  if (t < 0.5) return [fwd + (back - fwd) * (t / 0.5), GROUND];
+  const s = (t - 0.5) / 0.5;
+  const e = s * s * (3 - 2 * s);
+  return [back + (fwd - back) * e, GROUND - lift * Math.sin(Math.PI * s)];
+}
+
+/**
+ * A trot, like a real dog or cat: legs move in diagonal pairs. The near front
+ * paw and the far back paw drive back together while the other pair swings
+ * forward, then they swap. The body rises a little as each pair passes under it.
+ */
+const RUN_FEET: Feet[] = Array.from({ length: RUN_FRAMES }, (_, i) => {
+  const a = i / RUN_FRAMES;
+  const b = a + 0.5;
+  return {
+    fn: stride(a, 54, 34, 8),
+    bf: stride(a, 25, 8, 7),
+    ff: stride(b, 56, 36, 8),
+    bn: stride(b, 23, 6, 7),
+    bob: -1.4 * (1 - Math.cos(a * Math.PI * 4)) / 2,
+  };
+});
 const JUMP_FEET: Feet = { bf: [6, 42], bn: [2, 44], ff: [58, 40], fn: [62, 42] };
 
 /** Texture key prefix for a pet, e.g. "cat-grey". */
@@ -66,7 +94,9 @@ function outline(p: Palette): number {
  * the top, so they grow out of the body instead of sitting on it.
  */
 function leg(c: Ctx, p: Palette, x1: number, y1: number, x2: number, y2: number, color: number, w: number, back: boolean, near = false): void {
-  const cx = (x1 + x2) / 2 + (back ? -2.5 : 1.5);
+  // a lifted paw folds the leg: the hock bends back, the wrist bends forward
+  const fold = Math.max(0, GROUND - y2) * (y2 >= 45 ? 0.55 : 0);
+  const cx = (x1 + x2) / 2 + (back ? -2.5 - fold : 1.5 + fold);
   const cy = (y1 + y2) / 2;
   const path = (from = 0) => {
     const t = from;
@@ -165,8 +195,11 @@ function collar(c: Ctx, x: number, y: number, h: number): void {
 }
 
 function drawDog(c: Ctx, p: Palette, f: Feet): void {
-  leg(c, p, 18, 34, f.bf[0], f.bf[1], p.dark, 6, true);
-  leg(c, p, 42, 34, f.ff[0], f.ff[1], p.dark, 6, false);
+  const b = f.bob ?? 0;
+  leg(c, p, 18, 34 + b, f.bf[0], f.bf[1], p.dark, 6, true);
+  leg(c, p, 42, 34 + b, f.ff[0], f.ff[1], p.dark, 6, false);
+  c.save();
+  c.translate(0, b);
   // tail, wagging up behind
   const tail = () => {
     c.beginPath();
@@ -193,8 +226,11 @@ function drawDog(c: Ctx, p: Palette, f: Feet): void {
   };
   shadeBody(c, p, body, 22, 21, [35, 37, 12, 5]);
   fur(c, p, [[16, 22, 3, -0.8], [24, 20, 3, -0.5], [32, 19.6, 3, -0.2], [20, 39.5, 2.5, 0.8], [28, 39.2, 2.5, 0.8], [10, 33, -0.8, 2.5]]);
-  leg(c, p, 16, 36, f.bn[0], f.bn[1], p.fur, 6, true, true);
-  leg(c, p, 40, 36, f.fn[0], f.fn[1], p.fur, 6, false, true);
+  c.restore();
+  leg(c, p, 16, 36 + b, f.bn[0], f.bn[1], p.fur, 6, true, true);
+  leg(c, p, 40, 36 + b, f.fn[0], f.fn[1], p.fur, 6, false, true);
+  c.save();
+  c.translate(0, b);
   collar(c, 41.5, 20, 11.5);
   // head: skull, muzzle, ear, eye, nose, a happy tongue
   circle(c, 49, 16.5, 11.5);
@@ -218,11 +254,15 @@ function drawDog(c: Ctx, p: Palette, f: Feet): void {
   fillOut(c, lin(c, 38, 8, 47, 24, [[0, shade(p.dark, 0.2)], [1, shade(p.dark, -0.3)]]), outline(p), 1.1);
   eye(c, 52.5, 13, 0x1a1a1a, false);
   line(c, [[50, 9.2], [53.5, 8.8]], shade(p.fur, -0.35), 1, 0.6);
+  c.restore();
 }
 
 function drawCat(c: Ctx, p: Palette, f: Feet): void {
-  leg(c, p, 18, 36, f.bf[0], f.bf[1], p.dark, 5, true);
-  leg(c, p, 42, 36, f.ff[0], f.ff[1], p.dark, 5, false);
+  const b = f.bob ?? 0;
+  leg(c, p, 18, 36 + b, f.bf[0], f.bf[1], p.dark, 5, true);
+  leg(c, p, 42, 36 + b, f.ff[0], f.ff[1], p.dark, 5, false);
+  c.save();
+  c.translate(0, b);
   // long tail curling up
   const tail = () => {
     c.beginPath();
@@ -250,8 +290,11 @@ function drawCat(c: Ctx, p: Palette, f: Feet): void {
   };
   shadeBody(c, p, body, 22, 24, [35, 37.5, 10, 4.2]);
   fur(c, p, [[17, 24.5, 3, -0.5], [25, 23, 3, -0.3], [33, 22.8, 3, 0], [20, 39.8, 2.5, 0.6], [29, 39.4, 2.5, 0.6]]);
-  leg(c, p, 16, 38, f.bn[0], f.bn[1], p.fur, 5, true, true);
-  leg(c, p, 40, 38, f.fn[0], f.fn[1], p.fur, 5, false, true);
+  c.restore();
+  leg(c, p, 16, 38 + b, f.bn[0], f.bn[1], p.fur, 5, true, true);
+  leg(c, p, 40, 38 + b, f.fn[0], f.fn[1], p.fur, 5, false, true);
+  c.save();
+  c.translate(0, b);
   // ears, then the head over them
   for (const [a, b, d] of [[[40.5, 15], [44, 1.5], [50.5, 10.5]], [[49.5, 10], [56.5, 0.8], [58.5, 14.5]]] as [number, number][][]) {
     c.beginPath();
@@ -284,6 +327,7 @@ function drawCat(c: Ctx, p: Palette, f: Feet): void {
   line(c, [[61, 25], [62.5, 26]], 0x5a3a3a, 0.8, 0.7);
   eye(c, 53, 17, 0x4caa4c, true);
   for (const [x2, y2] of [[66, 22.5], [66.5, 26], [65.5, 29]]) line(c, [[58.5, 25.5], [x2, y2]], 0xffffff, 0.7, 0.75);
+  c.restore();
 }
 
 function drawSlide(c: Ctx, species: Species, p: Palette): void {
@@ -342,8 +386,8 @@ export function makePetTextures(scene: Phaser.Scene, c: PetChoice): void {
   if (!scene.anims.exists(`${key}-run`)) {
     scene.anims.create({
       key: `${key}-run`,
-      frames: [0, 1, 2, 1].map((i) => ({ key: `${key}-run-${i}` })),
-      frameRate: 12,
+      frames: RUN_FEET.map((_, i) => ({ key: `${key}-run-${i}` })),
+      frameRate: 20,
       repeat: -1,
     });
   }

@@ -107,14 +107,13 @@ function startRunner(r: HTMLElement, host: CardHost): void {
   const imgs = Array.from(r.querySelectorAll<HTMLImageElement>('.runner img, img.flip'));
   if (!imgs.length) return;
   const frames = host.petFrames(host.choice());
-  const order = [0, 1, 2, 1];
   let i = 0;
   imgs.forEach((img) => (img.src = frames[0]));
   if (runnerTimer) window.clearInterval(runnerTimer);
   runnerTimer = window.setInterval(() => {
-    i = (i + 1) % order.length;
-    imgs.forEach((img) => (img.src = frames[order[i]]));
-  }, 85);
+    i = (i + 1) % frames.length;
+    imgs.forEach((img) => (img.src = frames[i]));
+  }, 60);
 }
 
 // ---------------------------------------------------------------------------

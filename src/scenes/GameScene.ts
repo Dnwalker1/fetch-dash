@@ -9,7 +9,7 @@ import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground'
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
-import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
+import { RUN_FRAMES, SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, type CardHost } from '../ui/cards';
@@ -342,7 +342,7 @@ export class GameScene extends Phaser.Scene {
         const cached = this.frameCache.get(key);
         if (cached) return cached;
         makePetTextures(this, c);
-        const frames = [0, 1, 2].map((i) => this.textures.getBase64(`${key}-run-${i}`) as string);
+        const frames = Array.from({ length: RUN_FRAMES }, (_, i) => this.textures.getBase64(`${key}-run-${i}`) as string);
         this.frameCache.set(key, frames);
         return frames;
       },
