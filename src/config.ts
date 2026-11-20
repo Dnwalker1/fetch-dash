@@ -96,11 +96,11 @@ export const BONUS = {
   petAccel: 1500,
   autoChaseMs: 650, // after a throw the pet runs after the ball on its own this long
   grabReach: 36, // how close the pet has to be to pick up a ball
-  grabHeight: 46, // a ball higher than this sails over the pet's head
+  grabHeight: 70, // a ball higher than this sails over the pet's head (it leaps for one lower)
   // The ball: its height is worked out by hand (z, with this gravity)
-  gravity: 900,
+  gravity: 1400,
   throwSpeed: [120, 420] as [number, number], // along the ground, weakest to strongest throw
-  throwLift: [320, 520] as [number, number], // straight up
+  throwLift: [500, 810] as [number, number], // straight up
   // bounce: share of its fall speed it bounces back up with; grip: share of its speed
   // along the ground it keeps at each bounce; friction: how fast it stops rolling
   dog: { bounce: 0.45, grip: 0.65, friction: 520, bounces: 3 },

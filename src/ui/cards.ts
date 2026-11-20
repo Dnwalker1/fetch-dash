@@ -556,7 +556,7 @@ export function openEnd(host: CardHost, res: RunResult): void {
             <div class="bigstars">${starRow(res.stars)}</div>
             <ul>
               <li class="${res.goals.finish ? 'ok' : ''}">Catch the ball</li>
-              <li class="${res.goals.treats ? 'ok' : ''}">Grab most of the treats (${res.treats} of ${res.treatsTotal})</li>
+              ${res.treatsTotal ? `<li class="${res.goals.treats ? 'ok' : ''}">Grab most of the treats (${res.treats} of ${res.treatsTotal})</li>` : ''}
               <li class="${res.goals.clean ? 'ok' : ''}">No bumps</li>
             </ul>
           </div>
