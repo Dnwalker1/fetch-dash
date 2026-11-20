@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
+import { paintProps } from '../art/props';
+import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import { makeLevelArt3 } from '../art/levelArt3';
@@ -150,7 +152,7 @@ export class GameScene extends Phaser.Scene {
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
   private shownHints = new Set<string>();
-  private groundGfx!: Phaser.GameObjects.Graphics;
+  private groundBobs: Phaser.GameObjects.Bob[] = [];
   private frameCache = new Map<string, string[]>();
   private darkSky = false;
   private weather: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
@@ -226,6 +228,8 @@ export class GameScene extends Phaser.Scene {
     this.safeUntil = 0;
     this.paused = false;
 
+    // Painted props go first; the flat-shape art fills in whatever they don't cover
+    paintProps(this);
     makeTextures(this);
     makeLevelArt(this);
     makeLevelArt2(this);
@@ -237,8 +241,11 @@ export class GameScene extends Phaser.Scene {
     this.weather = [];
     this.startWeather();
 
-    // The ground is drawn fresh each frame so it can follow the hills
-    this.groundGfx = this.add.graphics().setDepth(0.9);
+    // The ground is a painted strip laid down in narrow columns, each moved
+    // every frame to sit on the hill under it
+    const ground = this.add.blitter(0, 0, paintGround(this, this.level.id, this.level.theme)).setDepth(0.9);
+    this.groundBobs = [];
+    for (let i = 0; i <= Math.ceil(GAME_WIDTH / GROUND_COL); i++) this.groundBobs.push(ground.create(0, 0, 0));
 
     // Pet: an invisible box does the physics, and the pet sprite is drawn on top of it
     const gy = this.groundAt(PET.homeX);
@@ -724,132 +731,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawGround(): void {
-    const t = this.level.theme;
-    const g = this.groundGfx;
-    g.clear();
-    if (t.tufts === 'street') {
-      this.drawStreet();
-      return;
-    }
-    if (t.tufts === 'boards') {
-      this.drawBoardwalk();
-      return;
-    }
-    const step = 16;
-    const tops: { x: number; y: number }[] = [];
-    for (let x = -step; x <= GAME_WIDTH + step; x += step) tops.push({ x, y: this.groundAt(x) });
-
-    // grass (or sand) down to the bottom of the screen
-    g.fillStyle(t.grass, 1);
-    g.beginPath();
-    g.moveTo(-step, GAME_HEIGHT);
-    for (const p of tops) g.lineTo(p.x, p.y);
-    g.lineTo(GAME_WIDTH + step, GAME_HEIGHT);
-    g.closePath();
-    g.fillPath();
-
-    // the dirt path band
-    g.fillStyle(t.dirt, 1);
-    g.beginPath();
-    for (const p of tops) g.lineTo(p.x, p.y + 18);
-    for (let i = tops.length - 1; i >= 0; i--) g.lineTo(tops[i].x, tops[i].y + 48);
-    g.closePath();
-    g.fillPath();
-
-    // a darker edge along the top
-    g.lineStyle(4, t.grassDark, 1);
-    g.beginPath();
-    tops.forEach((p, i) => (i ? g.lineTo(p.x, p.y + 1) : g.moveTo(p.x, p.y + 1)));
-    g.strokePath();
-
-    // tufts and pebbles that scroll with the trail
-    const off = this.distancePx;
-    const first = Math.floor(off / 40) * 40;
-    for (let wx = first; wx < off + GAME_WIDTH + 40; wx += 40) {
-      const x = wx - off;
-      const y = this.groundAt(x);
-      const n = (wx / 40) % 7;
-      if (t.tufts === 'grass') {
-        g.fillStyle(t.grassDark, 1);
-        g.fillTriangle(x, y + 1, x + 4, y - 7, x + 8, y + 1);
-        if (n === 2 || n === 5) g.fillTriangle(x + 6, y + 1, x + 9, y - 5, x + 12, y + 1);
-        if (n % 3 === 0) g.fillTriangle(x + 16, y + 64, x + 20, y + 56, x + 24, y + 64);
-        if (t.speckle !== undefined && n % 2 === 0) {
-          // fallen leaves or petals
-          g.fillStyle(t.speckle, 1);
-          g.fillEllipse(x + 12, y + 6, 7, 4);
-          g.fillEllipse(x + 30, y + 58 + n, 6, 3);
-        }
-      } else if (t.tufts === 'snow') {
-        // soft drifts on top, and a sparkle here and there
-        g.fillStyle(0xffffff, 1);
-        if (n === 2 || n === 5) g.fillEllipse(x + 12, y + 1, 22, 7);
-        if (n % 3 === 1) {
-          g.fillStyle(0xbfd6ff, 1);
-          g.fillCircle(x + 26, y + 60 + n, 1.6);
-        }
-      } else {
-        g.fillStyle(t.grassDark, 1);
-        g.fillEllipse(x + 10, y + 8 + (n % 3) * 3, 16, 3);
-        if (n === 3) {
-          g.fillStyle(0xfff2dc, 1);
-          g.fillCircle(x + 22, y + 66, 3); // a shell
-        }
-      }
-      g.fillStyle(t.dirtDark, 1);
-      if (n === 1 || n === 4) g.fillCircle(x + 14, y + 28 + n * 2, 2.5);
-      if (n === 6) g.fillCircle(x + 30, y + 38, 2);
-    }
-  }
-
-  /** Fireworks Pier: wooden planks over dark water, with posts going down into it. */
-  private drawBoardwalk(): void {
-    const t = this.level.theme;
-    const g = this.groundGfx;
-    const y = this.groundAt(0);
-    g.fillStyle(t.dirt, 1);
-    g.fillRect(0, y, GAME_WIDTH, GAME_HEIGHT - y);
-    const off = this.distancePx;
-    // posts under the pier, then the deck on top
-    g.fillStyle(0x4a3a2a, 1);
-    for (let wx = Math.floor(off / 150) * 150; wx < off + GAME_WIDTH + 150; wx += 150) g.fillRect(wx - off + 40, y + 22, 12, GAME_HEIGHT - y);
-    g.fillStyle(t.grass, 1);
-    g.fillRect(0, y, GAME_WIDTH, 22);
-    g.fillStyle(0xc8a274, 1);
-    g.fillRect(0, y, GAME_WIDTH, 3);
-    g.fillStyle(t.grassDark, 1);
-    g.fillRect(0, y + 20, GAME_WIDTH, 5);
-    for (let wx = Math.floor(off / 36) * 36; wx < off + GAME_WIDTH + 36; wx += 36) g.fillRect(wx - off, y + 3, 2, 17);
-    // little glints of the fireworks on the water
-    g.fillStyle(t.dirtDark, 1);
-    for (let wx = Math.floor(off / 90) * 90; wx < off + GAME_WIDTH + 90; wx += 90) {
-      g.fillRect(wx - off + 10, y + 50 + ((wx / 90) % 3) * 14, 28, 2);
-    }
-  }
-
-  /** Main Street: a sidewalk to run on, a curb, and the road below. */
-  private drawStreet(): void {
-    const t = this.level.theme;
-    const g = this.groundGfx;
-    const y = this.groundAt(0); // the street is flat
-    g.fillStyle(t.grass, 1);
-    g.fillRect(0, y, GAME_WIDTH, 24);
-    g.fillStyle(0xd3cfc8, 1);
-    g.fillRect(0, y, GAME_WIDTH, 3);
-    g.fillStyle(t.grassDark, 1);
-    g.fillRect(0, y + 24, GAME_WIDTH, 6);
-    g.fillStyle(t.dirt, 1);
-    g.fillRect(0, y + 30, GAME_WIDTH, GAME_HEIGHT - y - 30);
-    const off = this.distancePx;
-    // sidewalk seams
-    g.fillStyle(t.grassDark, 1);
-    for (let wx = Math.floor(off / 64) * 64; wx < off + GAME_WIDTH + 64; wx += 64) g.fillRect(wx - off, y + 3, 2, 21);
-    // lane paint
-    g.fillStyle(t.dirtDark, 1);
-    for (let wx = Math.floor(off / 140) * 140; wx < off + GAME_WIDTH + 140; wx += 140) g.fillRect(wx - off, y + 64, 60, 5);
-    // a storm drain now and then
-    g.fillStyle(0x3d3f44, 1);
-    for (let wx = Math.floor(off / 700) * 700; wx < off + GAME_WIDTH + 700; wx += 700) g.fillRect(wx - off + 300, y + 31, 40, 5);
+    const off = Math.round(this.distancePx);
+    const first = Math.floor(off / GROUND_COL);
+    const shift = off - first * GROUND_COL;
+    const cols = GROUND_TILE / GROUND_COL;
+    this.groundBobs.forEach((bob, i) => {
+      const x = i * GROUND_COL - shift;
+      bob.x = x;
+      bob.y = Math.round(this.groundAt(x + GROUND_COL / 2)) - GROUND_TOP;
+      bob.setFrame((first + i) % cols);
+    });
   }
 
   private updatePetPosition(): void {
@@ -943,6 +834,11 @@ export class GameScene extends Phaser.Scene {
         if (d.tint !== 0xffffff) pole.setTint(d.tint);
         this.addDecor(pole);
       }
+    }
+    if (!o.slide && kind !== 'puddle' && kind !== 'creek' && kind !== 'pond') {
+      // a soft shadow where it sits on the ground
+      const w = this.textures.get(kind).getSourceImage().width;
+      this.addDecor(this.add.image(x, gy, 'shadow').setDisplaySize(w * 1.15, 9).setDepth(0.97));
     }
     this.addObstacle(x, gy - o.lift, kind);
     if (o.slide) this.hint(`slide-${kind}`, 'Swipe down to slide under!');

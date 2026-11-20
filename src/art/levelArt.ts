@@ -49,56 +49,6 @@ export function makeLevelArt(scene: Phaser.Scene): void {
     peak(520, 520, 140, 0x7cb183, false);
     peak(860, 460, 110, 0x86b98a, false);
   });
-  make(scene, 'pines', W, 170, (g) => {
-    const pine = (x: number, h: number, c: number) =>
-      wrap((dx) => {
-        g.fillStyle(0x5b3b22, 1);
-        g.fillRect(x + dx - 4, 170 - 18, 8, 18);
-        g.fillStyle(c, 1);
-        for (let i = 0; i < 3; i++) {
-          const top = 170 - h + i * (h * 0.24);
-          const half = 14 + i * 9;
-          g.fillTriangle(x + dx - half, top + h * 0.38, x + dx, top, x + dx + half, top + h * 0.38);
-        }
-      });
-    const trees: [number, number, number][] = [
-      [30, 120, 0x3f7a4a], [70, 90, 0x4c8a55], [210, 140, 0x3f7a4a], [250, 100, 0x4c8a55],
-      [420, 110, 0x3f7a4a], [600, 150, 0x3f7a4a], [640, 105, 0x4c8a55], [790, 125, 0x4c8a55],
-      [900, 95, 0x3f7a4a],
-    ];
-    for (const [x, h, c] of trees) pine(x, h, c);
-    g.fillStyle(0x6aa85a, 1);
-    for (const [x, r] of [[140, 20], [330, 26], [500, 22], [720, 24]] as const) wrap((dx) => g.fillCircle(x + dx, 170, r));
-  });
-  make(scene, 'log', 64, 34, (g) => {
-    g.fillStyle(0x8a5a32, 1);
-    g.fillRoundedRect(2, 4, 56, 28, 12);
-    g.lineStyle(2, 0x5e3b1e, 1);
-    g.strokeRoundedRect(2, 4, 56, 28, 12);
-    g.lineStyle(1.5, 0x6d4526, 1);
-    g.lineBetween(10, 12, 40, 12);
-    g.lineBetween(14, 22, 46, 22);
-    g.fillStyle(0xd9a86c, 1);
-    g.fillEllipse(56, 18, 14, 28);
-    g.lineStyle(1.5, 0x9c6b3c, 1);
-    g.strokeEllipse(56, 18, 14, 28);
-    g.strokeEllipse(56, 18, 7, 14);
-    g.fillStyle(0x5f9c3a, 1);
-    g.fillCircle(20, 5, 4);
-    g.fillCircle(26, 4, 3);
-  });
-  make(scene, 'rock', 46, 38, (g) => {
-    g.fillStyle(0x8e9097, 1);
-    g.fillEllipse(23, 22, 44, 32);
-    g.fillStyle(0x6d6f76, 1);
-    g.fillEllipse(28, 28, 32, 18);
-    g.fillStyle(0xb7b9c0, 1);
-    g.fillEllipse(15, 14, 14, 8);
-    g.lineStyle(2, 0x55575d, 1);
-    g.strokeEllipse(23, 22, 44, 32);
-    g.fillStyle(0x6aa85a, 1);
-    g.fillEllipse(30, 7, 14, 5);
-  });
   make(scene, 'rabbit', 40, 36, (g) => {
     // facing left
     g.fillStyle(0xa48a74, 1);
@@ -145,89 +95,6 @@ export function makeLevelArt(scene: Phaser.Scene): void {
     g.fillStyle(0xffffff, 0.8);
     for (let x = 0; x < W; x += 48) g.fillEllipse(x + 24, 128, 52, 8);
   });
-  make(scene, 'palms', W, 220, (g) => {
-    const palm = (x: number, h: number, lean: number) =>
-      wrap((dx) => {
-        const bx = x + dx;
-        g.lineStyle(10, 0x6e4a2b, 1);
-        g.beginPath();
-        g.moveTo(bx, 220);
-        g.lineTo(bx + lean * 0.4, 220 - h * 0.5);
-        g.lineTo(bx + lean, 220 - h);
-        g.strokePath();
-        const tx = bx + lean;
-        const ty = 220 - h;
-        // Fronds: each one a fan of leaflets along a drooping curve
-        const fronds: [number, number][] = [[-50, 18], [-36, 32], [48, 20], [34, 34], [-6, -20], [-46, -2], [46, -4], [14, -16]];
-        fronds.forEach(([ex, ey], fi) => {
-          g.fillStyle(fi % 2 ? 0x2f6b45 : 0x3d8256, 1);
-          for (let k = 1; k <= 6; k++) {
-            const t = k / 6;
-            const px = tx + ex * t;
-            const py = ty + ey * t + Math.sin(t * Math.PI) * -6 + t * t * 8;
-            const w = 9 * (1 - t * 0.6);
-            g.fillTriangle(tx + ex * (t - 0.2), ty + ey * (t - 0.2), px, py, px - ey * 0.12, py + w);
-            g.fillTriangle(tx + ex * (t - 0.2), ty + ey * (t - 0.2), px, py, px + ey * 0.1, py - w * 0.7);
-          }
-        });
-        g.fillStyle(0x6e4a2b, 1);
-        g.fillCircle(tx - 4, ty + 6, 4);
-        g.fillCircle(tx + 4, ty + 7, 4);
-      });
-    palm(120, 170, 24);
-    palm(520, 190, -20);
-    palm(760, 150, 18);
-    g.fillStyle(0xe8c98a, 1);
-    for (const [x, r] of [[60, 18], [300, 24], [640, 20], [880, 22]] as const) wrap((dx) => g.fillEllipse(x + dx, 220, r * 3, r));
-  });
-  make(scene, 'sandcastle', 50, 52, (g) => {
-    const sand = 0xe2bf7a;
-    const shade = 0xc49a55;
-    g.fillStyle(sand, 1);
-    g.fillRect(4, 26, 42, 26);
-    g.fillRect(16, 12, 18, 16);
-    for (const x of [4, 13, 22, 31, 40]) g.fillRect(x, 22, 6, 5);
-    for (const x of [16, 23, 30]) g.fillRect(x, 8, 4, 5);
-    g.fillStyle(shade, 1);
-    g.fillRect(21, 40, 8, 12);
-    g.fillRect(4, 48, 42, 4);
-    g.lineStyle(1.5, shade, 1);
-    g.strokeRect(4, 26, 42, 26);
-    g.lineStyle(1.5, 0x6e4a2b, 1);
-    g.lineBetween(25, 8, 25, 0);
-    g.fillStyle(0xd6402b, 1);
-    g.fillTriangle(25, 0, 25, 6, 33, 3);
-  });
-  make(scene, 'driftwood', 78, 26, (g) => {
-    g.fillStyle(0xb7a28a, 1);
-    g.fillRoundedRect(2, 8, 72, 16, 8);
-    g.lineStyle(4, 0xb7a28a, 1);
-    g.lineBetween(52, 10, 66, 1);
-    g.lineStyle(1.5, 0x8c7860, 1);
-    g.strokeRoundedRect(2, 8, 72, 16, 8);
-    g.lineBetween(10, 14, 44, 14);
-    g.lineBetween(18, 19, 60, 19);
-  });
-  make(scene, 'umbrella', 124, 46, (g) => {
-    const colors = [0xd6402b, 0xfff4e0];
-    for (let i = 0; i < 6; i++) {
-      g.fillStyle(colors[i % 2], 1);
-      const a0 = Math.PI + (i * Math.PI) / 6;
-      const a1 = Math.PI + ((i + 1) * Math.PI) / 6;
-      g.slice(62, 44, 60, a0, a1, false);
-      g.fillPath();
-    }
-    g.lineStyle(2, 0x9c2c1e, 1);
-    g.beginPath();
-    g.arc(62, 44, 60, Math.PI, Math.PI * 2);
-    g.strokePath();
-    g.fillStyle(0x6e4a2b, 1);
-    g.fillCircle(62, 2, 3);
-  });
-  make(scene, 'umbrella-pole', 6, 100, (g) => {
-    g.fillStyle(0x8a6a4a, 1);
-    g.fillRect(1, 0, 4, 100);
-  });
   make(scene, 'crab', 42, 28, (g) => {
     const c = 0xe0603a;
     g.fillStyle(c, 1);
@@ -272,10 +139,6 @@ export function makeLevelArt(scene: Phaser.Scene): void {
   });
 
   // ---------- Shared ----------
-  make(scene, 'shadow', 64, 14, (g) => {
-    g.fillStyle(0x000000, 0.18);
-    g.fillEllipse(32, 7, 64, 14);
-  });
   make(scene, 'rays', 400, 400, (g) => {
     g.fillStyle(0xffffff, 0.16);
     for (let i = 0; i < 16; i++) {
