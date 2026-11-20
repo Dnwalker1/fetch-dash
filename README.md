@@ -65,7 +65,7 @@ After levels 3, 6 and 9 the end card offers a 60-second bonus round (or skip it)
 - **Cats** get a ball of yarn: it bounces less, rolls farther and leaves a thread that fades.
 - The round's treats go into the **treat jar** (shown on the map), which is kept on the device.
 
-To jump straight into it, open the game with `?bonus=1` on the address (for example http://localhost:5173/?bonus=1). The code is `src/scenes/BonusScene.ts`, its numbers are the `BONUS` block in `src/config.ts`, and its placeholder art is painted in `src/art/bonusArt.ts`. The list of its pictures, for painting replacements, is at the top of `BonusScene.ts`.
+To jump straight into it, open the game with `?bonus=1` on the address (for example http://localhost:5173/?bonus=1). The code is `src/scenes/BonusScene.ts`, its numbers are the `BONUS` block in `src/config.ts`, its painted art (Elon's v1) is in `public/art/bonus/`, and `src/art/bonusArt.ts` paints stand-ins for any picture that fails to load. The list of its pictures and their sizes is at the top of `BonusScene.ts`.
 
 Pet art lives in `src/art/pets.ts`. All the numbers that control how the game feels are in `src/config.ts`.
 

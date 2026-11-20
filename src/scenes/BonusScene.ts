@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { markArt, queueArt } from '../art/artFiles';
+import { artFromFile, markArt, queueArt } from '../art/artFiles';
 import { LAWN_TOP, halfWidthAt, paintBonusArt } from '../art/bonusArt';
 import { artScale } from '../art/paint';
 import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
@@ -19,10 +19,11 @@ import { cardsOpen, closeCards, openBonusEnd, type CardHost } from '../ui/cards'
  * the screen are farther away, so they're drawn smaller and behind nearer
  * things, and they move more slowly on screen (see depthScale).
  *
- * TEXTURES. Every picture this round uses, so a painted one can replace the
- * code-painted placeholder. Paint it at twice the size listed here, save it
- * as public/art/bonus/<key>.webp and add the key to BONUS_ART in
- * src/art/artFiles.ts.
+ * TEXTURES. Every picture this round uses. The painted ones (Elon's set, at
+ * twice the size listed here) are public/art/bonus/<key>.webp, listed in
+ * BONUS_ART in src/art/artFiles.ts; src/art/bonusArt.ts paints a stand-in
+ * for any picture that fails to load. Painted props stand on their bottom
+ * edge; the code-painted stand-ins leave a little room below.
  *
  *   key             size (game px)  what it is
  *   toss-sky        960 x 140       sky, far hills and trees, with the back fence along the bottom (y 113 to 134)
@@ -35,8 +36,8 @@ import { cardsOpen, closeCards, openBonusEnd, type CardHost } from '../ui/cards'
  *   toss-yarn       26 x 26         the ball of yarn cats get instead of a ball
  *   toss-sprinkler  30 x 22         the lawn sprinkler
  *   toss-drop       8 x 8           one water drop from the sprinkler
- *   toss-shadow     40 x 14         a ball's shadow on the grass, painted fully dark; the game sets its
- *                                   opacity (0.5 on the ground, 0.15 at the top of the arc) and size
+ *   toss-shadow     40 x 14         a ball's shadow on the grass, about 0.6 opacity at its center; the game
+ *                                   fades it (to about 0.5 on the ground, 0.15 at the top of the arc) and sizes it
  *
  * Shared with the runner (already painted): ball (28 x 28) and the pet's shadow (shadow, 64 x 14).
  * The pet uses its side-view run frames for now, flipped to face the way it
@@ -397,9 +398,15 @@ export class BonusScene extends Phaser.Scene {
     // The sprinkler, and its spray (an oscillating fan of drops)
     const sp = BONUS.sprinkler;
     const sds = depthScale(sp.y);
-    this.sprinkler = this.add.image(sp.x, sp.y, 'toss-sprinkler').setOrigin(0.5, 0.82).setScale(artScale(this, 'toss-sprinkler', sds)).setDepth(sp.y);
+    const paintedSprinkler = artFromFile('toss-sprinkler');
+    this.sprinkler = this.add
+      .image(sp.x, sp.y, 'toss-sprinkler')
+      .setOrigin(0.5, paintedSprinkler ? 1 : 0.82)
+      .setScale(artScale(this, 'toss-sprinkler', sds))
+      .setDepth(sp.y);
     const dropScale = artScale(this, 'toss-drop', sds);
-    this.spray = this.add.particles(sp.x, sp.y - 12 * sds, 'toss-drop', {
+    // the spray comes out of the top cap
+    this.spray = this.add.particles(sp.x, sp.y - (paintedSprinkler ? 19 : 12) * sds, 'toss-drop', {
       speed: { min: 150 * sds, max: 215 * sds },
       angle: { onEmit: () => -90 + Math.sin(this.clock / 520) * 58 + Phaser.Math.Between(-6, 6) },
       gravityY: 380 * sds,
@@ -424,7 +431,8 @@ export class BonusScene extends Phaser.Scene {
     // Golden treats on the lawn, mostly far away, so long throws pay
     const pileKey = cat ? 'toss-pile-cat' : 'toss-pile';
     for (let i = 0; i < BONUS.piles; i++) {
-      const pile: Pile = { x: 0, y: 0, img: this.add.image(0, 0, pileKey).setOrigin(0.5, 0.86), active: false, backAt: 0 };
+      const img = this.add.image(0, 0, pileKey).setOrigin(0.5, artFromFile(pileKey) ? 1 : 0.86);
+      const pile: Pile = { x: 0, y: 0, img, active: false, backAt: 0 };
       this.piles.push(pile);
       this.placePile(pile, false);
     }
@@ -754,14 +762,14 @@ export class BonusScene extends Phaser.Scene {
         .setPosition(b.x, b.y - b.z * ds - (inMouth ? 0 : r))
         .setScale(artScale(this, this.ballKey, base * ds * (1 + 0.25 * high)))
         .setDepth(inMouth ? this.pet.y + 0.5 : b.y + 0.3);
-      // The shadow stays on the ground: full size at 0.5 opacity there, down to half
-      // size at 0.15 opacity at the top of the throw's arc
+      // The shadow stays on the ground: full size at about 0.5 opacity there, down to
+      // half size at 0.15 at the top of the throw's arc (the picture itself peaks at 0.6)
       const up = Phaser.Math.Clamp(b.z / b.peak, 0, 1);
       b.shadow
         .setVisible(!inMouth)
         .setPosition(b.x, b.y)
         .setScale(artScale(this, 'toss-shadow', 0.85 * ds * (1 - 0.5 * up)))
-        .setAlpha(0.5 - 0.35 * up);
+        .setAlpha(0.83 - 0.58 * up);
     }
     // the yarn trails
     const g = this.trailG.clear();
