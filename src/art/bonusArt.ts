@@ -406,7 +406,7 @@ function paintShadow(scene: Phaser.Scene): void {
     c.translate(20, 7);
     c.scale(1, 6 / 19);
     circle(c, 0, 0, 19);
-    c.fillStyle = rad(c, 0, 0, 0, 0, 0, 19, [[0, 0x0e2408, 0.62], [0.6, 0x0e2408, 0.42], [1, 0x0e2408, 0]]);
+    c.fillStyle = rad(c, 0, 0, 0, 0, 0, 19, [[0, 0x0e2408, 1], [0.6, 0x0e2408, 0.75], [1, 0x0e2408, 0]]);
     c.fill();
     c.restore();
   });

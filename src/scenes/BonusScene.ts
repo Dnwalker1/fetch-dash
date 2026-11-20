@@ -35,7 +35,8 @@ import { cardsOpen, closeCards, openBonusEnd, type CardHost } from '../ui/cards'
  *   toss-yarn       26 x 26         the ball of yarn cats get instead of a ball
  *   toss-sprinkler  30 x 22         the lawn sprinkler
  *   toss-drop       8 x 8           one water drop from the sprinkler
- *   toss-shadow     40 x 14         a ball's shadow on the grass (it shrinks and fades as the ball goes up)
+ *   toss-shadow     40 x 14         a ball's shadow on the grass, painted fully dark; the game sets its
+ *                                   opacity (0.5 on the ground, 0.15 at the top of the arc) and size
  *
  * Shared with the runner (already painted): ball (28 x 28) and the pet's shadow (shadow, 64 x 14).
  * The pet uses its side-view run frames for now, flipped to face the way it
@@ -76,6 +77,8 @@ interface Ball extends Flight {
   thrownAt: number;
   from: Point;
   trail: { x: number; y: number; t: number }[];
+  /** how high this throw goes, for the shadow */
+  peak: number;
 }
 
 interface Pile {
@@ -108,6 +111,8 @@ const BALL_SIZE = { dog: 0.62, cat: 0.72 };
 const MAX_AIM = 1.05;
 const WALL_BOUNCE = 0.5;
 const LAUNCH_Z = 12;
+/** How high the pet leaps on an air catch, at near size */
+const HOP_HEIGHT = 26;
 /** A thrown ball can't be grabbed until it's been gone this long (so it isn't caught at the thrower's feet). */
 const GRAB_GRACE_MS = 300;
 /** Shortest drag that counts as a throw, in game pixels. */
@@ -543,7 +548,7 @@ export class BonusScene extends Phaser.Scene {
     const look = this.look;
     const ds = depthScale(p.y);
     const hopT = (this.clock - this.hopAt) / 380;
-    const hop = hopT >= 0 && hopT < 1 ? Math.sin(hopT * Math.PI) * 26 * ds : 0;
+    const hop = hopT >= 0 && hopT < 1 ? Math.sin(hopT * Math.PI) * HOP_HEIGHT * ds : 0;
     const speed = Math.hypot(p.vx, p.vy);
     const running = hop === 0 && speed > 25;
     // Feet move a little faster far away, so the small far-off pet doesn't look like it's gliding
@@ -554,17 +559,21 @@ export class BonusScene extends Phaser.Scene {
     const step = running ? Math.abs(Math.sin(this.stride)) : 0;
     const bob = step * 2 * ds;
     const squash = running ? Math.abs(Math.cos(this.stride)) : 0;
+    // Size always comes from where the pet stands on the lawn (p.y), never from where it's drawn
     const base = look.scale * this.sizeF * PET_BASE * ds;
+    // A leap is only a lift off the ground plus a slight stretch (at most 5%)
+    const leap = hop > 0 ? Math.sin(hopT * Math.PI) : 0;
     // Flipped, the picture turns around its hit center (originX), so the body stays put
     const ox = p.face < 0 ? 1 - look.originX : look.originX;
     sp.setPosition(p.x, p.y - hop - bob)
       .setOrigin(ox, 1)
-      .setScale(base * (1 + 0.035 * squash), base * (1 - 0.05 * squash))
+      .setScale(base * (1 + 0.035 * squash) * (1 - 0.02 * leap), base * (1 - 0.05 * squash) * (1 + 0.05 * leap))
       .setFlipX(p.face < 0)
       .setDepth(p.y);
     if (hop > 0) {
-      sp.anims.stop();
-      sp.setTexture(look.jump);
+      // Hold the run picture showing now. The runner's jump picture is a tall upright
+      // pose, which read as the pet suddenly growing on this top-down lawn.
+      if (sp.anims.isPlaying) sp.anims.stop();
     } else if (running) {
       if (!sp.anims.isPlaying || sp.anims.currentAnim?.key !== look.anim) sp.play(look.anim);
       sp.anims.timeScale = pace;
@@ -579,8 +588,7 @@ export class BonusScene extends Phaser.Scene {
       .setAlpha(0.8 * lift);
     this.petMarks.forEach((m, i) => {
       const k = look.marks[i];
-      if (sp.texture.key === look.jump) m.setTexture(k.jump);
-      else m.setTexture(k.run, sp.frame.name);
+      m.setTexture(k.run, sp.frame.name);
       m.setPosition(sp.x, sp.y).setOrigin(ox, 1).setScale(sp.scaleX, sp.scaleY).setFlipX(sp.flipX).setDepth(p.y + 0.01);
     });
   }
@@ -598,6 +606,14 @@ export class BonusScene extends Phaser.Scene {
       x: sp.x + f * ((n.x - this.look.originX) * sp.displayWidth - r * 0.6),
       y: sp.y - (1 - n.y) * sp.displayHeight + r * 0.8,
     };
+  }
+
+  /** Puts a carried ball at the mouth of the picture showing now. */
+  private holdInMouth(b: Ball): void {
+    const m = this.mouth();
+    b.x = m.x;
+    b.y = this.pet.y;
+    b.z = (this.pet.y - m.y) / depthScale(this.pet.y);
   }
 
   /** The spot on the ground under the pet's head, which is what reaches a ball or a treat. */
@@ -624,6 +640,7 @@ export class BonusScene extends Phaser.Scene {
       thrownAt: 0,
       from: { x, y },
       trail: [],
+      peak: 200,
     };
   }
 
@@ -639,12 +656,18 @@ export class BonusScene extends Phaser.Scene {
     this.balls = Array.from({ length: n }, (_, i) => this.makeBall(TEE.x + (i - (n - 1) / 2) * 22, TEE.y));
     this.trailG.clear();
     const first = !this.started;
-    this.hint('Swipe up to throw!', first ? this.throwHelp() : '');
-    if (first) this.showFinger();
     if (n > 1 && !this.shown.has(`multi${n}`)) {
+      // One hint at a time: the news first, in the main hint spot, then the usual hint
       this.shown.add(`multi${n}`);
-      this.toast(n === 2 ? 'Two balls this time!' : 'Three balls!', '#c6f28a');
+      const news = n === 2 ? 'Two balls this time!' : 'Three balls this time!';
+      this.hint(news, '', '#c6f28a');
+      this.time.delayedCall(1500, () => {
+        if (this.phase === 'ready' && this.hintText.text === news) this.hint('Swipe up to throw!', '');
+      });
+    } else {
+      this.hint('Swipe up to throw!', first ? this.throwHelp() : '');
     }
+    if (first) this.showFinger();
   }
 
   private throwHelp(): string {
@@ -661,6 +684,7 @@ export class BonusScene extends Phaser.Scene {
       const [turn, f] = spread[i];
       const v = launchSpeeds(Phaser.Math.Clamp(angle + turn, -MAX_AIM - 0.25, MAX_AIM + 0.25), Phaser.Math.Clamp(power * f, 0.06, 1));
       Object.assign(b, { ...v, z: LAUNCH_Z, bounces: 0, rolling: false, landed: false, state: 'free', thrownAt: this.clock, airCaught: false });
+      b.peak = LAUNCH_Z + Math.max(v.vz, 1) ** 2 / (2 * BONUS.gravity);
       b.from = { x: b.x, y: b.y };
       b.trail = [];
     });
@@ -702,11 +726,7 @@ export class BonusScene extends Phaser.Scene {
         const r = BALL_R * BALL_SIZE.dog * ds;
         if (moved > 0.05) b.img.rotation += (moved / r) * (b.vx >= 0 ? 1 : -1) * (b.rolling ? 1 : 0.4);
       } else if (b.state === 'mouth') {
-        const m = this.mouth();
-        const ds = depthScale(this.pet.y);
-        b.x = m.x;
-        b.y = this.pet.y;
-        b.z = (this.pet.y - m.y) / ds;
+        this.holdInMouth(b);
       }
       // yarn leaves a thin trail that fades
       if (cat && (b.state === 'free' || b.state === 'mouth')) {
@@ -722,8 +742,11 @@ export class BonusScene extends Phaser.Scene {
   private drawBalls(): void {
     const base = BALL_SIZE[this.choice.species];
     for (const b of this.balls) {
-      const ds = depthScale(b.y);
       const inMouth = b.state === 'mouth';
+      // The pet was just drawn this frame: put a carried ball at its mouth now, so it
+      // never trails a frame behind (and sits right from the first frame of a catch)
+      if (inMouth) this.holdInMouth(b);
+      const ds = depthScale(b.y);
       // Drawn up off the ground by its height; a little bigger up high, as if nearer the camera
       const high = inMouth ? 0 : Math.min(1, b.z / 260);
       const r = BALL_R * base * ds * (1 + 0.25 * high);
@@ -731,12 +754,14 @@ export class BonusScene extends Phaser.Scene {
         .setPosition(b.x, b.y - b.z * ds - (inMouth ? 0 : r))
         .setScale(artScale(this, this.ballKey, base * ds * (1 + 0.25 * high)))
         .setDepth(inMouth ? this.pet.y + 0.5 : b.y + 0.3);
-      // The shadow stays on the ground: smaller and fainter the higher the ball is
+      // The shadow stays on the ground: full size at 0.5 opacity there, down to half
+      // size at 0.15 opacity at the top of the throw's arc
+      const up = Phaser.Math.Clamp(b.z / b.peak, 0, 1);
       b.shadow
         .setVisible(!inMouth)
         .setPosition(b.x, b.y)
-        .setScale(artScale(this, 'toss-shadow', 0.85 * ds * (1 - 0.55 * high)))
-        .setAlpha(1 - 0.55 * high);
+        .setScale(artScale(this, 'toss-shadow', 0.85 * ds * (1 - 0.5 * up)))
+        .setAlpha(0.5 - 0.35 * up);
     }
     // the yarn trails
     const g = this.trailG.clear();
@@ -775,8 +800,9 @@ export class BonusScene extends Phaser.Scene {
       this.airCatches++;
       this.addTreats(BONUS.airCatch);
       this.hopAt = this.clock;
-      const top = this.petSprite.y - this.petSprite.displayHeight;
-      this.pop(this.pet.x, top - 16, `Air catch! +${BONUS.airCatch}`, '#ffb547', 24);
+      // above the top of the leap, so the pet never jumps up into the words
+      const top = this.pet.y - this.petSprite.displayHeight - HOP_HEIGHT * depthScale(this.pet.y);
+      this.pop(this.pet.x, top - 18, `Air catch! +${BONUS.airCatch}`, '#ffb547', 24);
       sfx.ding();
     } else {
       sfx.crunch();
@@ -1124,9 +1150,10 @@ export class BonusScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(HUD);
     this.toastText = this.add
-      .text(CX, 78, '', { ...hintStyle, fontSize: '24px', strokeThickness: 5 })
+      .text(CX, 76, '', { ...hintStyle, fontSize: '24px', strokeThickness: 6 })
       .setOrigin(0.5)
       .setDepth(HUD)
+      .setShadow(0, 3, 'rgba(0,0,0,0.3)', 0, true, false)
       .setAlpha(0);
     this.pauseText = this.add
       .text(CX, 250, 'Paused\nTap to go on', { ...hintStyle, fontSize: '36px' })
@@ -1166,8 +1193,8 @@ export class BonusScene extends Phaser.Scene {
     this.tweens.add({ targets: this.treatText, scale: 1.2, duration: 110, yoyo: true });
   }
 
-  private hint(text: string, sub: string): void {
-    this.hintText.setText(text);
+  private hint(text: string, sub: string, color = '#fff8e8'): void {
+    this.hintText.setText(text).setColor(color);
     this.setSub(sub);
   }
 
