@@ -5,6 +5,20 @@ export const GAME_WIDTH = 960;
 export const GAME_HEIGHT = 540;
 export const GROUND_Y = 440; // top of the ground
 
+/**
+ * Canvas pixels per game pixel. The world stays 960x540 and the camera zooms
+ * in, so phones and big windows get a sharp picture instead of a stretched
+ * one. Capped at 2, since more costs a lot of fill-rate on mid-range phones.
+ * Add ?rs=1 or ?rs=2 to the page address to force one while testing.
+ */
+export const RENDER_SCALE = ((): number => {
+  if (typeof window === 'undefined') return 1;
+  const forced = Number(new URLSearchParams(window.location.search).get('rs'));
+  if (forced === 1 || forced === 2) return forced;
+  const fit = Math.min(window.innerWidth / GAME_WIDTH, window.innerHeight / GAME_HEIGHT);
+  return fit * (window.devicePixelRatio || 1) > 1.1 ? 2 : 1;
+})();
+
 export const PET = {
   homeX: 220,
   width: 56,

@@ -39,6 +39,25 @@ function clump(c: Ctx, r: () => number, x: number, h: number, greens: number[], 
   }
 }
 
+/** The shape under a dune or drift line, as a path to fill. */
+function ridge(c: Ctx, top: (x: number) => number): void {
+  c.beginPath();
+  c.moveTo(0, FG_H);
+  for (let x = 0; x <= FG_W; x += 16) c.lineTo(x, top(x));
+  c.lineTo(FG_W, FG_H);
+  c.closePath();
+}
+
+/** The highlight along the top of a dune or drift (only the top: an outline down the strip's ends shows as a line where it tiles). */
+function ridgeLine(c: Ctx, top: (x: number) => number, style: string, width: number): void {
+  c.beginPath();
+  c.moveTo(-16, top(-16));
+  for (let x = 0; x <= FG_W + 16; x += 16) c.lineTo(x, top(x));
+  c.strokeStyle = style;
+  c.lineWidth = width;
+  c.stroke();
+}
+
 function flower(c: Ctx, x: number, y: number, s: number, color: number): void {
   line(c, [[x, FG_H], [x + 1, (y + FG_H) / 2], [x, y]], 0x3a5a2a, 1.2);
   for (let k = 0; k < 5; k++) {
@@ -90,16 +109,11 @@ export function paintForeground(scene: Phaser.Scene, levelId: number, t: Theme):
       }
     } else if (t.tufts === 'sand') {
       // a dune edge with dune grass, shells and pebbles
-      c.beginPath();
-      c.moveTo(0, FG_H);
-      for (let x = 0; x <= FG_W; x += 16) c.lineTo(x, FG_H - 14 - 8 * Math.sin((x / FG_W) * TAU * 3) - 4 * Math.sin((x / FG_W) * TAU * 7));
-      c.lineTo(FG_W, FG_H);
-      c.closePath();
+      const duneTop = (x: number) => FG_H - 14 - 8 * Math.sin((x / FG_W) * TAU * 3) - 4 * Math.sin((x / FG_W) * TAU * 7);
+      ridge(c, duneTop);
       c.fillStyle = lin(c, 0, FG_H - 26, 0, FG_H, [[0, shade(t.grass, -0.2)], [1, shade(t.grassDark, -0.45)]]);
       c.fill();
-      c.strokeStyle = css(shade(t.grass, 0.25), 0.8);
-      c.lineWidth = 1.2;
-      c.stroke();
+      ridgeLine(c, duneTop, css(shade(t.grass, 0.25), 0.8), 1.2);
       for (let i = 0; i < 8; i++) {
         const x = (i + r()) * (FG_W / 8);
         const h = 30 + r() * 16;
@@ -123,16 +137,11 @@ export function paintForeground(scene: Phaser.Scene, levelId: number, t: Theme):
       }
     } else if (t.tufts === 'snow') {
       // soft snow drifts with a few twigs and berries poking out
-      c.beginPath();
-      c.moveTo(0, FG_H);
-      for (let x = 0; x <= FG_W; x += 16) c.lineTo(x, FG_H - 20 - 10 * Math.sin((x / FG_W) * TAU * 3 + 1) - 5 * Math.sin((x / FG_W) * TAU * 8));
-      c.lineTo(FG_W, FG_H);
-      c.closePath();
+      const driftTop = (x: number) => FG_H - 20 - 10 * Math.sin((x / FG_W) * TAU * 3 + 1) - 5 * Math.sin((x / FG_W) * TAU * 8);
+      ridge(c, driftTop);
       c.fillStyle = lin(c, 0, FG_H - 36, 0, FG_H, [[0, 0xdfe4f6], [0.45, 0xb4bcdc], [1, 0x7a84aa]]);
       c.fill();
-      c.strokeStyle = css(0xffffff, 0.9);
-      c.lineWidth = 1.6;
-      c.stroke();
+      ridgeLine(c, driftTop, css(0xffffff, 0.9), 1.6);
       for (let i = 0; i < 6; i++) {
         const x = (i + r()) * (FG_W / 6);
         wrap(x, 20, (wx) => {

@@ -4,14 +4,14 @@ import { paintProps } from '../art/props';
 import { paintCritters } from '../art/critters';
 import { paintCritters2 } from '../art/critters2';
 import { DEN_HOLE_UP, paintDen, paintProps2 } from '../art/props2';
-import { rimOf } from '../art/paint';
+import { artScale, resized, resOf, rimOf } from '../art/paint';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
 import { RUN_FRAMES, SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
-import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, SCORE, SPAWN } from '../config';
+import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
@@ -163,7 +163,8 @@ export class GameScene extends Phaser.Scene {
   private treats!: Phaser.Physics.Arcade.Group;
   private decor!: Phaser.Physics.Arcade.Group;
   private shownHints = new Set<string>();
-  private groundBobs: Phaser.GameObjects.Bob[] = [];
+  private groundBobs: Img[] = [];
+  private popPool: Phaser.GameObjects.Text[] = [];
   private frameCache = new Map<string, string[]>();
   private darkSky = false;
   private weather: Phaser.GameObjects.Particles.ParticleEmitter[] = [];
@@ -215,6 +216,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
+    // The canvas is RENDER_SCALE times the world's size; zoom in so the world fills it
+    this.cameras.main.setZoom(RENDER_SCALE).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    this.popPool = [];
     this.progress = loadProgress();
     this.level = levelById(data?.level ?? this.progress.current);
     this.progress.current = this.level.id;
@@ -255,13 +259,17 @@ export class GameScene extends Phaser.Scene {
     this.startWeather();
 
     // The ground is a painted strip laid down in narrow columns, each moved
-    // every frame to sit on the hill under it
-    const ground = this.add.blitter(0, 0, paintGround(this, this.level.id, this.level.theme)).setDepth(0.9);
+    // every frame to sit on the hill under it. (Images rather than a Blitter:
+    // the strip is painted at the render scale, and a Blitter can't scale.)
+    const groundKey = paintGround(this, this.level.id, this.level.theme);
+    const groundScale = artScale(this, groundKey);
     this.groundBobs = [];
-    for (let i = 0; i <= Math.ceil(GAME_WIDTH / GROUND_COL); i++) this.groundBobs.push(ground.create(0, 0, 0));
+    for (let i = 0; i <= Math.ceil(GAME_WIDTH / GROUND_COL); i++) {
+      this.groundBobs.push(this.add.image(0, 0, groundKey, 0).setOrigin(0, 0).setScale(groundScale).setDepth(0.9));
+    }
     // Close-up grass (or shells, snow, the pier rail) sliding by in front, below the trail
     const fg = paintForeground(this, this.level.id, this.level.theme);
-    if (fg) this.addLayer(fg, GAME_HEIGHT - FG_H, FG_H, FG_SPEED).setDepth(2.5);
+    if (fg) this.addLayer(fg, GAME_HEIGHT - FG_H, FG_H, FG_SPEED).setDepth(2.5).setTileScale(artScale(this, fg));
 
     // Pet: an invisible box does the physics, and the pet sprite is drawn on top of it
     const gy = this.groundAt(PET.homeX);
@@ -281,7 +289,8 @@ export class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.pet, this.treats, (_p, t) => this.collectTreat(t as Img));
 
     // HUD
-    const font = { fontFamily: 'Arial, sans-serif', color: '#1d2b1f' };
+    // Text is drawn on its own little canvas: give it the render scale so it stays sharp
+    const font = { fontFamily: 'Arial, sans-serif', color: '#1d2b1f', resolution: RENDER_SCALE };
     const top = this.level.theme.skyTop;
     const dark = ((top >> 16) & 255) * 0.3 + ((top >> 8) & 255) * 0.59 + (top & 255) * 0.11 < 120;
     this.darkSky = dark;
@@ -571,7 +580,7 @@ export class GameScene extends Phaser.Scene {
     btn.add(bg);
     btn.add(
       this.add
-        .text(0, 0, '\u{1F43E} My hero', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a' })
+        .text(0, 0, '\u{1F43E} My hero', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a', resolution: RENDER_SCALE })
         .setOrigin(0.5),
     );
     this.heroBtn = btn;
@@ -675,8 +684,10 @@ export class GameScene extends Phaser.Scene {
     const dx = this.speed * dt;
     this.distancePx += dx;
 
-    // Scroll the background layers; farther layers move slower
-    for (const l of this.layers) l.tile.tilePositionX += dx * l.factor;
+    // Scroll the background layers; farther layers move slower. A layer's
+    // factor is its share of the trail's speed on screen; tilePosition counts
+    // texture pixels, so it's divided by the tile scale.
+    for (const l of this.layers) l.tile.tilePositionX += (dx * l.factor) / l.tile.tileScaleX;
 
     // Keep moving things in step with the current speed
     for (const g of [this.obstacles, this.treats, this.decor]) {
@@ -747,14 +758,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawGround(): void {
-    const off = Math.round(this.distancePx);
+    // snapped to whole screen pixels
+    const off = Math.round(this.distancePx * RENDER_SCALE) / RENDER_SCALE;
     const first = Math.floor(off / GROUND_COL);
     const shift = off - first * GROUND_COL;
     const cols = GROUND_TILE / GROUND_COL;
     this.groundBobs.forEach((bob, i) => {
       const x = i * GROUND_COL - shift;
       bob.x = x;
-      bob.y = Math.round(this.groundAt(x + GROUND_COL / 2)) - GROUND_TOP;
+      bob.y = Math.round((this.groundAt(x + GROUND_COL / 2) - GROUND_TOP) * RENDER_SCALE) / RENDER_SCALE;
       bob.setFrame((first + i) % cols);
     });
   }
@@ -839,10 +851,10 @@ export class GameScene extends Phaser.Scene {
     if (d && 'tree' in d) {
       // Low branch hanging from a tree. The trunk stops just above the pet's
       // head, so it can slide under the tree.
-      const trunk = this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95);
+      const trunk = this.art(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95));
       if (d.trunkTint !== undefined) trunk.setTint(d.trunkTint);
       this.addDecor(trunk);
-      this.addDecor(this.add.image(x + 40, gy - 400, d.tree).setDepth(0.96));
+      this.addDecor(this.art(this.add.image(x + 40, gy - 400, d.tree).setDepth(0.96)));
     } else if (d) {
       // An awning, a stone arch, a clothesline or a banner held up on poles
       for (const dx of d.poles) {
@@ -853,7 +865,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (!o.slide && !o.flat) {
       // a soft shadow where it sits on the ground
-      const w = this.textures.get(kind).getSourceImage().width;
+      const w = this.textures.get(kind).getSourceImage().width / resOf(this, kind);
       this.addDecor(this.add.image(x, gy, 'shadow').setDisplaySize(w * 1.15, 9).setDepth(0.97));
     }
     this.addObstacle(x, gy - o.lift, kind);
@@ -872,7 +884,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private addObstacle(x: number, y: number, key: string): void {
-    const r = this.add.image(x, y, key).setDepth(1);
+    const r = this.art(this.add.image(x, y, key).setDepth(1));
     this.obstacles.add(r);
     const k = OBSTACLES[key as ObstacleKind];
     const spin: Phaser.GameObjects.Image[] = [r];
@@ -881,7 +893,7 @@ export class GameScene extends Phaser.Scene {
       r.setRotation(Math.atan2(this.groundAt(x + 30) - this.groundAt(x - 30), 60));
     } else {
       // a dark edge behind it, so it stands out from the painted scenery
-      const rim = this.add.image(x, y, rimOf(this, key)).setDepth(0.98);
+      const rim = this.art(this.add.image(x, y, rimOf(this, key)).setDepth(0.98));
       this.addDecor(rim);
       spin.push(rim);
     }
@@ -894,11 +906,13 @@ export class GameScene extends Phaser.Scene {
     // leaf tip or a fence-post corner doesn't count as a bump. Things to
     // jump over lose some height from the top; things to slide under keep
     // their bottom edge where it is, so a standing pet still hits them.
+    // (Sizes here are in the texture's own pixels: the body scales with the image.)
     const w = r.width * HITBOX.width;
     if (k?.flat) {
       // a thin band just above the ground line, whatever size the picture is
-      body.setSize(w, FLAT_HIT_H, false);
-      body.setOffset((r.width - w) / 2, r.height / 2 + k.lift - FLAT_HIT_H);
+      const res = resOf(this, key);
+      body.setSize(w, FLAT_HIT_H * res, false);
+      body.setOffset((r.width - w) / 2, r.height / 2 + (k.lift - FLAT_HIT_H) * res);
     } else if (k?.slide) {
       body.setSize(w, r.height, false);
       body.setOffset((r.width - w) / 2, 0);
@@ -916,7 +930,7 @@ export class GameScene extends Phaser.Scene {
       const tx = x + i * 45;
       const gy = this.groundAt(tx);
       const y = high ? gy - 120 - Math.sin((i / 3) * Math.PI) * 50 : gy - 30;
-      const t = this.add.image(tx, y, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1);
+      const t = this.art(this.add.image(tx, y, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1));
       this.treats.add(t);
       const body = t.body as Body;
       body.setAllowGravity(false);
@@ -928,7 +942,7 @@ export class GameScene extends Phaser.Scene {
   private spawnBall(remainingPx: number): void {
     this.ballSpawned = true;
     const x = PET.homeX + this.petW / 2 + remainingPx;
-    this.addDecor(this.add.image(x, this.groundAt(x) - 14, 'ball').setDepth(1));
+    this.addDecor(this.art(this.add.image(x, this.groundAt(x) - 14, 'ball').setDepth(1)));
     this.toast('There’s the ball!', '#1f6f2a');
   }
 
@@ -997,7 +1011,7 @@ export class GameScene extends Phaser.Scene {
     let found = false;
     this.obstacles.children.each((c) => {
       const o = c as Img;
-      if (o.x + o.width / 2 > this.pet.x - this.petW / 2 && o.x - o.width / 2 < reach) found = true;
+      if (o.x + o.displayWidth / 2 > this.pet.x - this.petW / 2 && o.x - o.displayWidth / 2 < reach) found = true;
       return true;
     });
     return found;
@@ -1007,9 +1021,8 @@ export class GameScene extends Phaser.Scene {
   private startChase(): void {
     const cat = this.choice.species === 'cat';
     const c = CHASERS[cat ? this.level.catChaser : this.level.dogChaser];
-    const sq = c.anim
-      ? this.add.sprite(GAME_WIDTH + 30, 0, c.texture).setDepth(1).play(c.anim)
-      : this.add.sprite(GAME_WIDTH + 30, 0, c.texture).setDepth(1);
+    const sq = this.art(this.add.sprite(GAME_WIDTH + 30, 0, c.texture).setDepth(1));
+    if (c.anim) sq.play(c.anim);
     // It runs along the ground (over the hills too) with little hops
     const hop = { h: 0 };
     const place = () => sq.setY(this.groundAt(sq.x) - c.lift - hop.h);
@@ -1031,22 +1044,22 @@ export class GameScene extends Phaser.Scene {
   private startGawk(what: GawkKind): void {
     const flyer = FLYERS[what];
     if (flyer) {
-      const bird = this.add.sprite(GAME_WIDTH + 40, flyer.y, `${flyer.texture}-0`).setDepth(1).setScale(1.3);
+      const bird = this.art(this.add.sprite(GAME_WIDTH + 40, flyer.y, `${flyer.texture}-0`).setDepth(1), 1.3);
       bird.play(`${flyer.texture}-flap`);
       this.tweens.add({ targets: bird, x: -60, duration: flyer.ms, onComplete: () => bird.destroy() });
       this.tweens.add({ targets: bird, y: flyer.y - 30, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       if (what === 'pigeon' || what === 'duck') {
         // pigeons and ducks come in pairs
-        const two = this.add.sprite(GAME_WIDTH + 100, flyer.y + 24, `${flyer.texture}-1`).setDepth(1).setScale(1.1).play(`${flyer.texture}-flap`);
+        const two = this.art(this.add.sprite(GAME_WIDTH + 100, flyer.y + 24, `${flyer.texture}-1`).setDepth(1), 1.1).play(`${flyer.texture}-flap`);
         this.tweens.add({ targets: two, x: 0, duration: flyer.ms, onComplete: () => two.destroy() });
       }
     } else if (what === 'person') {
       // A neighbor strolls by on the sidewalk and waves hello
       const gy = this.groundAt(GAME_WIDTH + 40);
-      const p = this.add.sprite(GAME_WIDTH + 40, gy + 2, 'person-0').setOrigin(0.5, 1).setDepth(0.85).setScale(1.25).play('person-wave');
+      const p = this.art(this.add.sprite(GAME_WIDTH + 40, gy + 2, 'person-0').setOrigin(0.5, 1).setDepth(0.85), 1.25).play('person-wave');
       this.tweens.add({ targets: p, x: -60, duration: 5200, onComplete: () => p.destroy() });
     } else if (what === 'butterfly') {
-      const b = this.add.sprite(GAME_WIDTH + 30, 300, 'butterfly-0').setDepth(1).setScale(1.3);
+      const b = this.art(this.add.sprite(GAME_WIDTH + 30, 300, 'butterfly-0').setDepth(1), 1.3);
       b.play('butterfly-flap');
       this.tweens.add({ targets: b, x: -60, duration: 5000, onComplete: () => b.destroy() });
       this.tweens.add({ targets: b, y: 250, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -1057,15 +1070,16 @@ export class GameScene extends Phaser.Scene {
       const x = GAME_WIDTH + 60;
       const base = this.groundAt(x) - DEN_BASE_UP;
       const { back, lip } = paintDen(this, this.level.id, this.level.theme);
-      const den = this.add.image(x, base, back).setOrigin(0.5, 1).setScale(DEN_SCALE).setDepth(0.5);
-      const front = this.add.image(x, base, lip).setOrigin(0.5, 1).setScale(DEN_SCALE).setDepth(0.6);
+      const den = this.art(this.add.image(x, base, back).setOrigin(0.5, 1).setDepth(0.5), DEN_SCALE);
+      const front = this.art(this.add.image(x, base, lip).setOrigin(0.5, 1).setDepth(0.6), DEN_SCALE);
       const holeY = base - DEN_HOLE_UP * DEN_SCALE;
       const holeBottom = holeY + 9 * DEN_SCALE;
-      const critter = this.add.image(x, holeY + 26, 'gopher').setDepth(0.55);
+      const critter = this.art(this.add.image(x, holeY + 26, 'gopher').setDepth(0.55));
       const crop = () => {
-        const h = Math.min(critter.height, holeBottom - (critter.y - critter.height / 2));
+        // how much of it is above the hole's lower edge, in game pixels, then in the texture's
+        const h = Math.min(critter.displayHeight, holeBottom - (critter.y - critter.displayHeight / 2));
         critter.setVisible(h > 0.5);
-        if (h > 0.5) critter.setCrop(0, 0, critter.width, h);
+        if (h > 0.5) critter.setCrop(0, 0, critter.width, h / critter.scaleY);
       };
       crop();
       this.tweens.add({ targets: [den, front, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), front.destroy(), critter.destroy()) });
@@ -1203,11 +1217,24 @@ export class GameScene extends Phaser.Scene {
   private treatPop(x: number, y: number): void {
     const ring = this.add.circle(x, y, 8, 0xffffff, 0).setStrokeStyle(3, 0xffe08a).setDepth(5);
     this.tweens.add({ targets: ring, scale: 2.5, alpha: 0, duration: 300, onComplete: () => ring.destroy() });
-    const label = this.add
-      .text(x, y - 10, `+${SCORE.treat}`, { fontFamily: 'Arial, sans-serif', fontSize: '20px', fontStyle: 'bold', color: '#b8860b' })
-      .setOrigin(0.5)
-      .setDepth(5);
-    this.tweens.add({ targets: label, y: y - 50, alpha: 0, duration: 700, onComplete: () => label.destroy() });
+    // The labels are reused: a run grabs dozens of treats, often four at a time
+    const label =
+      this.popPool.pop() ??
+      this.add
+        .text(0, 0, `+${SCORE.treat}`, { fontFamily: 'Arial, sans-serif', fontSize: '20px', fontStyle: 'bold', color: '#b8860b', resolution: RENDER_SCALE })
+        .setOrigin(0.5)
+        .setDepth(5);
+    label.setPosition(x, y - 10).setAlpha(1).setVisible(true);
+    this.tweens.add({
+      targets: label,
+      y: y - 50,
+      alpha: 0,
+      duration: 700,
+      onComplete: () => {
+        label.setVisible(false);
+        this.popPool.push(label);
+      },
+    });
   }
 
   private confetti(): void {
@@ -1279,6 +1306,7 @@ export class GameScene extends Phaser.Scene {
         color: '#16202a',
         backgroundColor: 'rgba(255,248,232,0.85)',
         padding: { x: 5, y: 2 },
+        resolution: RENDER_SCALE,
       })
       .setOrigin(0.5, 0);
     c.add([g, label]);
@@ -1293,11 +1321,11 @@ export class GameScene extends Phaser.Scene {
   private addPauseAndPaws(): void {
     this.pawIcons = [];
     for (let i = 0; i < PAWS; i++) {
-      this.pawIcons.push(this.add.text(132 + i * 30, 70, '\u{1F43E}', { fontSize: '22px' }).setOrigin(0.5).setDepth(20));
+      this.pawIcons.push(this.add.text(132 + i * 30, 70, '\u{1F43E}', { fontSize: '22px', resolution: RENDER_SCALE }).setOrigin(0.5).setDepth(20));
     }
     this.updatePaws();
     const btn = this.add
-      .text(84, 70, '\u23F8\uFE0F', { fontSize: '24px' })
+      .text(84, 70, '\u23F8\uFE0F', { fontSize: '24px', resolution: RENDER_SCALE })
       .setOrigin(0.5)
       .setDepth(20)
       .setInteractive({ useHandCursor: true })
@@ -1344,7 +1372,7 @@ export class GameScene extends Phaser.Scene {
   /** Small speaker button in the top-left corner, under the score. */
   private addMuteButton(): void {
     const btn = this.add
-      .text(36, 70, sfx.isMuted() ? '\u{1F507}' : '\u{1F50A}', { fontSize: '26px' })
+      .text(36, 70, sfx.isMuted() ? '\u{1F507}' : '\u{1F50A}', { fontSize: '26px', resolution: RENDER_SCALE })
       .setOrigin(0.5)
       .setDepth(20)
       .setInteractive({ useHandCursor: true });
@@ -1365,7 +1393,7 @@ export class GameScene extends Phaser.Scene {
     this.petW = Math.round(PET.width * scale);
     this.petH = Math.round(PET.height * scale);
     this.setPetHeight(this.petH);
-    this.petSprite.setScale(scale).clearTint();
+    this.petSprite.setScale(artScale(this, `${petKey(this.choice)}-run-0`, scale)).clearTint();
     this.petSprite.play(`${petKey(this.choice)}-run`);
   }
 
@@ -1384,9 +1412,15 @@ export class GameScene extends Phaser.Scene {
       // Painted strips have 4 clear rows on top. Showing from row 2 to just short of
       // the bottom keeps the strip's top and bottom edges from bleeding into each other.
       const h = l.src ? Math.round((this.textures.get(l.key).getSourceImage().height - 4) * scale) : (l.h ?? 0);
-      const tile = this.addLayer(l.key, GROUND_Y - h - (l.lift ?? 0), h, l.factor);
-      if (scale !== 1) tile.setTileScale(scale);
-      if (l.src) tile.tilePositionY = 2;
+      // A strip shown smaller than the screen's pixels is shrunk once, ahead of
+      // time, with the browser's good filter (the GPU's quick one makes leaves
+      // shimmer as they scroll). It keeps the same size and speed on screen.
+      const shrunk = l.src && scale * RENDER_SCALE < 1;
+      const key = shrunk ? resized(this, l.key, scale * RENDER_SCALE) : l.key;
+      const tileScale = shrunk ? 1 / RENDER_SCALE : scale;
+      const tile = this.addLayer(key, GROUND_Y - h - (l.lift ?? 0), h, l.factor * scale);
+      if (tileScale !== 1) tile.setTileScale(tileScale);
+      if (l.src) tile.tilePositionY = (2 * scale) / tileScale;
       if (l.tint !== undefined) tile.setTint(l.tint);
       if (i > 0) return;
       if (t.sunGlint && t.sun) {
@@ -1475,7 +1509,7 @@ export class GameScene extends Phaser.Scene {
           x: { min: -40, max: GAME_WIDTH + 260 },
           speedY: { min: 40, max: 95 },
           speedX: { min: -90, max: -30 },
-          scale: look.scale,
+          scale: { min: artScale(this, look.texture, look.scale.min), max: artScale(this, look.texture, look.scale.max) },
           alpha: { min: 0.7, max: 1 },
           tint: look.tint,
           rotate: look.spin ? { start: 0, end: look.spin } : 0,
@@ -1514,6 +1548,12 @@ export class GameScene extends Phaser.Scene {
         },
       });
     }
+  }
+
+  /** Sizes a picture painted in code (which holds RENDER_SCALE pixels per game pixel) to `scale` times its game size. */
+  private art<T extends Phaser.GameObjects.Image | Phaser.GameObjects.Sprite>(o: T, scale = 1): T {
+    o.setScale(artScale(this, o.texture.key, scale));
+    return o;
   }
 
   private addLayer(key: string, y: number, h: number, factor: number): Phaser.GameObjects.TileSprite {

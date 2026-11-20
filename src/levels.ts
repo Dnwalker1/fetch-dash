@@ -112,7 +112,7 @@ export const LEVELS: LevelDef[] = [
       skyImage: 'art/l1/sky.webp',
       layers: [
         { key: 'l1-far', src: 'art/l1/far.webp', scale: 1.5, factor: 0.2 },
-        { key: 'l1-mid', src: 'art/l1/mid.webp', scale: 0.7, factor: 0.45 },
+        { key: 'l1-mid', src: 'art/l1/mid.webp', scale: 0.8, factor: 0.45 },
       ],
       raysAlpha: 0.4,
       cloudsAlpha: 1,
@@ -145,7 +145,7 @@ export const LEVELS: LevelDef[] = [
       skyImage: 'art/l2/sky.webp',
       layers: [
         { key: 'l2-far', src: 'art/l2/far.webp', scale: 1, factor: 0.2 },
-        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.75, factor: 0.45 },
+        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45 },
       ],
       raysAlpha: 0.4,
       cloudsAlpha: 1,
@@ -180,7 +180,7 @@ export const LEVELS: LevelDef[] = [
       skyFit: { scale: 0.8, x: -32, y: -120 },
       layers: [
         { key: 'l3-far', src: 'art/l3/far.webp', scale: 0.75, factor: 0.05 },
-        { key: 'l3-mid', src: 'art/l3/mid.webp', scale: 0.6, factor: 0.45 },
+        { key: 'l3-mid', src: 'art/l3/mid.webp', scale: 0.55, factor: 0.45 },
       ],
       raysAlpha: 0.7,
       cloudsAlpha: 0.55,
@@ -282,7 +282,8 @@ export const LEVELS: LevelDef[] = [
       skyImage: 'art/l6/sky.webp',
       layers: [
         { key: 'l6-far', src: 'art/l6/far.webp', scale: 0.85, factor: 0.2, lift: 50 },
-        { key: 'l6-mid', src: 'art/l6/mid.webp', scale: 0.65, factor: 0.45 },
+        // the painting is lit like daytime: a cool tint makes it moonlit
+        { key: 'l6-mid', src: 'art/l6/mid.webp', scale: 0.7, factor: 0.45, tint: 0xb4c0e8 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0.25,
@@ -317,7 +318,7 @@ export const LEVELS: LevelDef[] = [
       skyImage: 'art/l7/sky.webp',
       layers: [
         { key: 'l7-far', src: 'art/l7/far.webp', scale: 0.8, factor: 0.15 },
-        { key: 'l7-mid', src: 'art/l7/mid.webp', scale: 0.62, factor: 0.45, lift: 30 },
+        { key: 'l7-mid', src: 'art/l7/mid.webp', scale: 0.7, factor: 0.45 },
       ],
       raysAlpha: 0.45,
       cloudsAlpha: 0.9,

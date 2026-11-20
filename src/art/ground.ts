@@ -13,8 +13,8 @@ export const GROUND_TILE = 1024;
 export const GROUND_TEX_H = 190;
 /** Rows above the ground line, for grass blades and drifts that stick up. */
 export const GROUND_TOP = 10;
-/** Width of each column the strip is laid down in. */
-export const GROUND_COL = 8;
+/** Width of each column the strip is laid down in (narrow, so hills look smooth, not stepped). */
+export const GROUND_COL = 4;
 
 const W = GROUND_TILE;
 const H = GROUND_TEX_H;
@@ -415,6 +415,10 @@ export function paintGround(scene: Phaser.Scene, levelId: number, t: Theme): str
     else if (t.tufts === 'boards') paintBoards(c, t);
     else paintGrass(c, t);
   });
-  if (tex) for (let i = 0; i < W / GROUND_COL; i++) tex.add(i, 0, i * GROUND_COL, 0, GROUND_COL, H);
+  if (tex) {
+    // columns in canvas pixels (the canvas is painted at the render scale)
+    const res = (tex.customData as { res?: number }).res ?? 1;
+    for (let i = 0; i < W / GROUND_COL; i++) tex.add(i, 0, i * GROUND_COL * res, 0, GROUND_COL * res, H * res);
+  }
   return key;
 }
