@@ -5,6 +5,7 @@ on), the critters and the dens are painted pictures, one file per texture key:
 
 - props in `public/art/props/<key>.webp`
 - critters and dens in `public/art/critters/<key>.webp`
+- the Backyard Toss bonus round in `public/art/bonus/<key>.webp` (its keys and sizes are listed at the top of `src/scenes/BonusScene.ts`; add a key to `BONUS_ART` in `src/art/artFiles.ts` once its picture is in)
 
 The code is in `src/art/artFiles.ts`. (The pets have their own sheets; see
 `docs/painted-pets.md`.)

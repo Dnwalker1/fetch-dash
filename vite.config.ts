@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 // e.g. a Fetch Dash page on goodwookie.com.
 export default defineConfig({
   base: './',
-  // Phaser itself is ~1.5 MB minified; that's expected for a game engine.
-  build: { chunkSizeWarningLimit: 1600 },
+  // Phaser itself is ~1.5 MB minified, and the game's code adds the rest;
+  // that's expected for a game engine.
+  build: { chunkSizeWarningLimit: 1800 },
 });

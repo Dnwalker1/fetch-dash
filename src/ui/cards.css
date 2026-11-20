@@ -400,6 +400,37 @@
   letter-spacing: -0.06em;
   text-shadow: 0 0 2px #fff, 0 0 2px #fff;
 }
+#ui .bstop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: clamp(20px, 5vh, 30px);
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px dashed var(--gold);
+  background: #fffaf0;
+  font-size: clamp(11px, 2.7vh, 17px);
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+  z-index: 2;
+}
+#ui .bstop.locked { filter: grayscale(1); opacity: 0.5; cursor: default; }
+#ui .bstop.on { border-style: solid; box-shadow: 0 0 0 4px rgba(199, 154, 62, 0.45), 0 2px 0 rgba(0, 0, 0, 0.2); animation: glow 1.4s ease-in-out infinite; }
+#ui .jar {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  padding: 0.15em 0.65em;
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.92);
+  border: 1.5px solid var(--aged);
+  color: var(--navy);
+  font-weight: 800;
+  font-size: 0.78em;
+  white-space: nowrap;
+  z-index: 1;
+}
 #ui .mappet {
   position: absolute;
   width: clamp(34px, 8.5vh, 52px);
@@ -414,6 +445,15 @@
 #ui .mapfoot .info b { color: var(--navy); font-size: 1.05em; }
 #ui .mapfoot .info small { flex-basis: 100%; color: var(--slate); }
 #ui .mapfoot .play { flex: none; min-width: 11em; }
+
+/* End of a bonus round */
+#ui .tally { list-style: none; margin: 0.5em 0 0; padding: 0; }
+#ui .tally li { display: flex; justify-content: space-between; gap: 1em; padding: 0.22em 0.6em; border-radius: 8px; color: var(--slate); }
+#ui .tally li:nth-child(odd) { background: var(--cream); }
+#ui .tally li b { color: var(--navy); }
+#ui .tally li.sum { margin-top: 0.25em; background: #fff3c4; color: var(--navy); font-weight: 800; font-size: 1.1em; }
+#ui .jarline { margin: 0.5em 0 0; color: var(--slate); }
+#ui .jarline b { color: var(--navy); font-size: 1.15em; }
 
 /* End card */
 #ui .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4em; margin-top: 0.6em; }

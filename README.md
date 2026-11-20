@@ -54,6 +54,19 @@ Finishing a level opens the next one. Best scores are kept per level on the devi
   - Something out of reach (a bird or gull overhead, a den hole, a butterfly): your pet stops to stare and the run slows down until you call it back.
 - On the end card, Enter or Space starts the next run.
 
+## Bonus round: Backyard Toss
+
+After levels 3, 6 and 9 the end card offers a 60-second bonus round (or skip it), and each one can be replayed from its 🎾 stop on the trail map once that level is done. The camera looks down a backyard lawn at an angle: things farther up the screen are smaller, drawn behind nearer things, and move more slowly.
+
+- **Throw:** swipe up from the bottom half of the screen. The direction aims; a longer, faster swipe throws farther. A dotted arc shows the throw while you drag. On a computer, drag up with the mouse, or hold Space to charge and aim with ← →.
+- **Fetch:** the pet dashes after the ball for a moment, then you steer: hold a finger (or the mouse button) where it should run, or use the arrow keys / WASD.
+- **Bring it back** to the glowing circle at the bottom for the next throw. Catching it before it touches the ground is an air catch.
+- **Treats:** 3 for each ball brought back, 3 more for an air catch, 1 for each golden treat on the lawn (3 to a pile, mostly in the far half), and 5 for three air-caught returns in a row. After 3 returns each throw launches 2 balls, and after 6, 3 balls. The sprinkler turns on now and then and pushes the ball. You can't lose.
+- **Cats** get a ball of yarn: it bounces less, rolls farther and leaves a thread that fades.
+- The round's treats go into the **treat jar** (shown on the map), which is kept on the device.
+
+To jump straight into it, open the game with `?bonus=1` on the address (for example http://localhost:5173/?bonus=1). The code is `src/scenes/BonusScene.ts`, its numbers are the `BONUS` block in `src/config.ts`, and its placeholder art is painted in `src/art/bonusArt.ts`. The list of its pictures, for painting replacements, is at the top of `BonusScene.ts`.
+
 Pet art lives in `src/art/pets.ts`. All the numbers that control how the game feels are in `src/config.ts`.
 
 ## Run it on your computer

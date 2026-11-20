@@ -26,9 +26,15 @@ const CRITTERS = [
   'squirrel', 'streetcat', 'streetdog',
   ...['dirt', 'sand', 'snow'].flatMap((e) => [`den-${e}`, `den-${e}-lip`]),
 ];
+/**
+ * Backyard Toss pictures in public/art/bonus/ (the keys are listed at the top
+ * of src/scenes/BonusScene.ts). Add a key here once its picture is in.
+ */
+const BONUS_ART: string[] = [];
 const FILES = new Map<string, string>([
   ...PROPS.map((k): [string, string] => [k, 'props']),
   ...CRITTERS.map((k): [string, string] => [k, 'critters']),
+  ...BONUS_ART.map((k): [string, string] => [k, 'bonus']),
 ]);
 
 /** Picture pixels per game pixel in a painted file. */
