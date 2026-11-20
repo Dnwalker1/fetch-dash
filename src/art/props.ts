@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GROUND_Y } from '../config';
 import {
-  blob, circle, css, ellipse, fillOut, grain, leaf, lin, line, mix, paint, rad, roundX, roundY, rrect, seeded, shade, type Ctx,
+  blade, blob, circle, css, ellipse, fillOut, grain, leaf, lin, line, mix, paint, rad, roundX, roundY, rrect, seeded, shade, type Ctx,
 } from './paint';
 
 /**
@@ -189,38 +189,95 @@ function paintTreats(scene: Phaser.Scene): void {
   });
 }
 
+// ---------- Fences ----------
+
+/**
+ * A fence that crosses the trail at an angle, near end at the lower left,
+ * on its own patch of grass: the white picket fence (levels 1 and 2) or the
+ * split-rail fence (orchard and farm). Drawn in code only if its painted
+ * picture fails to load.
+ */
+function paintFence(scene: Phaser.Scene, key: 'fence' | 'fence-rail'): void {
+  const W = 88;
+  const H = 72;
+  const picket = key === 'fence';
+  paint(scene, key, W, H, (c) => {
+    const r = seeded(picket ? 21 : 22);
+    // from the near end (t = 0) to the far end (t = 1)
+    const at = (t: number): [number, number] => [14 + 60 * t, 63 - 23 * t];
+    const tall = (t: number): number => 43 - 8 * t;
+    const across = (t: number, near: number, far: number): number => near + (far - near) * t;
+
+    blob(c, [[1, 68], [20, 71], [52, 60], [87, 45], [85, 35], [70, 33], [38, 46], [4, 58]]);
+    fillOut(c, lin(c, 0, 33, 0, 71, [[0, 0x8fb04a], [0.6, 0x6c9a3a], [1, 0x4f7a2c]]), 0x8a5a32, 1.2);
+    const greens = [0x3f6324, 0x5d8a32, 0x8dbb4f];
+    for (let i = 0; i < 26; i++) {
+      const t = r();
+      const [x, y] = at(t);
+      blade(c, x + (r() - 0.5) * 14, y + 4 + (r() - 0.5) * 6, 4 + r() * 5, (r() - 0.5) * 5, greens[i % 3], 0.9);
+    }
+
+    const wood = picket ? 0xece4d2 : 0x8a5a32;
+    const dark = picket ? 0x6f665a : 0x3e2614;
+    const rails = picket ? [0.32, 0.7] : [0.38, 0.75];
+    const thick = picket ? [3.6, 2.8] : [7, 5.4];
+    const post = (t: number, w: number): void => {
+      const [x, y] = at(t);
+      const h = tall(t);
+      rrect(c, x - w / 2, y - h, w, h, 1.2);
+      fillOut(c, roundX(c, x - w / 2, x + w / 2, wood, 0.22, -0.32), dark, 1.1);
+      rrect(c, x - w / 2, y - h, w, Math.min(3, w * 0.4), 1);
+      c.fillStyle = css(0xffffff, 0.25);
+      c.fill();
+    };
+    const rail = (f: number): void => {
+      const [x0, y0] = at(0);
+      const [x1, y1] = at(1);
+      const t0 = y0 - tall(0) * f;
+      const t1 = y1 - tall(1) * f;
+      c.beginPath();
+      c.moveTo(x0, t0 - thick[0] / 2);
+      c.lineTo(x1, t1 - thick[1] / 2);
+      c.lineTo(x1, t1 + thick[1] / 2);
+      c.lineTo(x0, t0 + thick[0] / 2);
+      c.closePath();
+      fillOut(c, roundY(c, Math.min(t0, t1) - thick[0] / 2, Math.max(t0, t1) + thick[0] / 2, wood, 0.2, -0.35), dark, 1);
+    };
+
+    post(1, across(1, 9, 7));
+    for (const f of rails) rail(f);
+    if (picket) {
+      for (let i = 6; i >= 1; i--) {
+        const t = i / 7;
+        const [x, y] = at(t);
+        const h = tall(t) - 2;
+        const w = across(t, 6, 4.6);
+        c.beginPath();
+        c.moveTo(x - w / 2, y);
+        c.lineTo(x - w / 2, y - h + w * 0.7);
+        c.lineTo(x, y - h);
+        c.lineTo(x + w / 2, y - h + w * 0.7);
+        c.lineTo(x + w / 2, y);
+        c.closePath();
+        fillOut(c, roundX(c, x - w / 2, x + w / 2, wood, 0.22, -0.32), dark, 1);
+      }
+    }
+    post(0, 9);
+    for (let i = 0; i < 10; i++) {
+      const [x, y] = at(r() * 0.3);
+      blade(c, x + (r() - 0.5) * 12, y + 5, 3 + r() * 4, (r() - 0.5) * 4, greens[i % 3], 0.9);
+    }
+    grain(c, W, H, 0.05, 0, picket ? 5 : 6, 64);
+  });
+}
+
 // ---------- Level 1 and 2: park and hills ----------
 
 function paintParkProps(scene: Phaser.Scene): void {
   const greens = [0x2f5e2a, 0x4f8a3a, 0x8dbb4f];
 
-  paint(scene, 'fence', 34, 50, (c) => {
-    const wood = 0xc08a52;
-    const dark = 0x5e3d22;
-    for (const y of [16, 34]) {
-      rrect(c, 0.6, y, 32.8, 6, 1.5);
-      fillOut(c, roundY(c, y, y + 6, wood, 0.2, -0.3), dark, 1.1);
-    }
-    for (const x of [3, 21]) {
-      c.beginPath();
-      c.moveTo(x, 8.5);
-      c.lineTo(x + 5, 0.8);
-      c.lineTo(x + 10, 8.5);
-      c.lineTo(x + 10, 49.3);
-      c.lineTo(x, 49.3);
-      c.closePath();
-      fillOut(c, roundX(c, x, x + 10, wood, 0.22, -0.32), dark, 1.3);
-      line(c, [[x + 3.2, 12], [x + 3.6, 22], [x + 3, 31]], dark, 0.7, 0.4);
-      line(c, [[x + 6.8, 27], [x + 6.4, 37], [x + 7, 46]], dark, 0.7, 0.4);
-      line(c, [[x + 1.6, 9], [x + 1.6, 48]], 0xffffff, 0.9, 0.25);
-      for (const y of [19, 37]) {
-        circle(c, x + 5, y, 0.9);
-        c.fillStyle = css(0x2a1c10, 0.85);
-        c.fill();
-      }
-    }
-    grain(c, 34, 50, 0.06, 0, 5, 64);
-  });
+  paintFence(scene, 'fence');
+  paintFence(scene, 'fence-rail');
 
   paint(scene, 'branch', 110, 50, (c) => {
     limb(c, BARK);

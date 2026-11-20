@@ -7,7 +7,7 @@ import { GROUND_Y } from './config';
  */
 
 export type ObstacleKind =
-  | 'fence' | 'puddle' | 'branch' | 'log' | 'rock' | 'sandcastle' | 'driftwood' | 'umbrella'
+  | 'fence' | 'fence-rail' | 'puddle' | 'branch' | 'log' | 'rock' | 'sandcastle' | 'driftwood' | 'umbrella'
   | 'trashcan' | 'hydrant' | 'sign' | 'awning' | 'stump' | 'creek' | 'snowman' | 'sled' | 'snowbranch'
   | 'haybale' | 'pumpkin' | 'autumnbranch' | 'cactus' | 'tumbleweed' | 'arch' | 'trough' | 'clothesline'
   | 'lantern' | 'pond' | 'blossombranch' | 'vines' | 'crate' | 'barrel' | 'banner';
@@ -306,7 +306,7 @@ export const LEVELS: LevelDef[] = [
     icon: '🍎',
     goalMeters: 1250,
     speed: { start: 360, max: 830, gainPerSecond: 8 },
-    obstacles: { haybale: 3, pumpkin: 3, autumnbranch: 3, fence: 1 },
+    obstacles: { haybale: 3, pumpkin: 3, autumnbranch: 3, 'fence-rail': 1 },
     hills: { height: 50, length: 1400 },
     dogChaser: 'chipmunk',
     catChaser: 'mouse',
@@ -370,7 +370,7 @@ export const LEVELS: LevelDef[] = [
     icon: '🐄',
     goalMeters: 1350,
     speed: { start: 370, max: 850, gainPerSecond: 8.5 },
-    obstacles: { haybale: 3, trough: 3, fence: 2, clothesline: 3 },
+    obstacles: { haybale: 3, trough: 3, 'fence-rail': 2, clothesline: 3 },
     hills: { height: 30, length: 1200 },
     dogChaser: 'chicken',
     catChaser: 'mouse',

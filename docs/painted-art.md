@@ -20,11 +20,11 @@ The code is in `src/art/artFiles.ts`. (The pets have their own sheets; see
 - A key that isn't listed is painted in code, as before (the leaf and petal
   specks, for one).
 - Hit areas and ground shadows of obstacles are measured from the painted
-  part of the picture (`artBox`), not the whole picture. That's how the fence,
-  which fills only the lower part of its picture, gets a low hit area. The hit
-  area is 72% of the painted width and 80% of its height for things to jump
-  over, and its full height for things to slide under, so the bottom edge
-  stays put.
+  part of the picture (`artBox`), not the whole picture, so a prop that sits
+  in clear space gets a hit area that fits it. The hit area is 72% of the
+  painted width and 80% of its height for things to jump over, and its full
+  height for things to slide under, so the bottom edge stays put. An obstacle
+  can set its own share with `hit` in `OBSTACLES` (`src/scenes/GameScene.ts`).
 - Flap animations are made once both pictures exist, since a level loads only
   the critters it uses.
 
@@ -45,6 +45,17 @@ The code is in `src/art/artFiles.ts`. (The pets have their own sheets; see
 - Poles (`umbrella-pole`, `arch-leg`, `wood-post`, `pier-pole`) are stretched
   to their size in the game, and the awning uses the umbrella pole tinted dark.
 - Tree canopies are scenery only; the branch is what the pet slides under.
+
+## Fences
+
+The two fences cross the trail at an angle, near end at the lower left, each
+on its own patch of grass: the white picket `fence` (Park Trail and Hilltop
+Trail) and the split-rail `fence-rail` (Autumn Orchard and Sunny Farm). Both
+are 88x72 in the game (176x144 pictures). They sit 2 px into the trail, have
+no shadow (the grass patch is their ground), and their hit area is 55% of
+the painted width and 60% of its height, centered and on the ground, because
+the angle leaves the top corners empty. The code-drawn stand-ins are angled
+fences of the same size.
 
 ## Dens
 

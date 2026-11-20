@@ -110,9 +110,17 @@ const FLYERS: Partial<Record<GawkKind, { texture: string; y: number; ms: number;
 type Decor = { tree: string; trunkTint?: number } | { poles: number[]; tint: number; width: number; height: number; pole?: string };
 /** Water lies flat on the trail: drawn a little below the ground line, with a thin hit band at the line. */
 const FLAT_HIT_H = 10;
-type ObstacleDef = { lift: number; slide: boolean; decor?: Decor; flat?: boolean };
+/**
+ * `hit` overrides the share of the painted part that bumps the pet (HITBOX),
+ * and `ground` marks a picture that brings its own patch of ground, so it
+ * gets no shadow.
+ */
+type ObstacleDef = { lift: number; slide: boolean; decor?: Decor; flat?: boolean; hit?: { width: number; height: number }; ground?: boolean };
+/** The fences cross the trail at an angle, which leaves clear corners at the top: a smaller hit area. */
+const FENCE: ObstacleDef = { lift: 34, slide: false, hit: { width: 0.55, height: 0.6 }, ground: true };
 const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
-  fence: { lift: 25, slide: false },
+  fence: FENCE,
+  'fence-rail': FENCE,
   puddle: { lift: -7, slide: false, flat: true },
   log: { lift: 17, slide: false },
   rock: { lift: 19, slide: false },
@@ -908,7 +916,7 @@ export class GameScene extends Phaser.Scene {
         this.addDecor(pole);
       }
     }
-    if (!o.slide && !o.flat) {
+    if (!o.slide && !o.flat && !o.ground) {
       // a soft shadow where it sits on the ground
       const w = artBox(this, kind).w / resOf(this, kind);
       this.addDecor(this.add.image(x, gy, 'shadow').setDisplaySize(w * 1.15, 9).setDepth(0.97));
@@ -952,10 +960,11 @@ export class GameScene extends Phaser.Scene {
     // jump over lose some height from the top; things to slide under keep
     // their bottom edge where it is, so a standing pet still hits them.
     // Measured from the painted part of the picture: a painted prop can sit in
-    // clear space (the fence fills only the lower half of its picture).
+    // clear space.
     // (Sizes here are in the texture's own pixels: the body scales with the image.)
     const box = artBox(this, key);
-    const w = box.w * HITBOX.width;
+    const share = k?.hit ?? HITBOX;
+    const w = box.w * share.width;
     const x0 = box.x + (box.w - w) / 2;
     if (k?.flat) {
       // a thin band just above the ground line, whatever size the picture is
@@ -966,7 +975,7 @@ export class GameScene extends Phaser.Scene {
       body.setSize(w, box.h, false);
       body.setOffset(x0, box.y);
     } else {
-      const h = box.h * HITBOX.height;
+      const h = box.h * share.height;
       body.setSize(w, h, false);
       body.setOffset(x0, box.y + box.h - h);
     }

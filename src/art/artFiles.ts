@@ -13,7 +13,7 @@ import Phaser from 'phaser';
 const PROPS = [
   'arch', 'arch-leg', 'autumnbranch', 'awning', 'ball', 'banner', 'barrel', 'blossombranch',
   'bone', 'branch', 'cactus', 'canopy', 'canopy-autumn', 'canopy-blossom', 'canopy-jungle',
-  'clothesline', 'crate', 'creek', 'driftwood', 'fence', 'fish', 'haybale', 'hydrant', 'lantern',
+  'clothesline', 'crate', 'creek', 'driftwood', 'fence', 'fence-rail', 'fish', 'haybale', 'hydrant', 'lantern',
   'log', 'pier-pole', 'pond', 'puddle', 'pumpkin', 'rock', 'sandcastle', 'sign', 'sled',
   'snowbranch', 'snowcanopy', 'snowman', 'stump', 'trashcan', 'trough', 'trunk', 'tumbleweed',
   'umbrella', 'umbrella-pole', 'vines', 'wood-post',
