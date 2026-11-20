@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { RENDER_SCALE } from '../config';
+import { propFromFile } from './propArt';
 
 /**
  * A small painting kit for code-drawn art. It draws with the browser's canvas
@@ -12,7 +13,8 @@ export type Ctx = CanvasRenderingContext2D;
 type Stop = [offset: number, color: number, alpha?: number];
 
 /**
- * Makes a texture by painting on a canvas. Does nothing if the key exists.
+ * Makes a texture by painting on a canvas. Does nothing if the key exists, or
+ * if its picture comes from a painted prop file (see propArt.ts).
  * The drawing code works in game pixels (w x h); the canvas holds `res` times
  * as many, so the art stays sharp once the camera zooms in (RENDER_SCALE).
  * Show it with artScale() so it comes out at w x h in the game.
@@ -25,7 +27,7 @@ export function paint(
   draw: (c: Ctx) => void,
   res = RENDER_SCALE,
 ): Phaser.Textures.CanvasTexture | null {
-  if (scene.textures.exists(key)) return null;
+  if (scene.textures.exists(key) || propFromFile(key)) return null;
   const tex = scene.textures.createCanvas(key, Math.round(w * res), Math.round(h * res));
   if (!tex) return null;
   (tex.customData as { res?: number }).res = res;

@@ -5,6 +5,7 @@ import { paintCritters } from '../art/critters';
 import { paintCritters2 } from '../art/critters2';
 import { DEN_HOLE_UP, paintDen, paintProps2 } from '../art/props2';
 import { artScale, resized, resOf, rimOf } from '../art/paint';
+import { artBox, markProps, queueProps } from '../art/propArt';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { makeLevelArt } from '../art/levelArt';
@@ -109,7 +110,8 @@ const FLYERS: Partial<Record<GawkKind, { texture: string; y: number; ms: number;
 type Decor = { tree: string; trunkTint?: number } | { poles: number[]; tint: number; width: number; height: number; pole?: string };
 /** Water lies flat on the trail: drawn a little below the ground line, with a thin hit band at the line. */
 const FLAT_HIT_H = 10;
-const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean; decor?: Decor; flat?: boolean }> = {
+type ObstacleDef = { lift: number; slide: boolean; decor?: Decor; flat?: boolean };
+const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
   fence: { lift: 25, slide: false },
   puddle: { lift: -7, slide: false, flat: true },
   log: { lift: 17, slide: false },
@@ -237,6 +239,8 @@ export class GameScene extends Phaser.Scene {
     const pet = loadPet();
     const sheet = sheetFor(pet);
     if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
+    // the painted props this level uses (anything without a file is painted in code)
+    queueProps(this, propKeys(Object.keys(l.obstacles) as ObstacleKind[]));
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
@@ -267,7 +271,9 @@ export class GameScene extends Phaser.Scene {
     this.safeUntil = 0;
     this.paused = false;
 
-    // Painted props go first; the flat-shape art fills in whatever they don't cover
+    // Painted props go first; the flat-shape art fills in whatever they don't cover.
+    // Props with a picture file use it, and the code paints the rest.
+    markProps(this);
     paintProps(this);
     paintProps2(this);
     paintCritters(this);
@@ -904,7 +910,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (!o.slide && !o.flat) {
       // a soft shadow where it sits on the ground
-      const w = this.textures.get(kind).getSourceImage().width / resOf(this, kind);
+      const w = artBox(this, kind).w / resOf(this, kind);
       this.addDecor(this.add.image(x, gy, 'shadow').setDisplaySize(w * 1.15, 9).setDepth(0.97));
     }
     this.addObstacle(x, gy - o.lift, kind);
@@ -945,20 +951,24 @@ export class GameScene extends Phaser.Scene {
     // leaf tip or a fence-post corner doesn't count as a bump. Things to
     // jump over lose some height from the top; things to slide under keep
     // their bottom edge where it is, so a standing pet still hits them.
+    // Measured from the painted part of the picture: a painted prop can sit in
+    // clear space (the fence fills only the lower half of its picture).
     // (Sizes here are in the texture's own pixels: the body scales with the image.)
-    const w = r.width * HITBOX.width;
+    const box = artBox(this, key);
+    const w = box.w * HITBOX.width;
+    const x0 = box.x + (box.w - w) / 2;
     if (k?.flat) {
       // a thin band just above the ground line, whatever size the picture is
       const res = resOf(this, key);
       body.setSize(w, FLAT_HIT_H * res, false);
-      body.setOffset((r.width - w) / 2, r.height / 2 + (k.lift - FLAT_HIT_H) * res);
+      body.setOffset(x0, r.height / 2 + (k.lift - FLAT_HIT_H) * res);
     } else if (k?.slide) {
-      body.setSize(w, r.height, false);
-      body.setOffset((r.width - w) / 2, 0);
+      body.setSize(w, box.h, false);
+      body.setOffset(x0, box.y);
     } else {
-      const h = r.height * HITBOX.height;
+      const h = box.h * HITBOX.height;
       body.setSize(w, h, false);
-      body.setOffset((r.width - w) / 2, r.height - h);
+      body.setOffset(x0, box.y + box.h - h);
     }
   }
 
@@ -1680,4 +1690,16 @@ export class GameScene extends Phaser.Scene {
 function dim(color: number): number {
   const f = 0.6;
   return (Math.round(((color >> 16) & 255) * f) << 16) | (Math.round(((color >> 8) & 255) * f) << 8) | Math.round((color & 255) * f);
+}
+
+/** The textures a level's obstacles need (with their trees and poles), and the treats and ball. */
+function propKeys(kinds: ObstacleKind[]): string[] {
+  const keys = ['bone', 'fish', 'ball'];
+  for (const kind of kinds) {
+    keys.push(kind);
+    const d = (OBSTACLES as Record<string, ObstacleDef | undefined>)[kind]?.decor;
+    if (d && 'tree' in d) keys.push('trunk', d.tree);
+    else if (d) keys.push(d.pole ?? 'umbrella-pole');
+  }
+  return keys;
 }
