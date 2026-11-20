@@ -6,6 +6,7 @@ import { paintCritters2 } from '../art/critters2';
 import { DEN_HOLE_UP, paintDen, paintProps2 } from '../art/props2';
 import { rimOf } from '../art/paint';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
+import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
@@ -258,6 +259,9 @@ export class GameScene extends Phaser.Scene {
     const ground = this.add.blitter(0, 0, paintGround(this, this.level.id, this.level.theme)).setDepth(0.9);
     this.groundBobs = [];
     for (let i = 0; i <= Math.ceil(GAME_WIDTH / GROUND_COL); i++) this.groundBobs.push(ground.create(0, 0, 0));
+    // Close-up grass (or shells, snow, the pier rail) sliding by in front, below the trail
+    const fg = paintForeground(this, this.level.id, this.level.theme);
+    if (fg) this.addLayer(fg, GAME_HEIGHT - FG_H, FG_H, FG_SPEED).setDepth(2.5);
 
     // Pet: an invisible box does the physics, and the pet sprite is drawn on top of it
     const gy = this.groundAt(PET.homeX);
