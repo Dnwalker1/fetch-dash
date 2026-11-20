@@ -1,0 +1,72 @@
+// All the numbers that shape how the game feels live here,
+// so they are easy to tune while play-testing.
+
+export const GAME_WIDTH = 960;
+export const GAME_HEIGHT = 540;
+export const GROUND_Y = 440; // top of the ground
+
+/**
+ * Canvas pixels per game pixel. The world stays 960x540 and the camera zooms
+ * in, so phones and big windows get a sharp picture instead of a stretched
+ * one. Capped at 2, since more costs a lot of fill-rate on mid-range phones.
+ * Add ?rs=1 or ?rs=2 to the page address to force one while testing.
+ */
+export const RENDER_SCALE = ((): number => {
+  if (typeof window === 'undefined') return 1;
+  const forced = Number(new URLSearchParams(window.location.search).get('rs'));
+  if (forced === 1 || forced === 2) return forced;
+  const fit = Math.min(window.innerWidth / GAME_WIDTH, window.innerHeight / GAME_HEIGHT);
+  return fit * (window.devicePixelRatio || 1) > 1.1 ? 2 : 1;
+})();
+
+export const PET = {
+  homeX: 220,
+  width: 56,
+  height: 56,
+  slideHeight: 26,
+  jumpVelocity: -850,
+  // A slide covers a set stretch of trail, so it still clears a branch
+  // when a distraction has slowed the run down.
+  slideDistance: 320,
+};
+
+export const SPEED = {
+  start: 300, // pixels per second
+  max: 750,
+  gainPerSecond: 6,
+};
+
+export const LEVEL = {
+  goalMeters: 600, // catch the ball here to finish Level 1 (about a minute)
+};
+
+export const SPAWN = {
+  minGap: 420, // pixels of ground between obstacles at start speed
+  maxGap: 860,
+  treatChance: 0.6,
+};
+
+export const DISTRACTION = {
+  firstAfterMs: 6000,
+  minEveryMs: 8000,
+  maxEveryMs: 13000,
+  chaseChance: 0.5, // the rest are out-of-reach distractions (bird, den hole)
+  focusBonus: 50, // for calling your pet back before it gives in
+  // Squirrel on the trail: the pet turns around and chases it
+  chaseWarnMs: 900,
+  chaseSpeedFactor: 0.5, // the run slows to this share of full speed
+  chaseDriftSpeed: 90, // how fast the pet runs back toward the squirrel
+  loseX: 50, // if the pet gets this far back, the run ends
+  // Bird or den hole out of reach: the pet stops to stare and slows down
+  gawkWarnMs: 700,
+  gawkSpeedFactor: 0.6,
+  comboWindowMs: 600, // a slide/jump pressed this soon before the call-back still happens
+  clearAheadMs: 1200, // no new distraction if an obstacle arrives within this time
+  retryMs: 400,
+  gawkMaxMs: 5000, // after this the pet loses interest on its own (no bonus)
+};
+
+export const SCORE = {
+  treat: 10,
+  pixelsPerMeter: 40,
+};
