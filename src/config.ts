@@ -70,3 +70,48 @@ export const SCORE = {
   treat: 10,
   pixelsPerMeter: 40,
 };
+
+/**
+ * The Backyard Toss bonus round (src/scenes/BonusScene.ts): a lawn seen from
+ * above at an angle. Things farther up the screen are farther away, so they
+ * are drawn smaller and move more slowly (see depthScale there).
+ */
+export const BONUS = {
+  horizonY: 120, // where the lawn meets the sky
+  farScale: 0.45, // size of things at the horizon...
+  nearScale: 1.15, // ...and at the bottom of the screen
+  // The lawn is a trapezoid: half its width where it meets the back fence,
+  // and half its width at the bottom of the screen
+  fenceY: 132,
+  halfWidthFar: 235,
+  halfWidthNear: 560,
+  // Where the pet and the balls can go (the back fence and the near edge)
+  fieldTop: 150,
+  fieldBottom: 522,
+  ySquash: 0.8, // up-and-down moves cover less screen than sideways ones, which reads as depth
+  roundSeconds: 60,
+  ring: { x: 480, y: 488, rx: 66, ry: 24 }, // the glowing spot to bring the ball back to
+  // The pet (speeds in game px per second at full size, shrunk with depth)
+  petSpeed: 460,
+  petAccel: 1500,
+  autoChaseMs: 650, // after a throw the pet runs after the ball on its own this long
+  grabReach: 36, // how close the pet has to be to pick up a ball
+  grabHeight: 70, // a ball higher than this sails over the pet's head (it leaps for one lower)
+  // The ball: its height is worked out by hand (z, with this gravity)
+  gravity: 1400,
+  throwSpeed: [120, 420] as [number, number], // along the ground, weakest to strongest throw
+  throwLift: [500, 810] as [number, number], // straight up
+  // bounce: share of its fall speed it bounces back up with; grip: share of its speed
+  // along the ground it keeps at each bounce; friction: how fast it stops rolling
+  dog: { bounce: 0.45, grip: 0.65, friction: 520, bounces: 3 },
+  cat: { bounce: 0.25, grip: 0.85, friction: 200, bounces: 2 }, // yarn rolls farther and bounces less
+  // Treats
+  perReturn: 3,
+  airCatch: 3,
+  streak: { length: 3, bonus: 5 },
+  piles: 6, // treat piles on the lawn at a time
+  farShare: 0.7, // share of piles in the far half
+  multiAfter: [3, 6], // returns before throws launch 2 balls, then 3
+  // A sprinkler that turns on now and then and pushes the ball along
+  sprinkler: { x: 655, y: 285, reach: 120, push: 520, onMs: 3200, offMs: [5000, 8000] as [number, number] },
+};

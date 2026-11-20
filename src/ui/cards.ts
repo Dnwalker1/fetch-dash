@@ -1,7 +1,8 @@
 import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
-import { LEVELS, levelById, type Progress } from '../levels';
+import { BONUS } from '../config';
+import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
 import { HeroError, LIVE, generateLive, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
 import { FREE_PORTRAITS, cap, countPortrait, displayName, loadHero, portraitsLeft, saveHero, type Hero } from '../hero/store';
@@ -21,6 +22,22 @@ export interface CardHost {
   petFrames(c: PetChoice): string[];
   progress(): Progress;
   play(level: number): void;
+  /** Starts the Backyard Toss bonus round that follows this level. */
+  playBonus?(after: number): void;
+}
+
+export interface BonusResult {
+  /** the level the bonus round follows, if it was opened from one */
+  after?: number;
+  name: string;
+  species: Species;
+  returned: number;
+  airCatches: number;
+  golden: number;
+  streaks: number;
+  total: number;
+  /** the treat jar after this round */
+  jar: number;
 }
 
 export interface RunResult {
@@ -342,6 +359,17 @@ function mapPoints(n: number): { x: number; y: number }[] {
   }));
 }
 
+/** The middle of the trail's curve from pts[i] to pts[i + 1] (the same curve trailPath draws). */
+function curveMid(pts: { x: number; y: number }[], i: number): { x: number; y: number } {
+  const p0 = pts[Math.max(0, i - 1)];
+  const p1 = pts[i];
+  const p2 = pts[i + 1];
+  const p3 = pts[Math.min(pts.length - 1, i + 2)];
+  const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
+  const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+  return { x: (p1.x + 3 * c1.x + 3 * c2.x + p2.x) / 8, y: (p1.y + 3 * c1.y + 3 * c2.y + p2.y) / 8 };
+}
+
 /** A smooth trail through the points (Catmull-Rom turned into curves). */
 function trailPath(pts: { x: number; y: number }[]): string {
   if (pts.length < 2) return '';
@@ -393,6 +421,14 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
       </button>
       <span class="mark" style="left:${x / 10}%; top:${(above ? y - 50 : y + 52) / 2.6}%">${l.icon}</span>`;
   }).join('');
+  // Backyard Toss bonus stops on the trail after levels 3, 6 and 9, open once that level is done
+  const cat = host.choice().species === 'cat';
+  const bonusAt = new Map(BONUS_AFTER.filter((a) => a < LEVELS.length).map((a) => [a, curveMid(full, a)]));
+  const bonusStops = [...bonusAt].map(([a, { x, y }]) => {
+    const open = p.done.includes(a);
+    return `<button class="bstop${open ? '' : ' locked'}" data-after="${a}" style="left:${x / 10}%; top:${y / 2.6}%" ${open ? '' : 'disabled'}
+        title="${open ? 'Bonus round' : `Bonus round: finish level ${a} first`}" aria-label="Bonus round after level ${a}">${cat ? '🧶' : '🎾'}</button>`;
+  }).join('');
 
   const r = show(
     `<div class="card home mapcard${opts.reveal ? ' reveal' : ''}">
@@ -415,6 +451,8 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
           <path class="dash" d="${trailPath(full)}" />
         </svg>
         ${stops}
+        ${bonusStops}
+        <span class="jar" title="Treats from bonus rounds">${cat ? '🐟' : '🦴'} Treat jar: ${p.bonusTreats}</span>
         <span class="ball" style="left:98.5%; top:${(lastPt.y - 30) / 2.6}%">🎾</span>
         <span class="compass">🧭</span>
         <div class="mappet"><img class="flip" alt="" /></div>
@@ -424,21 +462,45 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
         <button class="btn primary play"></button>
       </div>
     </div>`,
-    () => host.play(host.progress().current),
+    () => go(),
   );
+
+  // The bonus round picked on the map, if one is
+  let bonusPick: number | undefined;
+  const go = () => (bonusPick && host.playBonus ? host.playBonus(bonusPick) : host.play(host.progress().current));
+  const standPet = (at: { x: number; y: number }) => {
+    const pet = r.querySelector<HTMLElement>('.mappet');
+    if (pet) {
+      pet.style.left = `${at.x / 10}%`;
+      pet.style.top = `${at.y / 2.6}%`;
+    }
+  };
+  const highlight = (level?: number, after?: number) => {
+    r.querySelectorAll('.stop').forEach((b) => b.classList.toggle('on', Number((b as HTMLElement).dataset.level) === level));
+    r.querySelectorAll('.bstop').forEach((b) => b.classList.toggle('on', Number((b as HTMLElement).dataset.after) === after));
+  };
+  const pickBonus = (after: number) => {
+    bonusPick = after;
+    highlight(undefined, after);
+    standPet(bonusAt.get(after)!);
+    const info = r.querySelector('.info');
+    if (info) {
+      info.innerHTML = `<b>Bonus round · Backyard Toss</b>
+        <small>Throw the ${cat ? 'yarn' : 'ball'}, fetch it and bring it back for treats · ${BONUS.roundSeconds} s · Treat jar ${host.progress().bonusTreats}</small>`;
+    }
+    const play = r.querySelector('.play');
+    if (play) play.textContent = 'Play bonus round ▶';
+  };
 
   // Show the picked level's name, stars and best score, and stand the pet on its stop
   const pick = (id: number) => {
+    bonusPick = undefined;
     const prog = host.progress();
     prog.current = id;
     const l = levelById(id);
     const i = LEVELS.indexOf(l);
-    r.querySelectorAll('.stop').forEach((b) => b.classList.toggle('on', Number((b as HTMLElement).dataset.level) === id));
-    const pet = r.querySelector<HTMLElement>('.mappet');
-    if (pet) {
-      pet.style.left = `${pts[i].x / 10}%`;
-      pet.style.top = `${pts[i].y / 2.6}%`;
-    }
+    highlight(id);
+    standPet(pts[i]);
     const best = prog.best[id];
     const info = r.querySelector('.info');
     if (info) {
@@ -452,7 +514,8 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   pick(p.current);
   startRunner(r, host);
   r.querySelectorAll<HTMLButtonElement>('.stop').forEach((b) => b.addEventListener('click', () => pick(Number(b.dataset.level))));
-  r.querySelector('.play')?.addEventListener('click', () => host.play(host.progress().current));
+  r.querySelectorAll<HTMLButtonElement>('.bstop').forEach((b) => b.addEventListener('click', () => pickBonus(Number(b.dataset.after))));
+  r.querySelector('.play')?.addEventListener('click', go);
   r.querySelector('.edit')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
   // Tap the small hero picture to see the whole portrait; tap again to close it
   const medal = r.querySelector<HTMLButtonElement>('button.medal');
@@ -478,6 +541,9 @@ export function openEnd(host: CardHost, res: RunResult): void {
     : esc(res.reason.replace('!', '')) + '!';
   const primary = res.won && next ? `Level ${next.id}: ${next.name} ▶` : res.won ? 'Play again ▶' : 'Run again ▶';
   const primaryLevel = res.won && next ? next.id : res.level;
+  // After levels 3, 6 and 9 the bonus round comes next (it can be skipped)
+  const bonus = res.won && BONUS_AFTER.includes(res.level) && host.playBonus ? () => host.playBonus!(res.level) : undefined;
+  const go = () => (bonus ? bonus() : host.play(primaryLevel));
 
   const r = show(
     `<div class="card end${res.won ? ' won' : ''}">
@@ -490,7 +556,7 @@ export function openEnd(host: CardHost, res: RunResult): void {
             <div class="bigstars">${starRow(res.stars)}</div>
             <ul>
               <li class="${res.goals.finish ? 'ok' : ''}">Catch the ball</li>
-              <li class="${res.goals.treats ? 'ok' : ''}">Grab most of the treats (${res.treats} of ${res.treatsTotal})</li>
+              ${res.treatsTotal ? `<li class="${res.goals.treats ? 'ok' : ''}">Grab most of the treats (${res.treats} of ${res.treatsTotal})</li>` : ''}
               <li class="${res.goals.clean ? 'ok' : ''}">No bumps</li>
             </ul>
           </div>
@@ -502,7 +568,8 @@ export function openEnd(host: CardHost, res: RunResult): void {
           </div>
           <div class="actions">
             <button class="btn ghost levels-btn">Levels</button>
-            <button class="btn primary again">${primary}</button>
+            ${bonus ? `<button class="btn ghost skip">Skip to ${next ? `Level ${next.id}` : 'the map'}</button>` : ''}
+            <button class="btn primary again">${bonus ? '\u{1F3BE} Bonus round ▶' : primary}</button>
           </div>
           <div class="shop">
             <p>${hero?.portrait ? `Love this portrait? Put ${esc(name)} on a shirt, sticker or poster.` : `Turn ${esc(name)} into art for a shirt, sticker or poster.`}</p>
@@ -513,10 +580,11 @@ export function openEnd(host: CardHost, res: RunResult): void {
         </div>
       </div>
     </div>`,
-    () => host.play(primaryLevel),
+    go,
   );
   startRunner(r, host);
-  r.querySelector('.again')?.addEventListener('click', () => host.play(primaryLevel));
+  r.querySelector('.again')?.addEventListener('click', go);
+  r.querySelector('.skip')?.addEventListener('click', () => (next ? host.play(primaryLevel) : openHome(host)));
   r.querySelector('.levels-btn')?.addEventListener('click', () => {
     host.progress().current = primaryLevel;
     openHome(host);
@@ -528,6 +596,61 @@ export function openEnd(host: CardHost, res: RunResult): void {
     b.disabled = true;
     await reportDesign(hero!.designId!, 'other').catch(() => undefined);
     b.textContent = 'Reported. Thank you.';
+  });
+}
+
+// ---------------------------------------------------------------------------
+// End of a bonus round
+// ---------------------------------------------------------------------------
+
+export function openBonusEnd(host: CardHost, res: BonusResult): void {
+  const hero = loadHero();
+  const next = res.after ? LEVELS.find((l) => l.id === res.after! + 1) : undefined;
+  const cat = res.species === 'cat';
+  const treat = cat ? '🐟' : '🦴';
+  const n = res.returned;
+  const toy = cat ? (n === 1 ? 'ball of yarn' : 'balls of yarn') : n === 1 ? 'ball' : 'balls';
+  const title = n ? `${esc(res.name)} brought back ${n} ${toy}!` : "Time's up!";
+  const rows: [string, number][] = [
+    [`Brought back (${n} × ${BONUS.perReturn})`, n * BONUS.perReturn],
+    [`Air catches (${res.airCatches} × ${BONUS.airCatch})`, res.airCatches * BONUS.airCatch],
+    ['Golden treats', res.golden],
+    [`Streak bonus (${res.streaks} × ${BONUS.streak.bonus})`, res.streaks * BONUS.streak.bonus],
+  ];
+  const primary = next ? `Level ${next.id}: ${next.name} ▶` : 'Trail map ▶';
+  const go = () => (next ? host.play(next.id) : openHome(host));
+  const r = show(
+    `<div class="card end won bonusend">
+      <div class="cols">
+        <div class="col left">${portraitBlock(host, hero, 'Bonus round!')}</div>
+        <div class="col right">
+          <h1>${title}</h1>
+          <p class="lead">Backyard Toss${n ? '' : ` · Try a shorter throw, then bring the ${cat ? 'yarn' : 'ball'} to the circle`}</p>
+          <ul class="tally">
+            ${rows.map(([label, v]) => `<li><span>${label}</span><b>${v ? `+${v}` : '0'}</b></li>`).join('')}
+            <li class="sum"><span>Bonus treats</span><b>${treat} +${res.total}</b></li>
+          </ul>
+          <p class="jarline">Treat jar: <b>${res.jar}</b> ${treat}</p>
+          <div class="actions">
+            ${next ? '<button class="btn ghost levels-btn">Map</button>' : ''}
+            <button class="btn ghost toss">Toss again</button>
+            <button class="btn primary again">${primary}</button>
+          </div>
+          <div class="shop">
+            <p>Put ${esc(displayName(hero, res.species))} on a shirt, sticker or poster.</p>
+            <a class="btn gold" href="${shopUrl('bonus-end')}" target="_blank" rel="noopener">Shop Design Your Pet →</a>
+          </div>
+        </div>
+      </div>
+    </div>`,
+    go,
+  );
+  startRunner(r, host);
+  r.querySelector('.again')?.addEventListener('click', go);
+  r.querySelector('.toss')?.addEventListener('click', () => host.playBonus?.(res.after ?? 0));
+  r.querySelector('.levels-btn')?.addEventListener('click', () => {
+    if (next) host.progress().current = next.id;
+    openHome(host);
   });
 }
 

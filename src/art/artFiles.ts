@@ -26,9 +26,18 @@ const CRITTERS = [
   'squirrel', 'streetcat', 'streetdog',
   ...['dirt', 'sand', 'snow'].flatMap((e) => [`den-${e}`, `den-${e}-lip`]),
 ];
+/**
+ * Backyard Toss pictures in public/art/bonus/ (the keys are listed at the top
+ * of src/scenes/BonusScene.ts): Elon's painted set, v1.
+ */
+const BONUS_ART = [
+  'toss-sky', 'toss-lawn', 'toss-hedge', 'toss-ring',
+  'toss-pile', 'toss-pile-cat', 'toss-yarn', 'toss-sprinkler', 'toss-drop', 'toss-shadow',
+];
 const FILES = new Map<string, string>([
   ...PROPS.map((k): [string, string] => [k, 'props']),
   ...CRITTERS.map((k): [string, string] => [k, 'critters']),
+  ...BONUS_ART.map((k): [string, string] => [k, 'bonus']),
 ]);
 
 /** Picture pixels per game pixel in a painted file. */

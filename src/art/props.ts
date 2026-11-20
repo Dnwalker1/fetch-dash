@@ -88,7 +88,8 @@ export function crown(c: Ctx, puffs: [number, number, number][], greens: [number
 
 // ---------- Treats, ball and shadow ----------
 
-function paintTreats(scene: Phaser.Scene): void {
+/** The treats, the ball and the soft shadow (the bonus round uses them too). */
+export function paintTreats(scene: Phaser.Scene): void {
   paint(scene, 'shadow', 64, 14, (c) => {
     c.save();
     c.translate(32, 7);

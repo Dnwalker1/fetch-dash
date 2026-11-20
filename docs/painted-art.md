@@ -5,6 +5,7 @@ on), the critters and the dens are painted pictures, one file per texture key:
 
 - props in `public/art/props/<key>.webp`
 - critters and dens in `public/art/critters/<key>.webp`
+- the Backyard Toss bonus round in `public/art/bonus/<key>.webp` (its keys and sizes are listed at the top of `src/scenes/BonusScene.ts` and in `BONUS_ART` in `src/art/artFiles.ts`). Elon's v1 set is in: sky with the back fence, lawn, hedge, ring, treat piles, yarn, sprinkler, drop and the ball's shadow. Their props stand on the bottom edge of the picture; the sprinkler's spray comes from its top cap.
 
 The code is in `src/art/artFiles.ts`. (The pets have their own sheets; see
 `docs/painted-pets.md`.)

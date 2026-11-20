@@ -11,8 +11,9 @@ import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
-import { PALETTES, RUN_FRAMES, SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
-import { makeSheetAnim, marksFor, queueSheet, sheetFor, sheetFrameUrls, sheetKeys, sheetReady } from '../art/sheets';
+import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
+import { marksFor, queueSheet, sheetFor } from '../art/sheets';
+import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
@@ -23,21 +24,6 @@ type Rect = Phaser.GameObjects.Rectangle;
 type Img = Phaser.GameObjects.Image;
 type Body = Phaser.Physics.Arcade.Body;
 
-/** The textures the pet is drawn with right now (a painted sheet, or the code-drawn pet). */
-interface PetLook {
-  anim: string;
-  idle: string;
-  jump: string;
-  slide: string;
-  /** sprite scale at Size 'medium' */
-  scale: number;
-  /** where the hit box center sits across the picture */
-  originX: number;
-  /** coat color for a tinted sheet */
-  tint?: number;
-  /** marking layers drawn over the coat */
-  marks: { run: string; jump: string; slide: string }[];
-}
 
 /**
  * chase: something dashes past on the trail. The pet turns around and runs
@@ -391,23 +377,7 @@ export class GameScene extends Phaser.Scene {
         this.updatePetSprite();
         this.loadLook();
       },
-      petFrames: (c) => {
-        const sheet = sheetFor(c);
-        const marks = sheet ? marksFor(sheet, c) : [];
-        const painted = sheet && sheetReady(this, sheet, marks);
-        const key = painted ? `${sheet.id}|${sheet.coat === 'tint' ? c.palette : ''}|${marks.join(',')}` : petKey(c);
-        const cached = this.frameCache.get(key);
-        if (cached) return cached;
-        let frames: string[];
-        if (painted) {
-          frames = sheetFrameUrls(this, sheet, sheet.coat === 'tint' ? PALETTES[c.palette].fur : undefined, marks);
-        } else {
-          makePetTextures(this, c);
-          frames = Array.from({ length: RUN_FRAMES }, (_, i) => this.textures.getBase64(`${key}-run-${i}`) as string);
-        }
-        this.frameCache.set(key, frames);
-        return frames;
-      },
+      petFrames: (c) => petFrameUrls(this, c, this.frameCache),
       progress: () => this.progress,
       play: (lvl) => {
         closeCards();
@@ -420,6 +390,12 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.scene.restart({ level: lvl, auto: true });
         }
+      },
+      playBonus: (after) => {
+        closeCards();
+        saveProgress(this.progress);
+        savePet(this.choice);
+        this.scene.start('bonus', { after });
       },
     };
   }
@@ -1463,26 +1439,7 @@ export class GameScene extends Phaser.Scene {
 
   /** How the pet is drawn now: its painted sheet once that's loaded, otherwise the code-drawn pet. */
   private petLook(): PetLook {
-    const c = this.choice;
-    const sheet = sheetFor(c);
-    const marks = sheet ? marksFor(sheet, c) : [];
-    if (sheet && sheetReady(this, sheet, marks)) {
-      makeSheetAnim(this, sheet);
-      const k = sheetKeys(sheet);
-      return {
-        anim: k.anim,
-        idle: k.run,
-        jump: k.jump,
-        slide: k.slide,
-        scale: sheet.fit / sheet.res,
-        originX: sheet.originX,
-        tint: sheet.coat === 'tint' ? PALETTES[c.palette].fur : undefined,
-        marks: marks.map((m) => sheetKeys(sheet, m)),
-      };
-    }
-    makePetTextures(this, c);
-    const key = petKey(c);
-    return { anim: `${key}-run`, idle: `${key}-run-0`, jump: `${key}-jump`, slide: `${key}-slide`, scale: artScale(this, `${key}-run-0`), originX: 0.5, marks: [] };
+    return petLookFor(this, this.choice);
   }
 
   /** Fetches the chosen pet's painted sprites if they aren't here yet, then switches to them. */

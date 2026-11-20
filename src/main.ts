@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { BonusScene } from './scenes/BonusScene';
 import { GameScene } from './scenes/GameScene';
 import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from './config';
 
@@ -21,7 +22,8 @@ const game = new Phaser.Game({
     // the scrolling scenery, instead of every other frame.
     arcade: { gravity: { x: 0, y: 2000 }, fixedStep: false, debug: false },
   },
-  scene: [GameScene],
+  // The first scene listed starts. ?bonus=1 opens the Backyard Toss bonus round straight away (for testing).
+  scene: new URLSearchParams(location.search).has('bonus') ? [BonusScene, GameScene] : [GameScene, BonusScene],
 });
 
 // Handy for debugging and automated checks during development only.

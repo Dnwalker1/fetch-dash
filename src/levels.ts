@@ -541,10 +541,14 @@ export interface Progress {
   best: Record<number, number>;
   done: number[]; // levels finished at least once
   stars: Record<number, number>; // most stars earned on each level (0-3)
+  bonusTreats: number; // treats earned in bonus rounds (the treat jar)
 }
 
+/** A Backyard Toss bonus round opens after each of these levels. */
+export const BONUS_AFTER = [3, 6, 9];
+
 export function loadProgress(): Progress {
-  const fresh: Progress = { unlocked: 1, current: 1, best: {}, done: [], stars: {} };
+  const fresh: Progress = { unlocked: 1, current: 1, best: {}, done: [], stars: {}, bonusTreats: 0 };
   try {
     const raw = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? 'null');
     if (raw && typeof raw.unlocked === 'number') {
@@ -554,6 +558,7 @@ export function loadProgress(): Progress {
         best: raw.best ?? {},
         done: Array.isArray(raw.done) ? raw.done : [],
         stars: raw.stars ?? {},
+        bonusTreats: Math.max(0, Math.floor(Number(raw.bonusTreats) || 0)),
       };
     }
     // Carry over the best score from before there were levels
