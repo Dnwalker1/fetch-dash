@@ -2,10 +2,12 @@ import Phaser from 'phaser';
 import { makeTextures } from '../art/textures';
 import { paintProps } from '../art/props';
 import { paintCritters } from '../art/critters';
+import { paintCritters2 } from '../art/critters2';
+import { DEN_HOLE_UP, paintDen, paintProps2 } from '../art/props2';
+import { rimOf } from '../art/paint';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
-import { makeLevelArt3 } from '../art/levelArt3';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
 import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, SCORE, SPAWN } from '../config';
@@ -33,6 +35,11 @@ interface Distraction {
 const SWIPE_PX = 30; // screen pixels
 /** Obstacle hit areas as a share of the picture (see addObstacle). */
 const HITBOX = { width: 0.72, height: 0.8 };
+/** Dens sit on the hillside just behind the trail, a little smaller (farther away). */
+const DEN_BASE_UP = 16;
+const DEN_SCALE = 1.1;
+/** How much the painted scenery fades toward the trail, so things on the trail stand out. */
+const TRAIL_HAZE = 0.28;
 /** A jump pressed this soon before landing happens on landing. */
 const JUMP_BUFFER_MS = 150;
 /** A jump still works this soon after running off the top of a hill. */
@@ -81,10 +88,12 @@ const FLYERS: Partial<Record<GawkKind, { texture: string; y: number; ms: number;
  * ground, and how to beat it. Things to slide under can come with a tree
  * (a trunk and a treetop) or with poles holding them up.
  */
-type Decor = { tree: string; trunkTint?: number } | { poles: number[]; tint: number; width: number; height: number };
-const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean; decor?: Decor }> = {
+type Decor = { tree: string; trunkTint?: number } | { poles: number[]; tint: number; width: number; height: number; pole?: string };
+/** Water lies flat on the trail: drawn a little below the ground line, with a thin hit band at the line. */
+const FLAT_HIT_H = 10;
+const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean; decor?: Decor; flat?: boolean }> = {
   fence: { lift: 25, slide: false },
-  puddle: { lift: 6, slide: false },
+  puddle: { lift: -7, slide: false, flat: true },
   log: { lift: 17, slide: false },
   rock: { lift: 19, slide: false },
   sandcastle: { lift: 26, slide: false },
@@ -96,7 +105,7 @@ const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean; decor?: De
   sign: { lift: 22, slide: false },
   awning: { lift: 64, slide: true, decor: { poles: [-56, 56], tint: 0x2b2b3a, width: 4, height: 86 } },
   stump: { lift: 18, slide: false },
-  creek: { lift: 5, slide: false },
+  creek: { lift: -8, slide: false, flat: true },
   snowman: { lift: 29, slide: false },
   sled: { lift: 13, slide: false },
   snowbranch: { lift: 65, slide: true, decor: { tree: 'snowcanopy', trunkTint: 0x8a7a70 } },
@@ -105,16 +114,16 @@ const OBSTACLES: Record<ObstacleKind, { lift: number; slide: boolean; decor?: De
   autumnbranch: { lift: 65, slide: true, decor: { tree: 'canopy-autumn' } },
   cactus: { lift: 26, slide: false },
   tumbleweed: { lift: 19, slide: false },
-  arch: { lift: 64, slide: true, decor: { poles: [-56, 56], tint: 0xc06a44, width: 14, height: 84 } },
+  arch: { lift: 64, slide: true, decor: { poles: [-55, 55], tint: 0xffffff, width: 20, height: 84, pole: 'arch-leg' } },
   trough: { lift: 13, slide: false },
-  clothesline: { lift: 64, slide: true, decor: { poles: [-62, 62], tint: 0x8a6a44, width: 5, height: 90 } },
+  clothesline: { lift: 64, slide: true, decor: { poles: [-62, 62], tint: 0xffffff, width: 6, height: 90, pole: 'wood-post' } },
   lantern: { lift: 23, slide: false },
-  pond: { lift: 5, slide: false },
+  pond: { lift: -8, slide: false, flat: true },
   blossombranch: { lift: 65, slide: true, decor: { tree: 'canopy-blossom' } },
   vines: { lift: 68, slide: true, decor: { tree: 'canopy-jungle' } },
   crate: { lift: 20, slide: false },
   barrel: { lift: 22, slide: false },
-  banner: { lift: 63, slide: true, decor: { poles: [-62, 62], tint: 0x4a4a6a, width: 5, height: 90 } },
+  banner: { lift: 63, slide: true, decor: { poles: [-62, 62], tint: 0xffffff, width: 5, height: 90, pole: 'pier-pole' } },
 };
 
 /**
@@ -195,13 +204,13 @@ export class GameScene extends Phaser.Scene {
     return this.baseSpeed * this.speedFactor;
   }
 
-  /** Painted pictures for the levels that have them (only fetched once). */
+  /** The painted pictures for the level about to start (each fetched only once). */
   preload(): void {
-    for (const l of LEVELS) {
-      const t = l.theme;
-      if (t.skyImage && !this.textures.exists(`sky-${l.id}`)) this.load.image(`sky-${l.id}`, t.skyImage);
-      for (const layer of t.layers) if (layer.src && !this.textures.exists(layer.key)) this.load.image(layer.key, layer.src);
-    }
+    const data = this.scene.settings.data as { level?: number } | undefined;
+    const l = levelById(data?.level ?? loadProgress().current);
+    const t = l.theme;
+    if (t.skyImage && !this.textures.exists(`sky-${l.id}`)) this.load.image(`sky-${l.id}`, t.skyImage);
+    for (const layer of t.layers) if (layer.src && !this.textures.exists(layer.key)) this.load.image(layer.key, layer.src);
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
@@ -231,11 +240,12 @@ export class GameScene extends Phaser.Scene {
 
     // Painted props go first; the flat-shape art fills in whatever they don't cover
     paintProps(this);
+    paintProps2(this);
     paintCritters(this);
+    paintCritters2(this);
     makeTextures(this);
     makeLevelArt(this);
     makeLevelArt2(this);
-    makeLevelArt3(this);
     this.makeAnimations();
     this.choice = loadPet();
     makePetTextures(this, this.choice);
@@ -832,12 +842,12 @@ export class GameScene extends Phaser.Scene {
     } else if (d) {
       // An awning, a stone arch, a clothesline or a banner held up on poles
       for (const dx of d.poles) {
-        const pole = this.add.image(x + dx, gy, 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(d.width, d.height).setDepth(0.95);
+        const pole = this.add.image(x + dx, gy, d.pole ?? 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(d.width, d.height).setDepth(0.95);
         if (d.tint !== 0xffffff) pole.setTint(d.tint);
         this.addDecor(pole);
       }
     }
-    if (!o.slide && kind !== 'puddle' && kind !== 'creek' && kind !== 'pond') {
+    if (!o.slide && !o.flat) {
       // a soft shadow where it sits on the ground
       const w = this.textures.get(kind).getSourceImage().width;
       this.addDecor(this.add.image(x, gy, 'shadow').setDisplaySize(w * 1.15, 9).setDepth(0.97));
@@ -860,7 +870,18 @@ export class GameScene extends Phaser.Scene {
   private addObstacle(x: number, y: number, key: string): void {
     const r = this.add.image(x, y, key).setDepth(1);
     this.obstacles.add(r);
-    if (key === 'tumbleweed') this.tweens.add({ targets: r, angle: -360, duration: 900, repeat: -1 });
+    const k = OBSTACLES[key as ObstacleKind];
+    const spin: Phaser.GameObjects.Image[] = [r];
+    if (k?.flat) {
+      // lies flat, so it tilts with the hill under it
+      r.setRotation(Math.atan2(this.groundAt(x + 30) - this.groundAt(x - 30), 60));
+    } else {
+      // a dark edge behind it, so it stands out from the painted scenery
+      const rim = this.add.image(x, y, rimOf(this, key)).setDepth(0.98);
+      this.addDecor(rim);
+      spin.push(rim);
+    }
+    if (key === 'tumbleweed') this.tweens.add({ targets: spin, angle: -360, duration: 900, repeat: -1 });
     const body = r.body as Body;
     body.setAllowGravity(false);
     body.setImmovable(true);
@@ -869,9 +890,12 @@ export class GameScene extends Phaser.Scene {
     // leaf tip or a fence-post corner doesn't count as a bump. Things to
     // jump over lose some height from the top; things to slide under keep
     // their bottom edge where it is, so a standing pet still hits them.
-    const k = OBSTACLES[key as ObstacleKind];
     const w = r.width * HITBOX.width;
-    if (k?.slide) {
+    if (k?.flat) {
+      // a thin band just above the ground line, whatever size the picture is
+      body.setSize(w, FLAT_HIT_H, false);
+      body.setOffset((r.width - w) / 2, r.height / 2 + k.lift - FLAT_HIT_H);
+    } else if (k?.slide) {
       body.setSize(w, r.height, false);
       body.setOffset((r.width - w) / 2, 0);
     } else {
@@ -1023,12 +1047,25 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: b, x: -60, duration: 5000, onComplete: () => b.destroy() });
       this.tweens.add({ targets: b, y: 250, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else {
-      // A den hole on the hillside, drifting by slower than the trail (it's farther away)
-      const gy = this.groundAt(GAME_WIDTH + 60);
-      const den = this.add.ellipse(GAME_WIDTH + 60, gy - 48, 70, 30, 0x3a2a1a).setDepth(0.5);
-      const critter = this.add.image(GAME_WIDTH + 60, gy - 58, 'gopher').setDepth(0.6);
-      this.tweens.add({ targets: [den, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), critter.destroy()) });
-      this.tweens.add({ targets: critter, y: gy - 84, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300 });
+      // A den on the hillside behind the trail, drifting by slower than the
+      // trail (it's farther away). The critter pops up out of the hole: it's
+      // cut off at the hole's lower edge, and the mound's lip sits in front.
+      const x = GAME_WIDTH + 60;
+      const base = this.groundAt(x) - DEN_BASE_UP;
+      const { back, lip } = paintDen(this, this.level.id, this.level.theme);
+      const den = this.add.image(x, base, back).setOrigin(0.5, 1).setScale(DEN_SCALE).setDepth(0.5);
+      const front = this.add.image(x, base, lip).setOrigin(0.5, 1).setScale(DEN_SCALE).setDepth(0.6);
+      const holeY = base - DEN_HOLE_UP * DEN_SCALE;
+      const holeBottom = holeY + 9 * DEN_SCALE;
+      const critter = this.add.image(x, holeY + 26, 'gopher').setDepth(0.55);
+      const crop = () => {
+        const h = Math.min(critter.height, holeBottom - (critter.y - critter.height / 2));
+        critter.setVisible(h > 0.5);
+        if (h > 0.5) critter.setCrop(0, 0, critter.width, h);
+      };
+      crop();
+      this.tweens.add({ targets: [den, front, critter], x: -80, duration: 6000, onComplete: () => (den.destroy(), front.destroy(), critter.destroy()) });
+      this.tweens.add({ targets: critter, y: holeY - 6, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300, onUpdate: crop });
     }
 
     this.warn('gawk', '?', DISTRACTION.gawkWarnMs, () => {
@@ -1359,6 +1396,13 @@ export class GameScene extends Phaser.Scene {
       // A pale haze between the far and near layers adds depth
       this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, t.haze, 0.12).setOrigin(0, 0);
     });
+    // Atmosphere: the scenery fades a little toward the trail. Things on the
+    // trail stay crisp, with dark edges, so they stand out from what's behind.
+    const haze = this.add.graphics();
+    haze.fillGradientStyle(t.haze, t.haze, t.haze, t.haze, 0, 0, TRAIL_HAZE, TRAIL_HAZE);
+    haze.fillRect(0, 120, GAME_WIDTH, GROUND_Y - 120);
+    haze.fillStyle(t.haze, TRAIL_HAZE);
+    haze.fillRect(0, GROUND_Y, GAME_WIDTH, GAME_HEIGHT - GROUND_Y);
     // Night gets a soft wash over everything behind the trail
     if (t.night) this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x0f1a3a, 0.18).setOrigin(0, 0);
   }

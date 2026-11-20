@@ -23,6 +23,31 @@ export function paint(scene: Phaser.Scene, key: string, w: number, h: number, dr
   return tex;
 }
 
+/**
+ * A dark outline to set behind a texture (padded so it fits around it), so a
+ * thing on the trail stands out from the busy painted scenery behind it.
+ */
+export function rimOf(scene: Phaser.Scene, key: string, color = 0x1e140c, alpha = 0.8, r = 2): string {
+  const rimKey = `${key}-rim`;
+  if (scene.textures.exists(rimKey)) return rimKey;
+  const src = scene.textures.get(key).getSourceImage() as HTMLCanvasElement;
+  const pad = Math.ceil(r) + 1;
+  const w = src.width + pad * 2;
+  const h = src.height + pad * 2;
+  const tex = scene.textures.createCanvas(rimKey, w, h);
+  if (!tex) return key;
+  const c = tex.getContext();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    c.drawImage(src, pad + Math.cos(a) * r, pad + Math.sin(a) * r);
+  }
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = css(color, alpha);
+  c.fillRect(0, 0, w, h);
+  tex.refresh();
+  return rimKey;
+}
+
 // ---------- Colors ----------
 
 const rgbOf = (hex: number): [number, number, number] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];

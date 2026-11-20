@@ -2,8 +2,8 @@ import { GROUND_Y } from './config';
 
 /**
  * The levels. Each one is a trail with its own look, length, speed,
- * obstacles and critters. To add a level, add an entry here (and any new
- * art in src/art/levelArt.ts).
+ * obstacles and critters. To add a level, add an entry here, with its
+ * painted pictures in public/art and any new props in src/art.
  */
 
 export type ObstacleKind =
@@ -313,10 +313,11 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x7fb6e0,
       skyBottom: 0xffe2b0,
-      sun: { x: 780, y: 110, r: 44, color: 0xffd27a, glow: 0xffb04d },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l7/sky.webp',
       layers: [
-        { key: 'autumnhills', h: 220, factor: 0.2 },
-        { key: 'appletrees', h: 170, factor: 0.45, lift: 30 },
+        { key: 'l7-far', src: 'art/l7/far.webp', scale: 0.8, factor: 0.15 },
+        { key: 'l7-mid', src: 'art/l7/mid.webp', scale: 0.62, factor: 0.45, lift: 30 },
       ],
       raysAlpha: 0.45,
       cloudsAlpha: 0.9,
@@ -345,10 +346,11 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x4f9ee8,
       skyBottom: 0xffd9a0,
-      sun: { x: 300, y: 100, r: 52, color: 0xfff0b0, glow: 0xffc46b },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l8/sky.webp',
       layers: [
-        { key: 'mesas', h: 240, factor: 0.15 },
-        { key: 'cacti', h: 160, factor: 0.45, lift: 30 },
+        { key: 'l8-far', src: 'art/l8/far.webp', scale: 0.85, factor: 0.12, lift: 20 },
+        { key: 'l8-mid', src: 'art/l8/mid.webp', scale: 0.6, factor: 0.45 },
       ],
       raysAlpha: 0.6,
       cloudsAlpha: 0.35,
@@ -375,10 +377,11 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x6ec4ff,
       skyBottom: 0xe8f6ff,
-      sun: { x: 820, y: 90, r: 44, color: 0xffe08a, glow: 0xffe08a },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l9/sky.webp',
       layers: [
-        { key: 'fields', h: 200, factor: 0.2 },
-        { key: 'barnyard', h: 190, factor: 0.45, lift: 20 },
+        { key: 'l9-far', src: 'art/l9/far.webp', scale: 0.8, factor: 0.2 },
+        { key: 'l9-mid', src: 'art/l9/mid.webp', scale: 0.5, factor: 0.45 },
       ],
       raysAlpha: 0.4,
       cloudsAlpha: 1,
@@ -405,10 +408,11 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x9fd0f5,
       skyBottom: 0xffe6ef,
-      sun: { x: 760, y: 110, r: 40, color: 0xfff0d0, glow: 0xffc0d0 },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l10/sky.webp',
       layers: [
-        { key: 'mountains', h: 260, factor: 0.15, tint: 0xe0d0f4 },
-        { key: 'blossoms', h: 180, factor: 0.45, lift: 20 },
+        { key: 'l10-far', src: 'art/l10/far.webp', scale: 0.8, factor: 0.12 },
+        { key: 'l10-mid', src: 'art/l10/mid.webp', scale: 0.6, factor: 0.45 },
       ],
       raysAlpha: 0.3,
       cloudsAlpha: 0.8,
@@ -438,10 +442,11 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x5fb8d8,
       skyBottom: 0xdaf2e0,
-      sun: { x: 200, y: 90, r: 40, color: 0xfff4c0, glow: 0xfff0a0 },
+      // Painted art, made in Grok from the art prompt sheet
+      skyImage: 'art/l11/sky.webp',
       layers: [
-        { key: 'falls', h: 260, factor: 0.15 },
-        { key: 'jungle', h: 200, factor: 0.45, lift: 30 },
+        { key: 'l11-far', src: 'art/l11/far.webp', scale: 0.55, factor: 0.15 },
+        { key: 'l11-mid', src: 'art/l11/mid.webp', scale: 0.55, factor: 0.45 },
       ],
       raysAlpha: 0.35,
       cloudsAlpha: 0.7,
@@ -468,9 +473,12 @@ export const LEVELS: LevelDef[] = [
     theme: {
       skyTop: 0x0d1436,
       skyBottom: 0x3a2d6b,
+      // Painted art, made in Grok from the art prompt sheet. The night sea sits
+      // low, so its top lines up with the horizon between the tents.
+      skyImage: 'art/l12/sky.webp',
       layers: [
-        { key: 'sea', h: 130, factor: 0.05, tint: 0x4a5a9a },
-        { key: 'carnival', h: 200, factor: 0.45 },
+        { key: 'l12-far', src: 'art/l12/far.webp', scale: 0.6, factor: 0.05, lift: -46 },
+        { key: 'l12-mid', src: 'art/l12/mid.webp', scale: 0.6, factor: 0.45 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0.2,

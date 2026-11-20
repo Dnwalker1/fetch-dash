@@ -16,14 +16,14 @@ export function paintCritters(scene: Phaser.Scene): void {
 
 // ---------- Small helpers ----------
 
-function dot(c: Ctx, x: number, y: number, r: number, color: number, alpha = 1): void {
+export function dot(c: Ctx, x: number, y: number, r: number, color: number, alpha = 1): void {
   circle(c, x, y, r);
   c.fillStyle = css(color, alpha);
   c.fill();
 }
 
 /** A shiny dark eye. */
-function eye(c: Ctx, x: number, y: number, r: number, iris = 0x111111): void {
+export function eye(c: Ctx, x: number, y: number, r: number, iris = 0x111111): void {
   circle(c, x, y, r);
   c.fillStyle = rad(c, x - r * 0.3, y - r * 0.3, 0.1, x, y, r, [[0, shade(iris, 0.35)], [1, iris]]);
   c.fill();
@@ -31,13 +31,13 @@ function eye(c: Ctx, x: number, y: number, r: number, iris = 0x111111): void {
 }
 
 /** A soft round shape lit from the upper left. */
-function soft(c: Ctx, x: number, y: number, rx: number, ry: number, color: number, out?: number, lw = 1.1): void {
+export function soft(c: Ctx, x: number, y: number, rx: number, ry: number, color: number, out?: number, lw = 1.1): void {
   ellipse(c, x, y, rx, ry);
   fillOut(c, rad(c, x - rx * 0.4, y - ry * 0.5, 0.5, x, y, Math.max(rx, ry) * 1.1, [[0, shade(color, 0.3)], [0.55, color], [1, shade(color, -0.3)]]), out ?? shade(color, -0.55), lw);
 }
 
 /** A pale patch (belly, chest, muzzle) with soft edges, kept inside the last shape drawn by `clip`. */
-function patch(c: Ctx, clip: () => void, x: number, y: number, rx: number, ry: number, color: number): void {
+export function patch(c: Ctx, clip: () => void, x: number, y: number, rx: number, ry: number, color: number): void {
   c.save();
   clip();
   c.clip();
@@ -47,14 +47,14 @@ function patch(c: Ctx, clip: () => void, x: number, y: number, rx: number, ry: n
   c.restore();
 }
 
-function limb(c: Ctx, pts: [number, number][], color: number, w: number, out: number): void {
+export function limb(c: Ctx, pts: [number, number][], color: number, w: number, out: number): void {
   line(c, pts, out, w + 2);
   line(c, pts, color, w);
 }
 
 // ---------- Birds ----------
 
-interface BirdLook {
+export interface BirdLook {
   w: number;
   h: number;
   body: number;
@@ -68,7 +68,7 @@ interface BirdLook {
   extra?: (c: Ctx, hx: number, hy: number) => void;
 }
 
-function bird(c: Ctx, b: BirdLook, up: boolean): void {
+export function bird(c: Ctx, b: BirdLook, up: boolean): void {
   const y = up ? b.by : b.by - 4;
   const out = shade(b.body, -0.6);
   const hx = b.bx - 11.5;

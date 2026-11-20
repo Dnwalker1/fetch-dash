@@ -26,7 +26,7 @@ export function paintProps(scene: Phaser.Scene): void {
 // ---------- Shared bits ----------
 
 /** A hanging cluster of leaves around a point, darker at the back. */
-function leafCluster(c: Ctx, r: () => number, x: number, y: number, size: number, greens: number[], maxY: number): void {
+export function leafCluster(c: Ctx, r: () => number, x: number, y: number, size: number, greens: number[], maxY: number): void {
   for (let layer = 0; layer < 3; layer++) {
     const n = 7 + layer * 3;
     for (let i = 0; i < n; i++) {
@@ -43,7 +43,7 @@ function leafCluster(c: Ctx, r: () => number, x: number, y: number, size: number
 }
 
 /** A limb across the top that leaves and needles hang from. */
-function limb(c: Ctx, bark: number): void {
+export function limb(c: Ctx, bark: number): void {
   c.beginPath();
   c.moveTo(110, 5.5);
   c.quadraticCurveTo(60, 8, 5, 12.5);
@@ -59,7 +59,7 @@ function limb(c: Ctx, bark: number): void {
 }
 
 /** A round leafy crown built from puffs: shadowed base, lit tops, leafy edges. */
-function crown(c: Ctx, puffs: [number, number, number][], greens: [number, number, number, number], seed: number, w: number, h: number): void {
+export function crown(c: Ctx, puffs: [number, number, number][], greens: [number, number, number, number], seed: number, w: number, h: number): void {
   const r = seeded(seed);
   const [dark, mid, light, glow] = greens;
   for (const [x, y, rr] of puffs) {
@@ -220,24 +220,6 @@ function paintParkProps(scene: Phaser.Scene): void {
       }
     }
     grain(c, 34, 50, 0.06, 0, 5, 64);
-  });
-
-  paint(scene, 'puddle', 90, 12, (c) => {
-    ellipse(c, 45, 6.2, 44.5, 5.6);
-    c.fillStyle = css(0x4a3a28, 0.35);
-    c.fill();
-    ellipse(c, 45, 5.8, 43, 4.8);
-    c.fillStyle = rad(c, 38, 3.5, 2, 45, 6, 44, [[0, 0xbfe3ff], [0.5, 0x6fb1e8], [1, 0x3f7fbf]]);
-    c.fill();
-    for (const [x, y, w] of [[30, 3.6, 10], [60, 7, 6], [44, 5, 3]]) {
-      ellipse(c, x, y, w, 0.9);
-      c.fillStyle = css(0xffffff, 0.75);
-      c.fill();
-    }
-    ellipse(c, 68, 5, 7, 2);
-    c.strokeStyle = css(0xffffff, 0.35);
-    c.lineWidth = 0.8;
-    c.stroke();
   });
 
   paint(scene, 'branch', 110, 50, (c) => {
@@ -655,26 +637,6 @@ function paintRiverProps(scene: Phaser.Scene): void {
     c.closePath();
     fillOut(c, lin(c, 0, 28, 0, 32, [[0, 0xc0603a], [1, 0x8a3a20]]), 0x5a2a18, 0.8);
     grain(c, 42, 36, 0.06, 0, 31, 64);
-  });
-
-  paint(scene, 'creek', 150, 16, (c) => {
-    ellipse(c, 75, 8.4, 74.5, 7.4);
-    c.fillStyle = css(0x3a3226, 0.35);
-    c.fill();
-    ellipse(c, 75, 8, 72, 6.6);
-    c.fillStyle = lin(c, 0, 1.5, 0, 14.5, [[0, 0x8fb6d4], [0.45, 0x5b84a8], [1, 0x3a6188]]);
-    c.fill();
-    const r = seeded(33);
-    for (let i = 0; i < 14; i++) {
-      const x = 14 + r() * 110;
-      const y = 4 + r() * 8;
-      const w = 6 + r() * 16;
-      line(c, [[x, y], [x + w * 0.5, y - 0.6], [x + w, y]], i % 3 ? 0xffffff : 0x2a4a6a, i % 3 ? 1 : 0.8, i % 3 ? 0.6 : 0.35);
-    }
-    for (const [x, y, rx, ry] of [[7, 11, 6.5, 4.2], [16, 13, 4, 2.6], [143, 10, 6.5, 4.5], [133, 13, 4, 2.6], [70, 14.2, 3.4, 1.6]]) {
-      ellipse(c, x, y, rx, ry);
-      fillOut(c, rad(c, x - rx * 0.4, y - ry * 0.5, 0.3, x, y, rx * 1.1, [[0, 0xc0c4ca], [0.5, 0x8a8f97], [1, 0x55595f]]), 0x3a3d42, 0.9);
-    }
   });
 }
 
