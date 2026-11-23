@@ -838,6 +838,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.keepOnGround();
+    if (this.sliding) this.reachTreatsWhileSliding();
     this.alertText.setPosition(this.pet.x, this.pet.y - 62);
     this.swipeArrow.setPosition(this.pet.x + 46, this.pet.y - 66);
     this.updatePetSprite();
@@ -1247,6 +1248,24 @@ export class GameScene extends Phaser.Scene {
     if (!this.sliding) return;
     this.sliding = false;
     this.setPetHeight(this.petH);
+  }
+
+  /**
+   * A sliding pet's hit box is short so it fits under branches, which left the
+   * low treat rows just above it (on a hill they missed by a pixel or two).
+   * Treats are never harmful, so while sliding they're picked up anywhere in
+   * the pet's standing height.
+   */
+  private reachTreatsWhileSliding(): void {
+    const b = this.petBody;
+    const top = b.bottom - Math.round(PET.height * SIZE_SCALE[this.choice.size]);
+    for (const c of this.treats.getChildren()) {
+      const t = c as Img;
+      const tb = t.body as Body | null;
+      if (!t.active || !tb) continue;
+      if (tb.right < b.left || tb.left > b.right || tb.bottom < top || tb.top > b.bottom) continue;
+      this.collectTreat(t);
+    }
   }
 
   private setPetHeight(h: number): void {
