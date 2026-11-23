@@ -8,13 +8,14 @@ import { artScale, resized, resOf, rimOf } from '../art/paint';
 import { artBox, markArt, queueArt } from '../art/artFiles';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
+import { LEDGE_H, ledgeTexture, pillarTexture } from '../art/ledges';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
 import { marksFor, queueSheet, sheetFor } from '../art/sheets';
 import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
-import { DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
+import { BRAKE, CLIMB, DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
@@ -35,6 +36,24 @@ type DistractionKind = 'chase' | 'gawk';
 interface Distraction {
   kind: DistractionKind;
   active: boolean; // false during the short warning, true once the pet gives in
+}
+
+/** A stone shelf in a climbing section. Its picture's left edge is at img.x; `top` is where the pet stands. */
+interface Ledge {
+  img: Img;
+  pillars: Img[];
+  w: number;
+  top: number;
+}
+
+/** A neighbor on the sidewalk holding out a treat: stop next to them to get it. */
+interface Greet {
+  person: Phaser.GameObjects.Sprite;
+  treat: Img;
+  label: Phaser.GameObjects.Text;
+  /** A glowing patch on the trail beside the neighbor: stop the pet on it */
+  zone: Phaser.GameObjects.Ellipse;
+  done: boolean;
 }
 
 const SWIPE_PX = 30; // screen pixels
@@ -197,6 +216,20 @@ export class GameScene extends Phaser.Scene {
   private sliding = false;
   private slideLeftPx = 0;
 
+  // Hold to stop: a finger held down (or the left arrow) puts the brakes on
+  private braking = false;
+  private brakeFactor = 1;
+  private holdTimer?: Phaser.Time.TimerEvent;
+  private greet?: Greet;
+  private standing = false;
+
+  // Climbing sections
+  private ledges: Ledge[] = [];
+  private onLedge?: Ledge;
+  private prevBottom = 0;
+  private nextClimbAt = Infinity;
+  private flats: { from: number; to: number }[] = [];
+
   private distraction?: Distraction;
   private returning = false;
   // A jump or slide pressed while the pet was turned around; done right after the call-back
@@ -219,7 +252,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private get speed(): number {
-    return this.baseSpeed * this.speedFactor;
+    return this.baseSpeed * this.speedFactor * this.brakeFactor;
   }
 
   /** The painted pictures for the level about to start (each fetched only once). */
@@ -264,6 +297,15 @@ export class GameScene extends Phaser.Scene {
     this.paws = PAWS;
     this.safeUntil = 0;
     this.paused = false;
+    this.braking = false;
+    this.brakeFactor = 1;
+    this.holdTimer = undefined;
+    this.greet = undefined;
+    this.standing = false;
+    this.ledges = [];
+    this.flats = [];
+    this.onLedge = undefined;
+    this.nextClimbAt = this.level.climb ? this.level.climb.firstM * SCORE.pixelsPerMeter : Infinity;
 
     // Painted props go first; the flat-shape art fills in whatever they don't cover.
     // Props and critters with a picture file use it, and the code paints the rest.
@@ -419,6 +461,9 @@ export class GameScene extends Phaser.Scene {
       else this.withTime(e, () => this.onSwipeDown());
     });
     keys?.on('keydown-UP', (e: KeyboardEvent) => !cardsOpen() && this.withTime(e, () => this.onSwipeUp()));
+    // Hold the left arrow to stop (like a finger held down on a phone)
+    keys?.on('keydown-LEFT', () => !cardsOpen() && this.setBrake(true));
+    keys?.on('keyup-LEFT', () => this.setBrake(false));
     keys?.on('keydown', () => sfx.unlock());
     keys?.on('keydown-P', () => !cardsOpen() && this.togglePause());
     keys?.on('keydown-ESC', () => !cardsOpen() && this.togglePause());
@@ -441,7 +486,17 @@ export class GameScene extends Phaser.Scene {
     const opts: AddEventListenerOptions = { passive: false };
     const down = (x: number, y: number) => {
       sfx.unlock();
-      this.pointerStart = { x, y, handled: false };
+      const start = { x, y, handled: false };
+      this.pointerStart = start;
+      // Held in place instead of tapped or swiped: put the brakes on until it lifts
+      this.holdTimer?.remove();
+      if (this.state === 'playing' && !this.paused) {
+        this.holdTimer = this.time.delayedCall(BRAKE.holdMs, () => {
+          if (this.pointerStart !== start || start.handled) return;
+          start.handled = true;
+          this.setBrake(true);
+        });
+      }
     };
     const move = (x: number, y: number) => {
       const s = this.pointerStart;
@@ -455,6 +510,8 @@ export class GameScene extends Phaser.Scene {
     const up = () => {
       const s = this.pointerStart;
       this.pointerStart = undefined;
+      this.holdTimer?.remove();
+      this.setBrake(false);
       if (s && !s.handled) this.onTap();
     };
 
@@ -586,6 +643,17 @@ export class GameScene extends Phaser.Scene {
     if (this.distraction) this.callBack();
   }
 
+  /** Hold to stop: the pet skids to a stop while the finger (or left arrow) is held, and runs on when it lifts. */
+  private setBrake(on: boolean): void {
+    if (on && (this.state !== 'playing' || this.paused)) return;
+    if (on === this.braking) return;
+    this.braking = on;
+    if (on) {
+      this.stopSlide();
+      if (this.grounded && !this.chasing) this.dust(4);
+    }
+  }
+
   // ---------- Run lifecycle ----------
 
   /** "Tap to run" with the level name, plus a small My hero button. */
@@ -627,6 +695,8 @@ export class GameScene extends Phaser.Scene {
   private endRun(reason: string, won = false): void {
     if (this.state !== 'playing') return;
     this.state = 'over';
+    this.braking = false;
+    this.holdTimer?.remove();
     this.pauseBtn?.setVisible(false);
     this.tweens.killTweensOf(this.petSprite);
     this.petSprite.setAlpha(1);
@@ -708,10 +778,19 @@ export class GameScene extends Phaser.Scene {
     if (this.state !== 'playing' || this.paused) return;
     const dt = deltaMs / 1000;
 
+    // The brakes: down to a stop quickly, back up to speed a little slower
+    const wantStop = this.braking && !this.chasing;
+    // Stopped a little short of a neighbor with a treat: walk up to them
+    const g = this.greet;
+    const creep = wantStop && g && !g.done && g.person.x - this.pet.x > GREET.reach * 0.4 ? GREET.creepSpeed / Math.max(1, this.baseSpeed * this.speedFactor) : 0;
+    this.brakeFactor = wantStop ? Math.max(creep, this.brakeFactor - dt / BRAKE.stopS) : Math.min(1, this.brakeFactor + dt / BRAKE.goS);
+
     const sp = this.level.speed;
-    this.baseSpeed = Math.min(sp.max, this.baseSpeed + sp.gainPerSecond * dt);
+    if (!this.braking) this.baseSpeed = Math.min(sp.max, this.baseSpeed + sp.gainPerSecond * dt);
     const dx = this.speed * dt;
     this.distancePx += dx;
+    this.moveLedges(dx);
+    this.updateGreet(dx);
 
     // Scroll the background layers; farther layers move slower. A layer's
     // factor is its share of the trail's speed on screen; tilePosition counts
@@ -756,7 +835,15 @@ export class GameScene extends Phaser.Scene {
 
   /** Screen y of the top of the ground at a screen x. */
   private groundAt(screenX: number): number {
-    return groundYAt(this.level, this.distancePx + screenX);
+    const wx = this.distancePx + screenX;
+    const g = groundYAt(this.level, wx);
+    // The hills flatten out under a climbing section, so its steps are always the same height
+    for (const f of this.flats) {
+      if (wx <= f.from || wx >= f.to) continue;
+      const t = Math.min(1, (wx - f.from) / CLIMB.flatRamp, (f.to - wx) / CLIMB.flatRamp);
+      return g + (GROUND_Y - g) * t * t * (3 - 2 * t);
+    }
+    return g;
   }
 
   /**
@@ -768,10 +855,27 @@ export class GameScene extends Phaser.Scene {
    */
   private keepOnGround(): void {
     const b = this.petBody;
-    const gy = this.groundAt(this.pet.x);
-    const stick = this.grounded && b.velocity.y >= 0 ? 12 : 0;
+    let gy = this.groundAt(this.pet.x);
+    // A ledge holds the pet up when it comes down onto it from above (it can
+    // jump up through one from below)
+    let ledge: Ledge | undefined;
+    if (b.velocity.y >= 0) {
+      const half = this.petW * 0.3;
+      for (const l of this.ledges) {
+        if (this.pet.x + half < l.img.x || this.pet.x - half > l.img.x + l.w) continue;
+        const tol = this.onLedge === l ? 6 : 0;
+        if (this.prevBottom <= l.top + 4 + tol && l.top < gy) {
+          gy = l.top;
+          ledge = l;
+        }
+      }
+    }
+    // Stick to the hill when running downhill (not when running off a ledge)
+    const stick = this.grounded && b.velocity.y >= 0 && !ledge && !this.onLedge ? 12 : 0;
+    this.onLedge = undefined;
     if (b.bottom >= gy - stick) {
       const landed = !this.grounded;
+      this.onLedge = ledge;
       b.y = gy - b.height;
       if (b.velocity.y > 0) b.velocity.y = 0;
       this.grounded = true;
@@ -784,6 +888,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.grounded = false;
     }
+    this.prevBottom = b.bottom;
   }
 
   private drawGround(): void {
@@ -825,7 +930,7 @@ export class GameScene extends Phaser.Scene {
     const sp = this.petSprite;
     sp.setPosition(this.pet.x, this.pet.y + this.pet.height / 2);
     // Shadow on the ground, smaller the higher the pet is
-    const gy = this.groundAt(this.pet.x);
+    const gy = this.onLedge?.top ?? this.shadowFloor();
     const air = Math.max(0, gy - (this.pet.y + this.pet.height / 2));
     const s = SIZE_SCALE[this.choice.size] * Math.max(0.35, 1 - air / 220);
     this.petShadow.setPosition(this.pet.x, gy + 2).setScale(s, s).setAlpha(Math.max(0.3, 1 - air / 260));
@@ -835,11 +940,12 @@ export class GameScene extends Phaser.Scene {
     const onGround = this.grounded;
     // Lean with the slope of the hill when running on it
     const slope = (this.groundAt(this.pet.x + 12) - this.groundAt(this.pet.x - 12)) / 24;
-    const lean = onGround ? Phaser.Math.RadToDeg(Math.atan(slope)) * (sp.flipX ? -1 : 1) : 0;
+    const lean = onGround && !this.onLedge ? Phaser.Math.RadToDeg(Math.atan(slope)) * (sp.flipX ? -1 : 1) : 0;
     sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : lean); // looking up at the bird or den
     if (onGround && !this.wasOnGround) this.dust(5); // landing puff
     this.wasOnGround = onGround;
-    if (onGround && !this.distraction) {
+    const stopped = this.speed < BRAKE.standSpeed && !this.chasing && !this.returning;
+    if (onGround && !this.distraction && !stopped) {
       this.dustTimer += this.game.loop.delta;
       if (this.dustTimer > 260) {
         this.dustTimer = 0;
@@ -847,16 +953,38 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const look = this.look;
+    if (this.sliding || !onGround) this.standing = false;
     if (this.sliding) {
       sp.anims.stop();
       sp.setTexture(look.slide);
     } else if (!onGround) {
       sp.anims.stop();
       sp.setTexture(look.jump);
+    } else if (stopped) {
+      // Standing still: hold the first frame of the run
+      if (!this.standing) {
+        this.standing = true;
+        sp.play(look.anim);
+        sp.anims.pause(sp.anims.currentAnim?.frames[0]);
+      }
     } else {
+      if (this.standing) {
+        this.standing = false;
+        sp.anims.resume();
+      }
       if (!sp.anims.isPlaying) sp.play(look.anim);
       sp.anims.timeScale = this.speed / this.level.speed.start;
     }
+  }
+
+  /** Where the pet's shadow falls: the highest ledge under it, or the ground. */
+  private shadowFloor(): number {
+    let y = this.groundAt(this.pet.x);
+    const bottom = this.pet.y + this.pet.height / 2;
+    for (const l of this.ledges) {
+      if (this.pet.x >= l.img.x && this.pet.x <= l.img.x + l.w && l.top >= bottom - 2 && l.top < y) y = l.top;
+    }
+    return y;
   }
 
   // ---------- Obstacles, treats and the ball ----------
@@ -873,7 +1001,26 @@ export class GameScene extends Phaser.Scene {
 
   private spawnNext(): void {
     const x = GAME_WIDTH + 60;
+    const remainingPx = this.level.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
+    if (this.distancePx >= this.nextClimbAt && remainingPx > CLIMB.clearEndPx) {
+      // A climbing section instead of the next obstacle
+      const span = this.spawnClimb(x);
+      const c = this.level.climb!;
+      this.nextClimbAt = this.distancePx + Phaser.Math.Between(c.everyM[0], c.everyM[1]) * SCORE.pixelsPerMeter;
+      this.nextSpawnIn = span + SPAWN.minGap * (this.baseSpeed / this.level.speed.start);
+      return;
+    }
     const kind = this.pickObstacle();
+    this.placeObstacle(x, kind);
+    if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
+
+    // Gaps grow with speed so the game stays fair as it speeds up
+    const scale = this.baseSpeed / this.level.speed.start;
+    this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
+  }
+
+  /** One obstacle on the trail at x, with its tree, poles or shadow. */
+  private placeObstacle(x: number, kind: ObstacleKind): void {
     const gy = this.groundAt(x);
     const o = OBSTACLES[kind];
     const d = o.decor;
@@ -900,11 +1047,6 @@ export class GameScene extends Phaser.Scene {
     this.addObstacle(x, gy - o.lift, kind);
     if (o.slide) this.hint(`slide-${kind}`, 'Swipe down to slide under!');
     else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : kind === 'creek' ? 'Jump the creek!' : kind === 'pond' ? 'Jump the pond!' : 'Tap to jump!');
-    if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
-
-    // Gaps grow with speed so the game stays fair as it speeds up
-    const scale = this.baseSpeed / this.level.speed.start;
-    this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
   }
 
   private addDecor(img: Img): void {
@@ -983,8 +1125,15 @@ export class GameScene extends Phaser.Scene {
   private collectTreat(t: Img): void {
     if (!t.active) return;
     this.treatPop(t.x, t.y);
+    if (t.getData('golden')) {
+      // the golden treat at the top of a climb
+      this.bonus += CLIMB.goldenBonus;
+      this.toast(`Top of the climb! +${CLIMB.goldenBonus}`, '#b8860b');
+      sfx.ding();
+    } else {
+      this.treatCount += 1;
+    }
     t.destroy();
-    this.treatCount += 1;
     sfx.crunch();
   }
 
@@ -1019,15 +1168,18 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.scheduleTimer = this.time.delayedCall(delayMs, () => {
       if (this.state !== 'playing') return;
-      if (!this.distraction && this.obstacleAhead()) {
+      if (!this.distraction && (this.obstacleAhead() || this.greet || this.ledges.length || this.braking)) {
         // Wait until the pet has cleared what's coming, so a distraction
         // never lands right on top of a fence or branch.
         this.scheduleDistraction(DISTRACTION.retryMs);
         return;
       }
       if (!this.distraction) {
-        if (Math.random() < DISTRACTION.chaseChance) this.startChase();
-        else this.startGawk(this.pickGawk());
+        const gawk = this.pickGawk();
+        // A neighbor with a treat is a chance, not a problem: stop to get it
+        if (gawk === 'person') this.startGreet();
+        else if (Math.random() < DISTRACTION.chaseChance) this.startChase();
+        else this.startGawk(gawk);
       }
       this.scheduleDistraction(Phaser.Math.Between(DISTRACTION.minEveryMs, DISTRACTION.maxEveryMs));
     });
@@ -1035,8 +1187,8 @@ export class GameScene extends Phaser.Scene {
 
   private pickGawk(): GawkKind {
     const cat = this.choice.species === 'cat';
-    // Dogs stare into den holes and wave back at people; cats stare at butterflies
-    const options = this.level.gawk.filter((g) => (cat ? g !== 'den' && g !== 'person' : g !== 'butterfly'));
+    // Dogs stare into den holes; cats stare at butterflies. Neighbors have treats for both.
+    const options = this.level.gawk.filter((g) => (cat ? g !== 'den' : g !== 'butterfly'));
     return Phaser.Utils.Array.GetRandom(options.length ? options : ['bird']);
   }
 
@@ -1128,6 +1280,166 @@ export class GameScene extends Phaser.Scene {
       this.petSound(1);
       // Eventually the pet loses interest by itself, but you lose the time
       this.distractionTimer = this.time.delayedCall(DISTRACTION.gawkMaxMs, () => this.clearDistraction());
+    });
+  }
+
+  // ---------- A neighbor with a treat ----------
+
+  /** A neighbor stands by the trail holding out a treat. Hold to stop next to them and the pet gets it. */
+  private startGreet(): void {
+    const x = GAME_WIDTH + 50;
+    const person = this.art(this.add.sprite(x, this.groundAt(x) + 2, 'person-0').setOrigin(0.5, 1).setDepth(0.85), 1.25).play('person-wave');
+    const treat = this.art(this.add.image(x - 14, 0, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1.1), 1.2);
+    treat.setTint(0xffe08a);
+    this.tweens.add({ targets: treat, scale: treat.scale * 1.18, duration: 380, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const touch = this.sys.game.device.input.touch;
+    const label = this.add
+      .text(x, 0, touch ? 'Hold to stop!' : 'Hold \u2190 to stop!', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '17px',
+        fontStyle: 'bold',
+        color: '#fff8e8',
+        backgroundColor: 'rgba(31,111,42,0.85)',
+        padding: { x: 7, y: 3 },
+        resolution: RENDER_SCALE,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(10);
+    const zone = this.add.ellipse(x, 0, GREET.reach * 2, 16, 0xffe08a, 0.45).setStrokeStyle(2, 0xffffff, 0.8).setDepth(0.99);
+    this.tweens.add({ targets: zone, alpha: 0.55, duration: 400, yoyo: true, repeat: -1 });
+    this.greet = { person, treat, label, zone, done: false };
+    this.placeGreet();
+    sfx.chitter();
+    this.hint('greet', touch ? 'A treat! Hold your finger down to stop by the neighbor' : 'A treat! Hold \u2190 to stop by the neighbor');
+  }
+
+  private placeGreet(): void {
+    const g = this.greet;
+    if (!g) return;
+    const top = g.person.y - g.person.displayHeight;
+    g.treat.setPosition(g.person.x - 16, top + 22);
+    g.label.setPosition(g.person.x, top - 6).setVisible(!g.done);
+    g.zone.setPosition(g.person.x, this.groundAt(g.person.x) + 4).setVisible(!g.done);
+  }
+
+  /** The neighbor stays put on the sidewalk (moves with the trail); stopping beside them earns the treat. */
+  private updateGreet(dx: number): void {
+    const g = this.greet;
+    if (!g) return;
+    g.person.x -= dx;
+    g.person.y = this.groundAt(g.person.x) + 2;
+    this.placeGreet();
+    const near = Math.abs(g.person.x - this.pet.x) < GREET.reach;
+    if (!g.done && near && this.speed < GREET.stopSpeed && this.grounded && !this.chasing) {
+      g.done = true;
+      this.tweens.killTweensOf(g.treat);
+      // the treat hops from the neighbor's hand to the pet
+      this.tweens.add({
+        targets: g.treat,
+        x: this.pet.x,
+        y: this.pet.y - 10,
+        duration: 320,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          this.treatPop(this.pet.x, this.pet.y - 20);
+          g.treat.setVisible(false);
+        },
+      });
+      this.bonus += GREET.bonus;
+      this.treatCount += 1;
+      this.treatsSpawned += 1;
+      this.toast(`${this.choice.species === 'cat' ? 'Good kitty!' : 'Good pup!'} +${GREET.bonus}`, '#1f6f2a');
+      sfx.ding();
+      this.petSound(1);
+    } else if (!g.done && g.person.x < this.pet.x - GREET.reach) {
+      g.done = true;
+      g.treat.setVisible(false);
+      this.toast('Missed the treat!', this.darkSky ? '#fff8e8' : '#1d2b1f');
+    }
+    if (g.person.x < -60) {
+      g.person.destroy();
+      g.treat.destroy();
+      g.label.destroy();
+      g.zone.destroy();
+      this.greet = undefined;
+    }
+  }
+
+  // ---------- Climbing sections ----------
+
+  /**
+   * Stone ledges in steps up to a high ridge with treats (and a golden treat
+   * at the far end) on top. The trail below keeps a couple of obstacles, so
+   * the high road pays and the low road doesn't.
+   */
+  private spawnClimb(x0: number): number {
+    const c = this.level.climb!;
+    const k = Math.max(1, this.baseSpeed / 300); // faster runs need longer steps
+    const steps = CLIMB.steps.map((st) => ({ x: x0 + st.dx * k, w: st.w * k, h: st.h }));
+    const end = steps[steps.length - 1];
+    const span = end.x + end.w - x0;
+    // Flat ground under the section (it's still off screen to the right)
+    this.flats = this.flats.filter((f) => f.to > this.distancePx);
+    this.flats.push({ from: this.distancePx + x0, to: this.distancePx + x0 + span + CLIMB.flatRamp });
+    const base = GROUND_Y;
+    const cat = this.choice.species === 'cat';
+    steps.forEach((st, i) => {
+      const top = base - st.h;
+      const key = ledgeTexture(this, c.style, st.w);
+      const img = this.art(this.add.image(st.x, top - 4, key).setOrigin(0, 0).setDepth(1.05));
+      const w = img.displayWidth;
+      const pillars = (w > 300 ? [0.25, 0.75] : [0.5]).map((f) => {
+        const px = st.x + w * f;
+        const pk = pillarTexture(this, c.style);
+        const p = this.art(this.add.image(px, top + LEDGE_H - 8, pk).setOrigin(0.5, 0).setDepth(0.94));
+        p.displayHeight = this.groundAt(px) - (top + LEDGE_H - 8) + 6;
+        return p;
+      });
+      this.ledges.push({ img, pillars, w, top });
+      // Treats along the high steps, a golden one at the very end
+      if (st.h >= CLIMB.treatsAbove) {
+        const n = Math.max(2, Math.floor(w / 70));
+        for (let j = 0; j < n; j++) {
+          const golden = i === steps.length - 1 && j === n - 1;
+          const t = this.art(this.add.image(st.x + 30 + j * ((w - 60) / Math.max(1, n - 1)), top - 30, cat ? 'fish' : 'bone').setDepth(1.1), golden ? 1.5 : 1);
+          if (golden) {
+            t.setTint(0xffd24a).setData('golden', true);
+            this.tweens.add({ targets: t, angle: { from: -10, to: 10 }, duration: 400, yoyo: true, repeat: -1 });
+          } else {
+            this.treatsSpawned += 1;
+          }
+          this.treats.add(t);
+          const body = t.body as Body;
+          body.setAllowGravity(false);
+          body.setVelocityX(-this.speed);
+        }
+      }
+    });
+    // The low road: obstacles to jump under the ridge
+    const jumps = (Object.keys(this.level.obstacles) as ObstacleKind[]).filter((kd) => !OBSTACLES[kd].slide);
+    for (const f of CLIMB.lowRoad) {
+      if (jumps.length) this.placeObstacle(x0 + span * f, Phaser.Utils.Array.GetRandom(jumps));
+    }
+    this.hint('climb', 'Jump up the ledges for treats!');
+    return span;
+  }
+
+  /** Ledges and their pillars move with the trail (by hand: they're wider than the usual clean-up allows). */
+  private moveLedges(dx: number): void {
+    if (!this.ledges.length) return;
+    this.ledges = this.ledges.filter((l) => {
+      l.img.x -= dx;
+      for (const p of l.pillars) {
+        p.x -= dx;
+        // stand the pillar on the ground under it, over the hills too
+        const top = l.top + LEDGE_H - 8;
+        p.displayHeight = this.groundAt(p.x) - top + 6;
+      }
+      if (l.img.x + l.w > -40) return true;
+      l.img.destroy();
+      l.pillars.forEach((p) => p.destroy());
+      if (this.onLedge === l) this.onLedge = undefined;
+      return false;
     });
   }
 

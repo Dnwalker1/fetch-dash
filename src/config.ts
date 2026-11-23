@@ -53,17 +53,53 @@ export const DISTRACTION = {
   chaseChance: 0.5, // the rest are out-of-reach distractions (bird, den hole)
   focusBonus: 50, // for calling your pet back before it gives in
   // Squirrel on the trail: the pet turns around and chases it
-  chaseWarnMs: 900,
+  chaseWarnMs: 1100,
   chaseSpeedFactor: 0.5, // the run slows to this share of full speed
   chaseDriftSpeed: 90, // how fast the pet runs back toward the squirrel
   loseX: 50, // if the pet gets this far back, the run ends
   // Bird or den hole out of reach: the pet stops to stare and slows down
-  gawkWarnMs: 700,
+  gawkWarnMs: 1100,
   gawkSpeedFactor: 0.6,
   comboWindowMs: 600, // a slide/jump pressed this soon before the call-back still happens
   clearAheadMs: 1200, // no new distraction if an obstacle arrives within this time
   retryMs: 400,
   gawkMaxMs: 5000, // after this the pet loses interest on its own (no bonus)
+};
+
+/** Hold to stop: a finger held down (or the left arrow) brings the pet to a stop. */
+export const BRAKE = {
+  holdMs: 220, // a press held this long without swiping is a hold, not a tap (a tap jumps)
+  stopS: 0.3, // seconds from full speed to a stop
+  goS: 0.45, // seconds back up to full speed after letting go
+  standSpeed: 25, // below this (px/s) the pet stands still instead of running in place
+};
+
+/** A neighbor by the trail holding out a treat (levels with 'person' in gawk). */
+export const GREET = {
+  reach: 110, // how close (px) the pet has to stop to the neighbor
+  stopSpeed: 75, // and how slow it has to be going
+  creepSpeed: 70, // stopped short of them, the pet walks up at this speed (px/s)
+  bonus: 75,
+};
+
+/**
+ * Climbing sections (levels with `climb`): ledges in steps up to a ridge.
+ * Positions and widths are in px at 300 px/s and stretch with the run's speed.
+ * h is the ledge top's height above the ground (the hills flatten out under a section);
+ * a jump rises about 180 px.
+ */
+export const CLIMB = {
+  steps: [
+    { dx: 0, w: 220, h: 90 },
+    { dx: 330, w: 220, h: 150 },
+    { dx: 660, w: 440, h: 205 },
+    { dx: 1240, w: 380, h: 205 },
+  ],
+  treatsAbove: 190, // steps at least this high carry treats
+  lowRoad: [0.45, 0.82], // obstacles on the trail under the ridge, as a share of the section
+  goldenBonus: 100,
+  clearEndPx: 3200, // no climb this close to the finish
+  flatRamp: 260, // px over which the hills ease flat before a section and back after it
 };
 
 export const SCORE = {
