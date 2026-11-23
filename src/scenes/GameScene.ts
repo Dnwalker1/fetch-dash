@@ -1116,6 +1116,8 @@ export class GameScene extends Phaser.Scene {
     // Gaps grow with speed so the game stays fair as it speeds up
     const scale = this.baseSpeed / this.level.speed.start;
     this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
+    // A tree went in farther out, so the gap after it starts from there
+    if (d && 'tree' in d) this.nextSpawnIn += TREE_LEAD;
     // The tutorial's last stop (calling the pet back) gets a clear stretch of trail
     if (this.tut && !this.obstacleQueue.length) this.nextSpawnIn = 1800;
   }
