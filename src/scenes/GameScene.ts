@@ -4,7 +4,7 @@ import { paintProps } from '../art/props';
 import { paintCritters } from '../art/critters';
 import { paintCritters2 } from '../art/critters2';
 import { DEN_W, denFiles, paintDen, paintProps2 } from '../art/props2';
-import { artScale, resized, resOf, rimOf } from '../art/paint';
+import { artScale, resized, resOf } from '../art/paint';
 import { artBox, markArt, queueArt } from '../art/artFiles';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
@@ -76,7 +76,10 @@ const SWIPE_PX = 30; // screen pixels
 /** Obstacle hit areas as a share of the picture (see addObstacle). */
 const HITBOX = { width: 0.72, height: 0.8 };
 /** Dens sit on the hillside just behind the trail, a little smaller (farther away). */
-const DEN_BASE_UP = 16;
+/** A den's picture height in game px at a scale (its texture's height over its resolution). */
+const DEN_H_OF = (img: Phaser.GameObjects.Image, scale: number): number => (img.displayHeight / scale);
+/** The visible bottom of a den (its hole's front edge) sits this far behind (above) the trail line. */
+const DEN_SINK = 3;
 const DEN_SCALE = 1.1;
 /** How much the painted scenery fades toward the trail, so things on the trail stand out. */
 const TRAIL_HAZE = 0.28;
@@ -128,7 +131,7 @@ const FLYERS: Partial<Record<GawkKind, { texture: string; y: number; ms: number;
  * ground, and how to beat it. Things to slide under can come with a tree
  * (a trunk and a treetop) or with poles holding them up.
  */
-type Decor = { tree: string; trunkTint?: number } | { poles: number[]; tint: number; width: number; height: number; pole?: string };
+type Decor = { tree: string } | { poles: number[]; tint: number; width: number; height: number; pole?: string };
 /** Water lies flat on the trail: drawn a little below the ground line, with a thin hit band at the line. */
 const FLAT_HIT_H = 10;
 /**
@@ -137,6 +140,24 @@ const FLAT_HIT_H = 10;
  * gets no shadow.
  */
 type ObstacleDef = { lift: number; slide: boolean; decor?: Decor; flat?: boolean; hit?: { width: number; height: number }; ground?: boolean };
+/**
+ * The rooted trees that hold up the low branches (from trees.json). The tree
+ * shares the obstacle's anchor (x, ground - lift); the obstacle picture is an
+ * exact copy of the tree's limb there, so they line up with no seam. The trunk
+ * stands about 100 px right of the anchor.
+ */
+const TREE_ORIGIN: Record<string, [number, number]> = {
+  'tree-park': [0.2865, 0.6445],
+  'tree-snow': [0.2933, 0.6667],
+  'tree-autumn': [0.2681, 0.6893],
+  'tree-blossom': [0.3025, 0.5848],
+  'tree-jungle': [0.2821, 0.5955],
+};
+/** Trees spawn this much farther right, so the ground can level off under them off screen. */
+const TREE_LEAD = 320;
+/** The stretch of ground under a tree that's made level, from its anchor. */
+const TREE_FLAT: [number, number] = [-70, 170];
+
 /** The fences cross the trail at an angle, which leaves clear corners at the top: a smaller hit area. */
 const FENCE: ObstacleDef = { lift: 34, slide: false, hit: { width: 0.55, height: 0.6 }, ground: true };
 const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
@@ -147,7 +168,7 @@ const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
   rock: { lift: 19, slide: false },
   sandcastle: { lift: 26, slide: false },
   driftwood: { lift: 13, slide: false },
-  branch: { lift: 65, slide: true, decor: { tree: 'canopy' } },
+  branch: { lift: 65, slide: true, decor: { tree: 'tree-park' } },
   umbrella: { lift: 66, slide: true, decor: { poles: [0], tint: 0xffffff, width: 6, height: 90 } },
   trashcan: { lift: 23, slide: false },
   hydrant: { lift: 19, slide: false },
@@ -157,10 +178,10 @@ const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
   creek: { lift: -8, slide: false, flat: true },
   snowman: { lift: 29, slide: false },
   sled: { lift: 13, slide: false },
-  snowbranch: { lift: 65, slide: true, decor: { tree: 'snowcanopy', trunkTint: 0x8a7a70 } },
+  snowbranch: { lift: 65, slide: true, decor: { tree: 'tree-snow' } },
   haybale: { lift: 20, slide: false },
   pumpkin: { lift: 17, slide: false },
-  autumnbranch: { lift: 65, slide: true, decor: { tree: 'canopy-autumn' } },
+  autumnbranch: { lift: 65, slide: true, decor: { tree: 'tree-autumn' } },
   cactus: { lift: 26, slide: false },
   tumbleweed: { lift: 19, slide: false },
   arch: { lift: 64, slide: true, decor: { poles: [-55, 55], tint: 0xffffff, width: 20, height: 84, pole: 'arch-leg' } },
@@ -168,8 +189,8 @@ const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
   clothesline: { lift: 64, slide: true, decor: { poles: [-62, 62], tint: 0xffffff, width: 6, height: 90, pole: 'wood-post' } },
   lantern: { lift: 23, slide: false },
   pond: { lift: -8, slide: false, flat: true },
-  blossombranch: { lift: 65, slide: true, decor: { tree: 'canopy-blossom' } },
-  vines: { lift: 68, slide: true, decor: { tree: 'canopy-jungle' } },
+  blossombranch: { lift: 65, slide: true, decor: { tree: 'tree-blossom' } },
+  vines: { lift: 68, slide: true, decor: { tree: 'tree-jungle' } },
   crate: { lift: 20, slide: false },
   barrel: { lift: 22, slide: false },
   banner: { lift: 63, slide: true, decor: { poles: [-62, 62], tint: 0xffffff, width: 5, height: 90, pole: 'pier-pole' } },
@@ -246,13 +267,15 @@ export class GameScene extends Phaser.Scene {
   private onLedge?: Ledge;
   private prevBottom = 0;
   private nextClimbAt = Infinity;
-  private flats: { from: number; to: number }[] = [];
+  /** Stretches where the hills are eased to a level (GROUND_Y unless `y` is given) */
+  private flats: { from: number; to: number; y?: number }[] = [];
 
   // Dig spots and tunnels
   private nextDigAt = Infinity;
   private digSpot?: { img: Img; label: Phaser.GameObjects.Text; done: boolean };
   private tunnel?: { endAt: number; strip: Phaser.GameObjects.TileSprite; golden: boolean };
   private fgLayer?: Phaser.GameObjects.TileSprite;
+  private dens: Phaser.GameObjects.Container[] = [];
   private skyIsDark = false;
 
   private distraction?: Distraction;
@@ -337,6 +360,7 @@ export class GameScene extends Phaser.Scene {
     this.digSpot = undefined;
     this.tunnel = undefined;
     this.fgLayer = undefined;
+    this.dens = [];
     this.nextClimbAt = this.level.climb ? this.level.climb.firstM * SCORE.pixelsPerMeter : Infinity;
 
     // Painted props go first; the flat-shape art fills in whatever they don't cover.
@@ -837,6 +861,7 @@ export class GameScene extends Phaser.Scene {
     const dx = this.speed * dt;
     this.distancePx += dx;
     this.moveLedges(dx);
+    this.moveDens(dx);
     this.updateGreet(dx);
     this.updateDig(dx);
     if (this.tut) this.checkTutorial();
@@ -890,7 +915,7 @@ export class GameScene extends Phaser.Scene {
     for (const f of this.flats) {
       if (wx <= f.from || wx >= f.to) continue;
       const t = Math.min(1, (wx - f.from) / CLIMB.flatRamp, (f.to - wx) / CLIMB.flatRamp);
-      return g + (GROUND_Y - g) * t * t * (3 - 2 * t);
+      return g + ((f.y ?? GROUND_Y) - g) * t * t * (3 - 2 * t);
     }
     return g;
   }
@@ -1057,6 +1082,7 @@ export class GameScene extends Phaser.Scene {
 
   private spawnNext(): void {
     const x = GAME_WIDTH + 60;
+    this.flats = this.flats.filter((f) => f.to > this.distancePx - 200);
     const remainingPx = this.level.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
     if (this.tunnel) {
       this.spawnInTunnel(x);
@@ -1075,7 +1101,16 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const kind = this.pickObstacle();
-    this.placeObstacle(x, kind);
+    const d = OBSTACLES[kind].decor;
+    if (d && 'tree' in d) {
+      // A tree: placed a little farther out, with the ground made level under its roots
+      const tx = x + TREE_LEAD;
+      const level = groundYAt(this.level, this.distancePx + tx + 100);
+      this.flats.push({ from: this.distancePx + tx + TREE_FLAT[0] - CLIMB.flatRamp, to: this.distancePx + tx + TREE_FLAT[1] + CLIMB.flatRamp, y: level });
+      this.placeObstacle(tx, kind);
+    } else {
+      this.placeObstacle(x, kind);
+    }
     if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
 
     // Gaps grow with speed so the game stays fair as it speeds up
@@ -1091,12 +1126,9 @@ export class GameScene extends Phaser.Scene {
     const o = OBSTACLES[kind];
     const d = o.decor;
     if (d && 'tree' in d) {
-      // Low branch hanging from a tree. The trunk stops just above the pet's
-      // head, so it can slide under the tree.
-      const trunk = this.art(this.add.image(x + 40, gy - 75, 'trunk').setOrigin(0.5, 1).setDepth(0.95));
-      if (d.trunkTint !== undefined) trunk.setTint(d.trunkTint);
-      this.addDecor(trunk);
-      this.addDecor(this.art(this.add.image(x + 40, gy - 400, d.tree).setDepth(0.96)));
+      // A tree beside the trail with its low limb reaching over the path
+      const [ox, oy] = TREE_ORIGIN[d.tree] ?? [0.29, 0.65];
+      if (this.textures.exists(d.tree)) this.addDecor(this.art(this.add.image(x, gy - o.lift, d.tree).setOrigin(ox, oy).setDepth(0.95)));
     } else if (d) {
       // An awning, a stone arch, a clothesline or a banner held up on poles
       for (const dx of d.poles) {
@@ -1129,10 +1161,6 @@ export class GameScene extends Phaser.Scene {
       // lies flat, so it tilts with the hill under it
       r.setRotation(Math.atan2(this.groundAt(x + 30) - this.groundAt(x - 30), 60));
     } else {
-      // a dark edge behind it, so it stands out from the painted scenery
-      const rim = this.art(this.add.image(x, y, rimOf(this, key)).setDepth(0.98));
-      this.addDecor(rim);
-      spin.push(rim);
     }
     if (key === 'tumbleweed') this.tweens.add({ targets: spin, angle: -360, duration: 900, repeat: -1 });
     const body = r.body as Body;
@@ -1318,18 +1346,20 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: b, x: -60, duration: 5000, onComplete: () => b.destroy() });
       this.tweens.add({ targets: b, y: 250, duration: 450, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     } else {
-      // A den on the hillside behind the trail, drifting by slower than the
-      // trail (it's farther away). The critter pops up out of the hole: it's
-      // cut off at the hole's lower edge, and the mound's lip sits in front.
+      // A den dug into the verge just behind the trail. It moves with the
+      // ground, follows the hills and tilts with them. The mound is cut off at
+      // the hole's front edge, so none of it hangs over the trail. The critter
+      // pops up out of the hole, cut off at its lower edge, behind the lip.
       const x = GAME_WIDTH + 60;
-      const base = this.groundAt(x) - DEN_BASE_UP;
       const d = paintDen(this, this.level.id, this.level.theme);
-      const den = this.art(this.add.image(x, base, d.back).setOrigin(0.5, 1).setDepth(0.5), DEN_SCALE);
-      const front = this.art(this.add.image(x, base, d.lip).setOrigin(0.5, 1).setDepth(0.6), DEN_SCALE);
-      const holeY = base - d.holeUp * DEN_SCALE;
+      const back = this.art(this.add.image(0, 0, d.back).setOrigin(0.5, 1), DEN_SCALE);
+      const front = this.art(this.add.image(0, 0, d.lip).setOrigin(0.5, 1), DEN_SCALE);
+      // cut the bottom of both pictures off at the hole's front edge (in texture pixels)
+      const cutUp = d.holeUp - d.holeHalf;
+      for (const img of [back, front]) img.setCrop(0, 0, img.width, img.height - (cutUp * img.height) / DEN_H_OF(img, DEN_SCALE));
+      const holeY = -d.holeUp * DEN_SCALE;
       const holeBottom = holeY + d.holeHalf * DEN_SCALE;
-      const holeX = x + (d.holeX - DEN_W / 2) * DEN_SCALE;
-      const critter = this.art(this.add.image(holeX, holeY + 26, 'gopher').setDepth(0.55));
+      const critter = this.art(this.add.image((d.holeX - DEN_W / 2) * DEN_SCALE, holeY + 26, 'gopher'));
       const crop = () => {
         // how much of it is above the hole's lower edge, in game pixels, then in the texture's
         const h = Math.min(critter.displayHeight, holeBottom - (critter.y - critter.displayHeight / 2));
@@ -1337,8 +1367,11 @@ export class GameScene extends Phaser.Scene {
         if (h > 0.5) critter.setCrop(0, 0, critter.width, h / critter.scaleY);
       };
       crop();
-      this.tweens.add({ targets: [den, front, critter], x: `-=${x + 80}`, duration: 6000, onComplete: () => (den.destroy(), front.destroy(), critter.destroy()) });
-      this.tweens.add({ targets: critter, y: holeY - 6, duration: 350, yoyo: true, hold: 500, repeat: 5, delay: 300, onUpdate: crop });
+      const den = this.add.container(x, 0, [back, critter, front]).setDepth(0.92);
+      den.setData('cut', cutUp * DEN_SCALE);
+      this.dens.push(den);
+      this.placeDen(den);
+      this.tweens.add({ targets: critter, y: holeY - 6, duration: 350, yoyo: true, hold: 500, repeat: -1, repeatDelay: 250, delay: 300, onUpdate: crop });
     }
 
     this.warn('gawk', '?', DISTRACTION.gawkWarnMs, () => {
@@ -1661,6 +1694,8 @@ export class GameScene extends Phaser.Scene {
         return true;
       });
       for (const g of [this.obstacles, this.treats, this.decor]) g.clear(true, true);
+      this.dens.forEach((den) => (this.tweens.killTweensOf(den.list), den.destroy()));
+      this.dens = [];
       this.fgLayer?.setVisible(false);
       this.weather.forEach((w) => w.setVisible(false));
       this.setHudDark(true);
@@ -1737,6 +1772,28 @@ export class GameScene extends Phaser.Scene {
     const body = t.body as Body;
     body.setAllowGravity(false);
     body.setVelocityX(-this.speed);
+  }
+
+  /** Dens move with the ground, sit on it and tilt with the hill. */
+  private moveDens(dx: number): void {
+    if (!this.dens.length) return;
+    this.dens = this.dens.filter((den) => {
+      den.x -= dx;
+      if (den.x < -80) {
+        this.tweens.killTweensOf(den.list);
+        den.destroy();
+        return false;
+      }
+      this.placeDen(den);
+      return true;
+    });
+  }
+
+  private placeDen(den: Phaser.GameObjects.Container): void {
+    const slope = Math.atan2(this.groundAt(den.x + 30) - this.groundAt(den.x - 30), 60);
+    den.setRotation(slope);
+    // the container's origin is the pictures' uncut bottom: lower it by the cut, so the hole's front edge sits on the line
+    den.y = this.groundAt(den.x) - DEN_SINK + (den.getData('cut') as number);
   }
 
   /** Ledges and their pillars move with the trail (by hand: they're wider than the usual clean-up allows). */
@@ -2297,7 +2354,7 @@ function propKeys(kinds: ObstacleKind[]): string[] {
   for (const kind of kinds) {
     keys.push(kind);
     const d = (OBSTACLES as Record<string, ObstacleDef | undefined>)[kind]?.decor;
-    if (d && 'tree' in d) keys.push('trunk', d.tree);
+    if (d && 'tree' in d) keys.push(d.tree);
     else if (d) keys.push(d.pole ?? 'umbrella-pole');
   }
   return keys;

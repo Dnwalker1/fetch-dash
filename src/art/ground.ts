@@ -10,9 +10,15 @@ import { blade, circle, css, ellipse, grain, leaf, lin, mix, paint, rad, rrect, 
 
 export const GROUND_TILE = 1024;
 /** Height of the strip; enough to reach the bottom of the screen from the highest hill. */
-export const GROUND_TEX_H = 190;
-/** Rows above the ground line, for grass blades and drifts that stick up. */
-export const GROUND_TOP = 10;
+export const GROUND_TEX_H = 216;
+/**
+ * Rows above the ground line: a strip of far verge behind the trail (where the
+ * den holes sit), fading into the painted scenery at its top, plus room for
+ * grass blades and drifts that stick up.
+ */
+export const GROUND_TOP = 36;
+/** How much of the rows above the line is solid verge (the rest is the fade). */
+const VERGE_SOLID = 16;
 /** Width of each column the strip is laid down in (narrow, so hills look smooth, not stepped). */
 export const GROUND_COL = 4;
 
@@ -406,9 +412,43 @@ function line(c: Ctx, pts: [number, number][] | ((x: number) => number), color: 
 }
 
 /** Paints the level's ground strip (once) and cuts it into columns. Returns its texture key. */
+/**
+ * The far verge just behind the trail: grass (or sand, or snow) with a little
+ * earth showing through, fading out at the top so there's no hard line
+ * against the painted scenery. The street and the pier have none.
+ */
+function paintVerge(c: Ctx, t: Theme): void {
+  if (t.tufts === 'street' || t.tufts === 'boards') return;
+  const top = S - VERGE_SOLID;
+  const base = t.tufts === 'snow' ? shade(t.grass, 0.3) : t.grass;
+  // a soft fade in, then solid down to the ground line
+  c.fillStyle = lin(c, 0, 0, 0, S + 2, [[0, base, 0], [(top - 2) / (S + 2), base, 0.85], [1, shade(base, -0.08)]]);
+  c.fillRect(0, 0, W, S + 2);
+  const r = seeded(77);
+  // patches of earth showing through, and darker tufts
+  for (let i = 0; i < 70; i++) {
+    const x = r() * W;
+    const y = top + 2 + r() * (VERGE_SOLID - 2);
+    const rx = 4 + r() * 10;
+    wrapX(x, rx + 2, (px) => {
+      ellipse(c, px, y, rx, 1.4 + r() * 1.6);
+      c.fillStyle = css(r() < 0.55 ? t.dirt : t.grassDark, 0.28 + r() * 0.2);
+      c.fill();
+    });
+  }
+  if (t.tufts === 'grass') {
+    for (let i = 0; i < 260; i++) {
+      const x = r() * W;
+      const y = top + 3 + r() * (VERGE_SOLID + 2);
+      wrapX(x, 4, (px) => blade(c, px, y, 2 + r() * 4, (r() - 0.5) * 3, r() < 0.5 ? t.grassDark : shade(t.grass, 0.12), 1, 0.8));
+    }
+  }
+}
+
 export function paintGround(scene: Phaser.Scene, levelId: number, t: Theme): string {
   const key = `ground-${levelId}`;
   const tex = paint(scene, key, W, H, (c) => {
+    paintVerge(c, t);
     if (t.tufts === 'sand') paintSand(c, t);
     else if (t.tufts === 'snow') paintSnow(c, t);
     else if (t.tufts === 'street') paintStreet(c, t);

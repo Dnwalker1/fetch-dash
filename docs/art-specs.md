@@ -67,3 +67,7 @@ Each earth has two pictures: the mound behind the critter and a lip in front of 
 ## Painted in code (no file yet)
 
 - **Climbing ledges:** `ledge-rock-<width>`, `ledge-sandstone-<width>`, plus the pillars `ledge-pillar-rock` and `ledge-pillar-sandstone` (`src/art/ledges.ts`). Ledges come in many widths, so painted ones would be a left end, a middle that repeats, and a right end. The standing surface sits 4 game px below the top of the picture.
+
+## Low-branch trees (Nov 23)
+
+Each low branch now hangs from a rooted tree beside the trail (`tree-park`, `tree-snow`, `tree-autumn`, `tree-blossom`, `tree-jungle` in `public/art/props/`). The tree uses the obstacle's anchor, with the origins in `TREE_ORIGIN` in `GameScene.ts` (from trees.json). The ground is made level under each tree. The obstacles no longer get a dark outline. Dens are now decals on a far verge strip just behind the trail (`GROUND_TOP` 36 in `src/art/ground.ts`).
