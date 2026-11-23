@@ -26,6 +26,7 @@ const CRITTERS = [
   'chicken', 'chipmunk', 'crab', 'fox', 'frog', 'gopher', 'lizard', 'monkey', 'mouse', 'rabbit',
   'squirrel', 'streetcat', 'streetdog',
   ...['dirt', 'sand', 'snow'].flatMap((e) => [`den-${e}`, `den-${e}-lip`]),
+  'tufts-den',
 ];
 /**
  * Backyard Toss pictures in public/art/bonus/ (the keys are listed at the top

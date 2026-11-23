@@ -3,7 +3,7 @@ import { makeTextures } from '../art/textures';
 import { paintProps } from '../art/props';
 import { paintCritters } from '../art/critters';
 import { paintCritters2 } from '../art/critters2';
-import { DEN_W, denFiles, paintDen, paintProps2 } from '../art/props2';
+import { denFiles, paintDen, paintProps2 } from '../art/props2';
 import { artScale, resized, resOf } from '../art/paint';
 import { artBox, markArt, queueArt } from '../art/artFiles';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
@@ -1359,7 +1359,7 @@ export class GameScene extends Phaser.Scene {
       for (const img of [back, front]) img.setCrop(0, 0, img.width, img.height - (cutUp * img.height) / DEN_H_OF(img, DEN_SCALE));
       const holeY = -d.holeUp * DEN_SCALE;
       const holeBottom = holeY + d.holeHalf * DEN_SCALE;
-      const critter = this.art(this.add.image((d.holeX - DEN_W / 2) * DEN_SCALE, holeY + 26, 'gopher'));
+      const critter = this.art(this.add.image((d.holeX - d.w / 2) * DEN_SCALE, holeY + 26, 'gopher'));
       const crop = () => {
         // how much of it is above the hole's lower edge, in game pixels, then in the texture's
         const h = Math.min(critter.displayHeight, holeBottom - (critter.y - critter.displayHeight / 2));
@@ -1367,7 +1367,10 @@ export class GameScene extends Phaser.Scene {
         if (h > 0.5) critter.setCrop(0, 0, critter.width, h / critter.scaleY);
       };
       crop();
-      const den = this.add.container(x, 0, [back, critter, front]).setDepth(0.92);
+      const parts: Phaser.GameObjects.GameObject[] = [back, critter, front];
+      // grass along the cut front edge, so the hole doesn't end on a hard line
+      if (d.tufts) parts.push(this.art(this.add.image((d.holeX - d.w / 2) * DEN_SCALE, -cutUp * DEN_SCALE + 2, d.tufts).setOrigin(0.5, 1), DEN_SCALE));
+      const den = this.add.container(x, 0, parts).setDepth(0.92);
       den.setData('cut', cutUp * DEN_SCALE);
       this.dens.push(den);
       this.placeDen(den);

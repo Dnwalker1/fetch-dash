@@ -55,8 +55,9 @@ Each earth has two pictures: the mound behind the critter and a lip in front of 
 
 | Hole sprite (file) | File size (px) | Painted part (x, y, w, h) | Placement (anchor) | Hole (file px) |
 |---|---|---|---|---|
-| `den-dirt` (public/art/critters/den-dirt.webp), mound (behind the critter) | 168 × 84 | 0, 1, 168, 83 | bottom center (0.5, 1), 16 game px above the trail line, shown at 1.1× | hole center 82 px from the left, 28 px up from the bottom; critter cut off 10 px up from the bottom |
-| `den-dirt-lip` (public/art/critters/den-dirt-lip.webp), front lip (drawn in front of the critter) | 168 × 84 | 17, 72, 132, 12 | bottom center (0.5, 1), 16 game px above the trail line, shown at 1.1× | hole center 82 px from the left, 28 px up from the bottom; critter cut off 10 px up from the bottom |
+| `den-dirt` (public/art/critters/den-dirt.webp), v2 hole in the verge (behind the critter) | 192 × 62 | full | bottom center (0.5, 1), on the far verge 3 game px behind the trail line, cut at the hole's front edge, shown at 1.1× | hole center 48.7 game px from the left, 13.1 up from the bottom, half size 20.6 × 6.8 |
+| `den-dirt-lip` (public/art/critters/den-dirt-lip.webp), v2 front lip (in front of the critter) | 192 × 62 | full | same as `den-dirt` | same as `den-dirt` |
+| `tufts-den` (public/art/critters/tufts-den.webp), grass along the den's cut front edge | 200 × 26 | full | bottom center (0.5, 1), centered on the hole, 2 game px below the cut | dirt dens only |
 | `den-sand` (public/art/critters/den-sand.webp), mound (behind the critter) | 168 × 84 | 3, 1, 161, 83 | bottom center (0.5, 1), 16 game px above the trail line, shown at 1.1× | hole center 83 px from the left, 26 px up from the bottom; critter cut off 14 px up from the bottom |
 | `den-sand-lip` (public/art/critters/den-sand-lip.webp), front lip (drawn in front of the critter) | 168 × 84 | 16, 68, 138, 16 | bottom center (0.5, 1), 16 game px above the trail line, shown at 1.1× | hole center 83 px from the left, 26 px up from the bottom; critter cut off 14 px up from the bottom |
 | `den-snow` (public/art/critters/den-snow.webp), mound (behind the critter) | 168 × 84 | 0, 0, 168, 84 | bottom center (0.5, 1), 16 game px above the trail line, shown at 1.1× | hole center 82 px from the left, 26 px up from the bottom; critter cut off 16 px up from the bottom |
