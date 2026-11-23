@@ -14,8 +14,7 @@ import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
-import { marksFor, queueSheet, sheetFor } from '../art/sheets';
-import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
+import { petFrameUrls, petLookFor, queuePetArt, type PetLook } from '../art/petLook';
 import { BRAKE, CLIMB, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
@@ -311,9 +310,7 @@ export class GameScene extends Phaser.Scene {
     if (t.skyImage && !this.textures.exists(`sky-${l.id}`)) this.load.image(`sky-${l.id}`, t.skyImage);
     for (const layer of t.layers) if (layer.src && !this.textures.exists(layer.key)) this.load.image(layer.key, layer.src);
     // the pet's painted sprites, if it has them
-    const pet = loadPet();
-    const sheet = sheetFor(pet);
-    if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
+    queuePetArt(this, loadPet());
     // the painted props and critters this level uses (anything without a file is painted in code)
     // (the tunnels have stones in them)
     queueArt(this, [...propKeys([...(Object.keys(l.obstacles) as ObstacleKind[]), ...(l.dig ? (['rock'] as ObstacleKind[]) : [])]), ...critterKeys(l)]);
@@ -2122,7 +2119,7 @@ export class GameScene extends Phaser.Scene {
     this.petSprite.play(this.look.anim);
     // one sprite per marking layer, kept in step with the pet (see syncMarks)
     this.petMarks.forEach((m) => m.destroy());
-    this.petMarks = this.look.marks.map((k) => this.add.sprite(this.petSprite.x, this.petSprite.y, k.run, 0).setOrigin(this.look.originX, 1).setDepth(2.01));
+    this.petMarks = this.look.marks.map((k, i) => this.add.sprite(this.petSprite.x, this.petSprite.y, k.run, 0).setOrigin(this.look.originX, 1).setDepth(2.01 + i * 0.001));
     this.syncMarks();
   }
 
@@ -2133,8 +2130,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Fetches the chosen pet's painted sprites if they aren't here yet, then switches to them. */
   private loadLook(): void {
-    const sheet = sheetFor(this.choice);
-    if (!sheet || !queueSheet(this, sheet, marksFor(sheet, this.choice))) return;
+    if (!queuePetArt(this, this.choice)) return;
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (!this.sys.isActive() || !this.petSprite?.active) return;
       this.applyPet();
@@ -2153,8 +2149,9 @@ export class GameScene extends Phaser.Scene {
       if (base === this.look.jump) m.setTexture(k.jump);
       else if (base === this.look.slide) m.setTexture(k.slide);
       else m.setTexture(k.run, sp.frame.name);
-      m.setPosition(sp.x, sp.y).setScale(sp.scaleX, sp.scaleY).setAngle(sp.angle).setFlipX(sp.flipX).setAlpha(sp.alpha).setVisible(sp.visible);
-      m.setTint(this.petDim ? dim(0xffffff) : 0xffffff);
+      m.setPosition(sp.x, sp.y).setScale(sp.scaleX, sp.scaleY).setAngle(sp.angle).setFlipX(sp.flipX).setAlpha(sp.alpha * (k.alpha ?? 1)).setVisible(sp.visible);
+      const tint = k.tint ?? 0xffffff;
+      m.setTint(this.petDim ? dim(tint) : tint);
     });
   }
 

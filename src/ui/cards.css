@@ -161,6 +161,8 @@
   padding: 0;
 }
 #ui .chip.coat.on { border: 4px solid var(--green); box-shadow: 0 0 0 2px #fff inset; }
+#ui .chip.coat.none { background: repeating-linear-gradient(45deg, #fff 0 4px, #e6ddcc 4px 8px); }
+#ui .coatname { font-weight: normal; font-size: 0.85em; color: var(--green); margin-left: 0.4em; }
 #ui .note { display: block; font-weight: normal; font-size: 0.82em; color: var(--green); margin-top: 0.2em; }
 
 /* Little running pet */

@@ -3,10 +3,9 @@ import { addDebugOverlay } from '../ui/debug';
 import { artFromFile, markArt, queueArt } from '../art/artFiles';
 import { LAWN_TOP, halfWidthAt, paintBonusArt } from '../art/bonusArt';
 import { artScale } from '../art/paint';
-import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
+import { petFrameUrls, petLookFor, queuePetArt, type PetLook } from '../art/petLook';
 import { SIZE_SCALE, loadPet, savePet, type PetChoice } from '../art/pets';
 import { paintTreats } from '../art/props';
-import { marksFor, queueSheet, sheetFor } from '../art/sheets';
 import * as sfx from '../audio/sfx';
 import { BONUS, GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../config';
 import { cap, displayName, loadHero } from '../hero/store';
@@ -354,9 +353,7 @@ export class BonusScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const pet = loadPet();
-    const sheet = sheetFor(pet);
-    if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
+    queuePetArt(this, loadPet());
     queueArt(this, ['ball', ...BONUS_TEXTURES]);
   }
 
@@ -462,6 +459,10 @@ export class BonusScene extends Phaser.Scene {
         this.choice = c;
         savePet(c);
         this.applyPet();
+        if (queuePetArt(this, c)) {
+          this.load.once(Phaser.Loader.Events.COMPLETE, () => this.sys.isActive() && this.applyPet());
+          this.load.start();
+        }
       },
       petFrames: (c) => petFrameUrls(this, c, this.frameCache),
       progress: () => this.progress,
@@ -616,7 +617,10 @@ export class BonusScene extends Phaser.Scene {
     this.petMarks.forEach((m, i) => {
       const k = look.marks[i];
       m.setTexture(k.run, sp.frame.name);
-      m.setPosition(sp.x, sp.y).setOrigin(ox, 1).setScale(sp.scaleX, sp.scaleY).setFlipX(sp.flipX).setDepth(p.y + 0.01);
+      m.setPosition(sp.x, sp.y).setOrigin(ox, 1).setScale(sp.scaleX, sp.scaleY).setFlipX(sp.flipX).setDepth(p.y + 0.01 + i * 0.001);
+      m.setAlpha(sp.alpha * (k.alpha ?? 1));
+      if (k.tint !== undefined) m.setTint(k.tint);
+      else m.clearTint();
     });
   }
 
