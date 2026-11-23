@@ -2,6 +2,7 @@ import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
 import { BONUS } from '../config';
+import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
 import { HeroError, LIVE, generateLive, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
@@ -440,6 +441,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
         </div>
         <div class="headbtns">
           <button class="btn ghost edit">${hero?.portrait ? 'Edit hero' : '✨ Make a hero portrait'}</button>
+          ${tutorialDone() ? '<button class="btn ghost tut">Replay tutorial</button>' : ''}
           <a class="shoplink" href="${shopUrl('home')}" target="_blank" rel="noopener">Put ${esc(name)} on a shirt →</a>
         </div>
       </div>
@@ -517,6 +519,10 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   r.querySelectorAll<HTMLButtonElement>('.bstop').forEach((b) => b.addEventListener('click', () => pickBonus(Number(b.dataset.after))));
   r.querySelector('.play')?.addEventListener('click', go);
   r.querySelector('.edit')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
+  r.querySelector('.tut')?.addEventListener('click', () => {
+    setTutorialDone(false);
+    host.play(1);
+  });
   // Tap the small hero picture to see the whole portrait; tap again to close it
   const medal = r.querySelector<HTMLButtonElement>('button.medal');
   medal?.addEventListener('click', () => {

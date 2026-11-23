@@ -19,6 +19,8 @@ import { BRAKE, CLIMB, DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PE
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
+import { addDebugOverlay } from '../ui/debug';
+import { setTutorialDone, tutorialDone } from '../tutorial';
 
 type State = 'ready' | 'playing' | 'over';
 type Rect = Phaser.GameObjects.Rectangle;
@@ -55,6 +57,19 @@ interface Greet {
   zone: Phaser.GameObjects.Ellipse;
   done: boolean;
 }
+
+/** The first-run tutorial on Level 1: what the player has to do at each stop. */
+type TutorialMove = 'tap' | 'down' | 'up';
+interface Tutorial {
+  step: number; // 0 = jump the fence, 1 = slide under the branch, 2 = call the pet back
+  want?: TutorialMove; // set while the game is held still, waiting for this move
+  ui?: Phaser.GameObjects.Container;
+  hand?: Phaser.GameObjects.Text;
+  since: number;
+}
+/** The obstacles the tutorial uses, in order, and how far ahead (px) each one stops the game. */
+const TUTORIAL_OBSTACLES: ObstacleKind[] = ['fence', 'branch'];
+const TUTORIAL_STOP_PX = 95;
 
 const SWIPE_PX = 30; // screen pixels
 /** Obstacle hit areas as a share of the picture (see addObstacle). */
@@ -222,6 +237,8 @@ export class GameScene extends Phaser.Scene {
   private holdTimer?: Phaser.Time.TimerEvent;
   private greet?: Greet;
   private standing = false;
+  private tut?: Tutorial;
+  private obstacleQueue: ObstacleKind[] = [];
 
   // Climbing sections
   private ledges: Ledge[] = [];
@@ -302,6 +319,8 @@ export class GameScene extends Phaser.Scene {
     this.holdTimer = undefined;
     this.greet = undefined;
     this.standing = false;
+    this.tut = undefined;
+    this.obstacleQueue = [];
     this.ledges = [];
     this.flats = [];
     this.onLedge = undefined;
@@ -393,6 +412,7 @@ export class GameScene extends Phaser.Scene {
     this.addPauseAndPaws();
     this.swipeArrow = this.makeSwipeArrow();
     this.setupInput();
+    addDebugOverlay(this, () => `speed ${this.speed.toFixed(0)} px/s  x${(this.speedFactor * this.brakeFactor).toFixed(2)} (distraction ${this.speedFactor.toFixed(2)}, brake ${this.brakeFactor.toFixed(2)})${this.braking ? ' BRAKING' : ''}${this.onLedge ? ' on-ledge' : ''}`);
 
     // First visit: make your hero. After that: meet your hero and pick a
     // level. Between runs: straight to "Tap to run".
@@ -578,6 +598,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.time.now - this.startedAt < 300) return; // the tap that pressed Start
     if (this.state === 'over') return;
+    if (!this.tutorialMove('tap')) return;
     if (this.chasing) {
       // A pet running the wrong way doesn't listen yet, but remember the jump
       // so it happens the moment the pet is called back.
@@ -602,6 +623,7 @@ export class GameScene extends Phaser.Scene {
 
   private onSwipeDown(): void {
     if (this.state !== 'playing' || this.paused) return;
+    if (!this.tutorialMove('down')) return;
     if (this.chasing) {
       this.pendingMove = { kind: 'slide', at: this.clock() };
       return;
@@ -640,6 +662,7 @@ export class GameScene extends Phaser.Scene {
 
   private onSwipeUp(): void {
     if (this.state !== 'playing' || this.paused) return;
+    if (!this.tutorialMove('up')) return;
     if (this.distraction) this.callBack();
   }
 
@@ -689,7 +712,13 @@ export class GameScene extends Phaser.Scene {
     this.heroBtn?.destroy();
     this.heroBtn = undefined;
     this.pauseBtn?.setVisible(true);
-    this.scheduleDistraction(DISTRACTION.firstAfterMs);
+    if (this.level.id === 1 && !tutorialDone()) {
+      // First run: the game stops at a fence, a branch and a squirrel to show each move
+      this.tut = { step: 0, since: 0 };
+      this.obstacleQueue = [...TUTORIAL_OBSTACLES];
+    } else {
+      this.scheduleDistraction(DISTRACTION.firstAfterMs);
+    }
   }
 
   private endRun(reason: string, won = false): void {
@@ -769,6 +798,10 @@ export class GameScene extends Phaser.Scene {
   // ---------- Main loop ----------
 
   update(_time: number, deltaMs: number): void {
+    if (this.tut?.want && this.state === 'playing') {
+      this.animateTutorial();
+      return;
+    }
     this.keepOnGround();
     this.alertText.setPosition(this.pet.x, this.pet.y - 62);
     this.swipeArrow.setPosition(this.pet.x + 46, this.pet.y - 66);
@@ -791,6 +824,7 @@ export class GameScene extends Phaser.Scene {
     this.distancePx += dx;
     this.moveLedges(dx);
     this.updateGreet(dx);
+    if (this.tut) this.checkTutorial();
 
     // Scroll the background layers; farther layers move slower. A layer's
     // factor is its share of the trail's speed on screen; tilePosition counts
@@ -990,6 +1024,8 @@ export class GameScene extends Phaser.Scene {
   // ---------- Obstacles, treats and the ball ----------
 
   private pickObstacle(): ObstacleKind {
+    const queued = this.obstacleQueue.shift();
+    if (queued) return queued;
     const entries = Object.entries(this.level.obstacles) as [ObstacleKind, number][];
     let roll = Math.random() * entries.reduce((s, [, w]) => s + w, 0);
     for (const [k, w] of entries) {
@@ -1017,6 +1053,8 @@ export class GameScene extends Phaser.Scene {
     // Gaps grow with speed so the game stays fair as it speeds up
     const scale = this.baseSpeed / this.level.speed.start;
     this.nextSpawnIn = Phaser.Math.Between(SPAWN.minGap, SPAWN.maxGap) * scale;
+    // The tutorial's last stop (calling the pet back) gets a clear stretch of trail
+    if (this.tut && !this.obstacleQueue.length) this.nextSpawnIn = 1800;
   }
 
   /** One obstacle on the trail at x, with its tree, poles or shadow. */
@@ -1283,6 +1321,106 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  // ---------- First-run tutorial ----------
+
+  /** Stops the game at the right moment for the next tutorial move. */
+  private checkTutorial(): void {
+    const t = this.tut!;
+    if (t.step < TUTORIAL_OBSTACLES.length) {
+      let near = false;
+      this.obstacles.children.each((c) => {
+        const o = c as Img;
+        const d = o.x - o.displayWidth / 2 - this.pet.x;
+        if (o.texture.key === TUTORIAL_OBSTACLES[t.step] && d > 0 && d < TUTORIAL_STOP_PX) near = true;
+        return true;
+      });
+      if (near) this.tutorialHold(t.step === 0 ? 'tap' : 'down');
+    } else if (!this.distraction && this.grounded && !this.sliding) {
+      this.startChase();
+      this.tutorialHold('up');
+    }
+  }
+
+  /** Holds the game still and shows the hand and the move to make. */
+  private tutorialHold(want: TutorialMove): void {
+    const t = this.tut!;
+    t.want = want;
+    t.since = performance.now();
+    this.physics.pause();
+    this.tweens.pauseAll();
+    this.time.paused = true;
+    this.petSprite.anims.pause();
+    const touch = this.sys.game.device.input.touch;
+    const words = {
+      tap: touch ? 'Tap anywhere to jump the fence!' : 'Press Space to jump the fence!',
+      down: touch ? 'Swipe down to slide under the branch!' : 'Press \u2193 to slide under the branch!',
+      up: touch ? 'Swipe up to call your pet back!' : 'Press \u2191 to call your pet back!',
+    }[want];
+    const ui = this.add.container(0, 0).setDepth(30);
+    const font = { fontFamily: 'Arial, sans-serif', fontStyle: 'bold', resolution: RENDER_SCALE };
+    const label = this.add
+      .text(GAME_WIDTH / 2, 150, words, { ...font, fontSize: '28px', color: '#fff8e8', backgroundColor: 'rgba(22,32,42,0.78)', padding: { x: 16, y: 9 } })
+      .setOrigin(0.5);
+    ui.add(label);
+    if (want !== 'tap') {
+      // a ghost arrow showing the swipe
+      const g = this.add.graphics();
+      const x = 640;
+      const [y0, y1] = want === 'down' ? [240, 380] : [380, 240];
+      const dir = Math.sign(y1 - y0);
+      g.lineStyle(14, 0xffffff, 0.35).lineBetween(x, y0, x, y1 - dir * 18);
+      g.fillStyle(0xffffff, 0.45).fillTriangle(x, y1 + dir * 10, x - 24, y1 - dir * 22, x + 24, y1 - dir * 22);
+      ui.add(g);
+    }
+    t.hand = this.add.text(640, 300, '\u{1F446}', { fontSize: '64px', resolution: RENDER_SCALE }).setOrigin(0.3, 0.1);
+    ui.add(t.hand);
+    t.ui = ui;
+  }
+
+  /** The hand taps or swipes over and over while the game waits. */
+  private animateTutorial(): void {
+    const t = this.tut!;
+    const hand = t.hand;
+    if (!hand) return;
+    const ms = performance.now() - t.since;
+    if (t.want === 'tap') {
+      const k = (ms % 900) / 900;
+      const press = k < 0.25 ? k / 0.25 : k < 0.45 ? 1 : Math.max(0, 1 - (k - 0.45) / 0.3);
+      hand.setPosition(640, 300 + press * 14).setScale(1 - press * 0.12);
+    } else {
+      const k = (ms % 1100) / 1100;
+      const [y0, y1] = t.want === 'down' ? [230, 370] : [370, 230];
+      hand.setPosition(640, y0 + (y1 - y0) * Math.min(1, k / 0.7)).setAlpha(k < 0.85 ? 1 : 1 - (k - 0.85) / 0.15);
+    }
+  }
+
+  /**
+   * During the tutorial only the move it asks for works, and it lets the game
+   * go on. Returns false when the move should be ignored.
+   */
+  private tutorialMove(move: TutorialMove): boolean {
+    const t = this.tut;
+    if (!t?.want) return true;
+    if (t.want !== move) return false;
+    t.ui?.destroy();
+    t.ui = undefined;
+    t.hand = undefined;
+    t.want = undefined;
+    this.physics.resume();
+    this.tweens.resumeAll();
+    this.time.paused = false;
+    this.petSprite.anims.resume();
+    t.step += 1;
+    if (t.step > TUTORIAL_OBSTACLES.length) {
+      // all done: from here on it's a normal run
+      this.tut = undefined;
+      setTutorialDone(true);
+      this.time.delayedCall(900, () => this.toast('You\u2019re ready. Fetch that ball!', this.darkSky ? '#fff8e8' : '#1d2b1f'));
+      this.scheduleDistraction(DISTRACTION.firstAfterMs);
+    }
+    return true;
+  }
+
   // ---------- A neighbor with a treat ----------
 
   /** A neighbor stands by the trail holding out a treat. Hold to stop next to them and the pet gets it. */
@@ -1519,7 +1657,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Shows a one-time tip the first time each thing appears in a run. */
   private hint(key: string, text: string): void {
-    if (this.shownHints.has(key)) return;
+    if (this.tut || this.shownHints.has(key)) return;
     this.shownHints.add(key);
     this.toast(text, this.darkSky ? '#fff8e8' : '#1d2b1f');
   }
@@ -1690,7 +1828,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private pause(): void {
-    if (this.state !== 'playing' || this.paused) return;
+    if (this.state !== 'playing' || this.paused || this.tut?.want) return;
     this.paused = true;
     this.physics.pause();
     this.tweens.pauseAll();

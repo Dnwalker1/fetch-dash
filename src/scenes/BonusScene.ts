@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { addDebugOverlay } from '../ui/debug';
 import { artFromFile, markArt, queueArt } from '../art/artFiles';
 import { LAWN_TOP, halfWidthAt, paintBonusArt } from '../art/bonusArt';
 import { artScale } from '../art/paint';
@@ -402,6 +403,7 @@ export class BonusScene extends Phaser.Scene {
     this.trailG = this.add.graphics().setDepth(-4);
     this.aimG = this.add.graphics().setDepth(HUD - 10);
     this.stickG = this.add.graphics().setDepth(HUD - 9);
+    addDebugOverlay(this, () => `pet ${Math.hypot(this.pet.vx, this.pet.vy).toFixed(0)} px/s  ${this.stick ? 'stick' : this.steer ? 'point' : ''}  ${this.phase}`);
 
     // The sprinkler, and its spray (an oscillating fan of drops)
     const sp = BONUS.sprinkler;
