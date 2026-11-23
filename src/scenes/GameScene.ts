@@ -9,13 +9,14 @@ import { artBox, markArt, queueArt } from '../art/artFiles';
 import { GROUND_COL, GROUND_TILE, GROUND_TOP, paintGround } from '../art/ground';
 import { FG_H, FG_SPEED, paintForeground } from '../art/foreground';
 import { LEDGE_H, ledgeTexture, pillarTexture } from '../art/ledges';
+import { TUNNEL_CEILING, paintDigSpot, paintRoots, paintTunnel } from '../art/tunnel';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
 import { marksFor, queueSheet, sheetFor } from '../art/sheets';
 import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
-import { BRAKE, CLIMB, DISTRACTION, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
+import { BRAKE, CLIMB, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
@@ -247,6 +248,13 @@ export class GameScene extends Phaser.Scene {
   private nextClimbAt = Infinity;
   private flats: { from: number; to: number }[] = [];
 
+  // Dig spots and tunnels
+  private nextDigAt = Infinity;
+  private digSpot?: { img: Img; label: Phaser.GameObjects.Text; done: boolean };
+  private tunnel?: { endAt: number; strip: Phaser.GameObjects.TileSprite; golden: boolean };
+  private fgLayer?: Phaser.GameObjects.TileSprite;
+  private skyIsDark = false;
+
   private distraction?: Distraction;
   private returning = false;
   // A jump or slide pressed while the pet was turned around; done right after the call-back
@@ -284,7 +292,8 @@ export class GameScene extends Phaser.Scene {
     const sheet = sheetFor(pet);
     if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
     // the painted props and critters this level uses (anything without a file is painted in code)
-    queueArt(this, [...propKeys(Object.keys(l.obstacles) as ObstacleKind[]), ...critterKeys(l)]);
+    // (the tunnels have stones in them)
+    queueArt(this, [...propKeys([...(Object.keys(l.obstacles) as ObstacleKind[]), ...(l.dig ? (['rock'] as ObstacleKind[]) : [])]), ...critterKeys(l)]);
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
@@ -324,6 +333,10 @@ export class GameScene extends Phaser.Scene {
     this.ledges = [];
     this.flats = [];
     this.onLedge = undefined;
+    this.nextDigAt = this.level.dig ? this.level.dig.firstM * SCORE.pixelsPerMeter : Infinity;
+    this.digSpot = undefined;
+    this.tunnel = undefined;
+    this.fgLayer = undefined;
     this.nextClimbAt = this.level.climb ? this.level.climb.firstM * SCORE.pixelsPerMeter : Infinity;
 
     // Painted props go first; the flat-shape art fills in whatever they don't cover.
@@ -354,7 +367,7 @@ export class GameScene extends Phaser.Scene {
     }
     // Close-up grass (or shells, snow, the pier rail) sliding by in front, below the trail
     const fg = paintForeground(this, this.level.id, this.level.theme);
-    if (fg) this.addLayer(fg, GAME_HEIGHT - FG_H, FG_H, FG_SPEED).setDepth(2.5).setTileScale(artScale(this, fg));
+    if (fg) this.fgLayer = this.addLayer(fg, GAME_HEIGHT - FG_H, FG_H, FG_SPEED).setDepth(2.5).setTileScale(artScale(this, fg));
 
     // Pet: an invisible box does the physics, and the pet sprite is drawn on top of it
     const gy = this.groundAt(PET.homeX);
@@ -381,6 +394,7 @@ export class GameScene extends Phaser.Scene {
     const top = this.level.theme.skyTop;
     const dark = ((top >> 16) & 255) * 0.3 + ((top >> 8) & 255) * 0.59 + (top & 255) * 0.11 < 120;
     this.darkSky = dark;
+    this.skyIsDark = dark;
     this.scoreText = this.add
       .text(20, 16, '', { ...font, fontSize: '24px', fontStyle: 'bold', color: dark ? '#fff8e8' : '#1d2b1f' })
       .setDepth(10)
@@ -824,6 +838,7 @@ export class GameScene extends Phaser.Scene {
     this.distancePx += dx;
     this.moveLedges(dx);
     this.updateGreet(dx);
+    this.updateDig(dx);
     if (this.tut) this.checkTutorial();
 
     // Scroll the background layers; farther layers move slower. A layer's
@@ -921,6 +936,11 @@ export class GameScene extends Phaser.Scene {
       }
     } else {
       this.grounded = false;
+    }
+    // In a tunnel the pet bumps its head on the ceiling instead of jumping higher
+    if (this.tunnel && b.y < TUNNEL_CEILING) {
+      b.y = TUNNEL_CEILING;
+      if (b.velocity.y < 0) b.velocity.y = 0;
     }
     this.prevBottom = b.bottom;
   }
@@ -1038,6 +1058,14 @@ export class GameScene extends Phaser.Scene {
   private spawnNext(): void {
     const x = GAME_WIDTH + 60;
     const remainingPx = this.level.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
+    if (this.tunnel) {
+      this.spawnInTunnel(x);
+      return;
+    }
+    if (this.distancePx >= this.nextDigAt && remainingPx > CLIMB.clearEndPx + TUNNEL.lengthPx) {
+      this.spawnDigSpot(x);
+      return;
+    }
     if (this.distancePx >= this.nextClimbAt && remainingPx > CLIMB.clearEndPx) {
       // A climbing section instead of the next obstacle
       const span = this.spawnClimb(x);
@@ -1163,10 +1191,12 @@ export class GameScene extends Phaser.Scene {
   private collectTreat(t: Img): void {
     if (!t.active) return;
     this.treatPop(t.x, t.y);
-    if (t.getData('golden')) {
-      // the golden treat at the top of a climb
-      this.bonus += CLIMB.goldenBonus;
-      this.toast(`Top of the climb! +${CLIMB.goldenBonus}`, '#b8860b');
+    const golden = t.getData('golden') as number | boolean | undefined;
+    if (golden) {
+      // the golden treat at the top of a climb or the end of a tunnel
+      const pts = typeof golden === 'number' ? golden : CLIMB.goldenBonus;
+      this.bonus += pts;
+      this.toast(`${this.tunnel ? 'Buried treasure!' : 'Top of the climb!'} +${pts}`, '#b8860b');
       sfx.ding();
     } else {
       this.treatCount += 1;
@@ -1206,7 +1236,7 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.scheduleTimer = this.time.delayedCall(delayMs, () => {
       if (this.state !== 'playing') return;
-      if (!this.distraction && (this.obstacleAhead() || this.greet || this.ledges.length || this.braking)) {
+      if (!this.distraction && (this.obstacleAhead() || this.greet || this.ledges.length || this.braking || this.digSpot || this.tunnel)) {
         // Wait until the pet has cleared what's coming, so a distraction
         // never lands right on top of a fence or branch.
         this.scheduleDistraction(DISTRACTION.retryMs);
@@ -1560,6 +1590,153 @@ export class GameScene extends Phaser.Scene {
     }
     this.hint('climb', 'Jump up the ledges for treats!');
     return span;
+  }
+
+  // ---------- Dig spots and tunnels ----------
+
+  /** Loose dirt on the trail with a bone poking out. Slide on it to dig into a tunnel. */
+  private spawnDigSpot(x: number): void {
+    const key = paintDigSpot(this, this.level.theme.dirt);
+    const img = this.art(this.add.image(x, this.groundAt(x) + 6, key).setOrigin(0.5, 1).setDepth(1.02));
+    const touch = this.sys.game.device.input.touch;
+    const label = this.add
+      .text(x, 0, touch ? 'Swipe down to dig!' : 'Press \u2193 to dig!', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '17px',
+        fontStyle: 'bold',
+        color: '#fff8e8',
+        backgroundColor: 'rgba(110,70,30,0.88)',
+        padding: { x: 7, y: 3 },
+        resolution: RENDER_SCALE,
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(10);
+    this.digSpot = { img, label, done: false };
+    const k = Math.max(1, this.baseSpeed / 300);
+    // flat ground from the spot through the whole tunnel
+    this.flats.push({ from: this.distancePx + x - 200, to: this.distancePx + x + (TUNNEL.lengthPx + 900) * k });
+    this.nextSpawnIn = 900 * k; // a clear stretch after the spot
+    const d = this.level.dig!;
+    this.nextDigAt = this.distancePx + Phaser.Math.Between(d.everyM[0], d.everyM[1]) * SCORE.pixelsPerMeter;
+    this.hint('dig', touch ? 'A dig spot! Swipe down on it to dig in' : 'A dig spot! Press \u2193 on it to dig in');
+  }
+
+  private updateDig(dx: number): void {
+    const s = this.digSpot;
+    if (s) {
+      s.img.x -= dx;
+      s.label.setPosition(s.img.x, s.img.y - s.img.displayHeight - 4 + Math.sin(performance.now() / 130) * 3);
+      if (!s.done && this.sliding && this.grounded && Math.abs(s.img.x - this.pet.x) < TUNNEL.digReach) this.enterTunnel();
+      if (s.img.x < -80) {
+        s.img.destroy();
+        s.label.destroy();
+        this.digSpot = undefined;
+      }
+    }
+    const t = this.tunnel;
+    if (t) {
+      t.strip.tilePositionX += dx / t.strip.tileScaleX;
+      if (this.distancePx >= t.endAt) this.exitTunnel();
+    }
+  }
+
+  /** Down the hole: a quick fade, then the run goes on underground. */
+  private enterTunnel(): void {
+    const s = this.digSpot!;
+    s.done = true;
+    s.label.setVisible(false);
+    this.dust(10);
+    sfx.slide();
+    const k = Math.max(1, this.baseSpeed / 300);
+    const cam = this.cameras.main;
+    cam.fadeOut(150, 40, 26, 14);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      if (this.state !== 'playing') return;
+      const key = paintTunnel(this);
+      const strip = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, key).setOrigin(0, 0).setDepth(0.92).setTileScale(artScale(this, key));
+      this.tunnel = { endAt: this.distancePx + TUNNEL.lengthPx * k, strip, golden: false };
+      // what was on the trail stays up there (and its treats don't count against the treat star)
+      this.treats.children.each((c) => {
+        if (!(c as Img).getData('golden')) this.treatsSpawned -= 1;
+        return true;
+      });
+      for (const g of [this.obstacles, this.treats, this.decor]) g.clear(true, true);
+      this.fgLayer?.setVisible(false);
+      this.weather.forEach((w) => w.setVisible(false));
+      this.setHudDark(true);
+      this.nextSpawnIn = 300;
+      cam.fadeIn(220, 40, 26, 14);
+      this.toast('Digging in! Bones down here', '#fff8e8');
+      this.hint('tunnel', 'Jump the stones, slide under the roots');
+    });
+  }
+
+  /** Light text over a dark background (a night sky or a tunnel), dark text over a light one. */
+  private setHudDark(dark: boolean): void {
+    this.darkSky = dark;
+    this.scoreText.setColor(dark ? '#fff8e8' : '#1d2b1f').setShadow(0, 2, dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.5)', 0);
+  }
+
+  /** Out of the hole and back on the trail. */
+  private exitTunnel(): void {
+    const t = this.tunnel!;
+    this.tunnel = undefined;
+    const cam = this.cameras.main;
+    cam.fadeOut(150, 40, 26, 14);
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      t.strip.destroy();
+      for (const g of [this.obstacles, this.decor]) g.clear(true, true);
+      this.fgLayer?.setVisible(true);
+      this.weather.forEach((w) => w.setVisible(true));
+      this.setHudDark(this.skyIsDark);
+      cam.fadeIn(220, 40, 26, 14);
+      this.dust(10);
+      this.toast('Back on the trail!', this.darkSky ? '#fff8e8' : '#1d2b1f');
+    });
+  }
+
+  /** Underground: stones to jump, roots to slide under, and lines of buried bones. */
+  private spawnInTunnel(x: number): void {
+    const t = this.tunnel!;
+    const k = Math.max(1, this.baseSpeed / 300);
+    const left = t.endAt - (this.distancePx + x - this.pet.x);
+    if (left < TUNNEL.clearEndPx * k) {
+      this.nextSpawnIn = 200;
+      if (!t.golden) {
+        t.golden = true;
+        this.addTreat(x, this.groundAt(x) - 30, true);
+      }
+      return;
+    }
+    if (Math.random() < 0.5) {
+      this.placeObstacle(x, 'rock');
+    } else {
+      const key = paintRoots(this);
+      const h = (this.textures.get(key).getSourceImage() as HTMLCanvasElement).height / resOf(this, key);
+      this.addObstacle(x, TUNNEL_CEILING - 6 + h / 2, key);
+      this.hint('roots', 'Swipe down to slide under the roots!');
+    }
+    // a line of bones, low or in a little arc
+    const arc = Math.random() < 0.5;
+    for (let i = 0; i < 4; i++) {
+      const tx = x + 200 * k + i * 45;
+      this.addTreat(tx, this.groundAt(tx) - 30 - (arc ? Math.sin((i / 3) * Math.PI) * 45 : 0));
+    }
+    this.nextSpawnIn = Phaser.Math.Between(TUNNEL.gap[0], TUNNEL.gap[1]) * k;
+  }
+
+  private addTreat(x: number, y: number, golden = false): void {
+    const t = this.art(this.add.image(x, y, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1.1), golden ? 1.5 : 1);
+    if (golden) {
+      t.setTint(0xffd24a).setData('golden', TUNNEL.goldenBonus);
+      this.tweens.add({ targets: t, angle: { from: -10, to: 10 }, duration: 400, yoyo: true, repeat: -1 });
+    } else {
+      this.treatsSpawned += 1;
+    }
+    this.treats.add(t);
+    const body = t.body as Body;
+    body.setAllowGravity(false);
+    body.setVelocityX(-this.speed);
   }
 
   /** Ledges and their pillars move with the trail (by hand: they're wider than the usual clean-up allows). */

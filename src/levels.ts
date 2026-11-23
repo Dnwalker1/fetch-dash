@@ -95,6 +95,8 @@ export interface LevelDef {
    * `firstM` meters, then one every `everyM` meters.
    */
   climb?: { style: LedgeStyle; firstM: number; everyM: [number, number] };
+  /** Dig spots that lead into a tunnel: the first after `firstM` meters, then one every `everyM`. */
+  dig?: { firstM: number; everyM: [number, number] };
   theme: Theme;
 }
 
@@ -247,6 +249,7 @@ export const LEVELS: LevelDef[] = [
     dogChaser: 'frog',
     catChaser: 'frog',
     gawk: ['duck', 'den'],
+    dig: { firstM: 150, everyM: [380, 460] },
     theme: {
       skyTop: 0x7d8a99,
       skyBottom: 0xc9d3d9,
@@ -384,6 +387,7 @@ export const LEVELS: LevelDef[] = [
     dogChaser: 'chicken',
     catChaser: 'mouse',
     gawk: ['bird', 'person', 'butterfly'],
+    dig: { firstM: 200, everyM: [420, 520] },
     theme: {
       skyTop: 0x6ec4ff,
       skyBottom: 0xe8f6ff,

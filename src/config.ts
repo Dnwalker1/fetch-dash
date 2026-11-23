@@ -102,6 +102,20 @@ export const CLIMB = {
   flatRamp: 260, // px over which the hills ease flat before a section and back after it
 };
 
+/**
+ * Dig-and-tunnel sections (levels with `dig`): a dig spot on the trail; swipe
+ * down on it to dig into a tunnel with stones to jump, roots to slide under and
+ * buried bones, then pop back out. Lengths are in px at 300 px/s and stretch
+ * with the run's speed.
+ */
+export const TUNNEL = {
+  digReach: 60, // how close (px) to the spot the slide has to start
+  lengthPx: 2600, // how long the tunnel runs
+  clearEndPx: 700, // nothing new in the tunnel's last stretch, so you pop out onto a clear trail
+  gap: [380, 620] as [number, number], // between things in the tunnel
+  goldenBonus: 100,
+};
+
 export const SCORE = {
   treat: 10,
   pixelsPerMeter: 40,
