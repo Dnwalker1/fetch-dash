@@ -1,0 +1,1595 @@
+{
+ "version": 1,
+ "cell": {
+  "run": {
+   "frameWidth": 189,
+   "frameHeight": 112,
+   "frames": 8,
+   "frameRate": 16,
+   "repeat": -1,
+   "order": [
+    "extend",
+    "front-land",
+    "contact",
+    "gather-a",
+    "gather-b",
+    "push",
+    "back-drive",
+    "reach"
+   ]
+  },
+  "jump": {
+   "width": 176,
+   "height": 150
+  },
+  "slide": {
+   "width": 198,
+   "height": 79
+  }
+ },
+ "render": {
+  "res": 2,
+  "fit": 1.15,
+  "scale": 0.575,
+  "originX": 0.66,
+  "originY": 1,
+  "sizeScale": {
+   "small": 0.8,
+   "medium": 1,
+   "large": 1.2
+  },
+  "tintMode": "Phaser setTint (multiply)"
+ },
+ "files": {
+  "path": "public/art/pets/<breed>/<layer>-<state>.webp",
+  "png": "same name with .png",
+  "key": "pet-<breed>-<layer>-<state>",
+  "runAnimKey": "pet-<breed>-coat-run (or coat-black-run / coat-light-run, whichever is the first layer of the coat)"
+ },
+ "stackOrder": [
+  "body layers of the coat, in recipe order (coat or coat-black or coat-light first, then marks, then patterns)",
+  "shape-variant layers for each variant group, one per body layer of the coat, same tint and alpha, in the same order",
+  "feature marks (Lab: mark-tailtip, mark-muzzle)",
+  "acc-bandana (tinted)",
+  "detail (eyes and nose, never tinted)"
+ ],
+ "shapeLayerNaming": {
+  "coat": "<group>-<option>",
+  "coat-black": "<group>-<option>-black",
+  "coat-light": "<group>-<option>-light",
+  "mark-<m>": "<group>-<option>-mark-<m>"
+ },
+ "bandana": {
+  "layer": "acc-bandana",
+  "colors": {
+   "red": "#C8362E",
+   "blue": "#2F6FB5",
+   "green": "#3E8E4E",
+   "yellow": "#E3B23C",
+   "purple": "#7A4FA8",
+   "pink": "#E07AA6"
+  },
+  "note": "one tintable sheet per breed and state, fitted to that breed and frame"
+ },
+ "features": {
+  "tailtip": {
+   "layer": "mark-tailtip",
+   "tint": "#F4EFE6",
+   "breeds": [
+    "lab"
+   ]
+  },
+  "muzzle": {
+   "layer": "mark-muzzle",
+   "tint": "#D9D3CA",
+   "breeds": [
+    "lab"
+   ]
+  }
+ },
+ "chewy": {
+  "default": true,
+  "layered": false,
+  "dir": "art/pets/chewy/",
+  "keys": [
+   "pet-chewy-run",
+   "pet-chewy-jump",
+   "pet-chewy-slide"
+  ]
+ },
+ "breeds": [
+  {
+   "id": "lab",
+   "label": "Lab",
+   "name": "Labrador Retriever",
+   "dir": "art/pets/lab/",
+   "defaultCoat": "yellow",
+   "coats": {
+    "yellow": [
+     {
+      "layer": "coat",
+      "tint": "#FFD192"
+     }
+    ],
+    "black": [
+     {
+      "layer": "coat-black"
+     }
+    ],
+    "chocolate": [
+     {
+      "layer": "coat",
+      "tint": "#7E5034"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "yellow": "#FFD192",
+    "black": "#2B2724",
+    "chocolate": "#7E5034"
+   },
+   "variants": {},
+   "features": {
+    "bandana": true,
+    "tailtip": true,
+    "muzzle": true
+   },
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "coat-black",
+    "detail",
+    "mark-muzzle",
+    "mark-tailtip"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-lab-acc-bandana-run",
+     "jump": "pet-lab-acc-bandana-jump",
+     "slide": "pet-lab-acc-bandana-slide"
+    },
+    "coat": {
+     "run": "pet-lab-coat-run",
+     "jump": "pet-lab-coat-jump",
+     "slide": "pet-lab-coat-slide"
+    },
+    "coat-black": {
+     "run": "pet-lab-coat-black-run",
+     "jump": "pet-lab-coat-black-jump",
+     "slide": "pet-lab-coat-black-slide"
+    },
+    "detail": {
+     "run": "pet-lab-detail-run",
+     "jump": "pet-lab-detail-jump",
+     "slide": "pet-lab-detail-slide"
+    },
+    "mark-muzzle": {
+     "run": "pet-lab-mark-muzzle-run",
+     "jump": "pet-lab-mark-muzzle-jump",
+     "slide": "pet-lab-mark-muzzle-slide"
+    },
+    "mark-tailtip": {
+     "run": "pet-lab-mark-tailtip-run",
+     "jump": "pet-lab-mark-tailtip-jump",
+     "slide": "pet-lab-mark-tailtip-slide"
+    }
+   },
+   "exampleStack": {
+    "coat": "yellow",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#FFD192"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      182.0,
+      49.0
+     ],
+     [
+      187.0,
+      47.0
+     ],
+     [
+      188.0,
+      47.5
+     ],
+     [
+      187.0,
+      47.0
+     ],
+     [
+      187.0,
+      44.5
+     ],
+     [
+      187.0,
+      46.0
+     ],
+     [
+      181.0,
+      50.5
+     ],
+     [
+      184.0,
+      51.0
+     ]
+    ],
+    "noseJump": [
+     174.0,
+     49.5
+    ],
+    "noseSlide": [
+     188.0,
+     26.0
+    ],
+    "eyeRunPerFrame": [
+     [
+      165,
+      41
+     ],
+     [
+      170,
+      38
+     ],
+     [
+      171,
+      39
+     ],
+     [
+      171,
+      37
+     ],
+     [
+      170,
+      35
+     ],
+     [
+      170,
+      37
+     ],
+     [
+      164,
+      42
+     ],
+     [
+      167,
+      42
+     ]
+    ]
+   },
+   "alignment": {
+    "runNoseYRange": 6.5,
+    "runBottomGap": [
+     2,
+     0,
+     2,
+     1,
+     1,
+     0,
+     0,
+     3
+    ],
+    "runRightGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 0
+   }
+  },
+  {
+   "id": "gsd",
+   "label": "Shepherd",
+   "name": "German Shepherd",
+   "dir": "art/pets/gsd/",
+   "defaultCoat": "black-and-tan",
+   "coats": {
+    "black-and-tan": [
+     {
+      "layer": "coat",
+      "tint": "#C98A4B"
+     },
+     {
+      "layer": "mark-saddle",
+      "tint": "#4A4548"
+     }
+    ],
+    "sable": [
+     {
+      "layer": "coat",
+      "tint": "#C29560"
+     },
+     {
+      "layer": "mark-saddle-light",
+      "tint": "#5E4A38",
+      "alpha": 0.9
+     }
+    ],
+    "black": [
+     {
+      "layer": "coat-black"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "black-and-tan": "#C98A4B",
+    "sable": "#C29560",
+    "black": "#2B2724"
+   },
+   "variants": {
+    "ears": {
+     "default": "up",
+     "options": [
+      "up",
+      "soft"
+     ]
+    }
+   },
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "coat-black",
+    "detail",
+    "ears-soft",
+    "ears-soft-black",
+    "ears-soft-mark-saddle",
+    "ears-soft-mark-saddle-light",
+    "ears-up",
+    "ears-up-black",
+    "ears-up-mark-saddle",
+    "ears-up-mark-saddle-light",
+    "mark-saddle",
+    "mark-saddle-light"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-gsd-acc-bandana-run",
+     "jump": "pet-gsd-acc-bandana-jump",
+     "slide": "pet-gsd-acc-bandana-slide"
+    },
+    "coat": {
+     "run": "pet-gsd-coat-run",
+     "jump": "pet-gsd-coat-jump",
+     "slide": "pet-gsd-coat-slide"
+    },
+    "coat-black": {
+     "run": "pet-gsd-coat-black-run",
+     "jump": "pet-gsd-coat-black-jump",
+     "slide": "pet-gsd-coat-black-slide"
+    },
+    "detail": {
+     "run": "pet-gsd-detail-run",
+     "jump": "pet-gsd-detail-jump",
+     "slide": "pet-gsd-detail-slide"
+    },
+    "ears-soft": {
+     "run": "pet-gsd-ears-soft-run",
+     "jump": "pet-gsd-ears-soft-jump",
+     "slide": "pet-gsd-ears-soft-slide"
+    },
+    "ears-soft-black": {
+     "run": "pet-gsd-ears-soft-black-run",
+     "jump": "pet-gsd-ears-soft-black-jump",
+     "slide": "pet-gsd-ears-soft-black-slide"
+    },
+    "ears-soft-mark-saddle": {
+     "run": "pet-gsd-ears-soft-mark-saddle-run",
+     "jump": "pet-gsd-ears-soft-mark-saddle-jump",
+     "slide": "pet-gsd-ears-soft-mark-saddle-slide"
+    },
+    "ears-soft-mark-saddle-light": {
+     "run": "pet-gsd-ears-soft-mark-saddle-light-run",
+     "jump": "pet-gsd-ears-soft-mark-saddle-light-jump",
+     "slide": "pet-gsd-ears-soft-mark-saddle-light-slide"
+    },
+    "ears-up": {
+     "run": "pet-gsd-ears-up-run",
+     "jump": "pet-gsd-ears-up-jump",
+     "slide": "pet-gsd-ears-up-slide"
+    },
+    "ears-up-black": {
+     "run": "pet-gsd-ears-up-black-run",
+     "jump": "pet-gsd-ears-up-black-jump",
+     "slide": "pet-gsd-ears-up-black-slide"
+    },
+    "ears-up-mark-saddle": {
+     "run": "pet-gsd-ears-up-mark-saddle-run",
+     "jump": "pet-gsd-ears-up-mark-saddle-jump",
+     "slide": "pet-gsd-ears-up-mark-saddle-slide"
+    },
+    "ears-up-mark-saddle-light": {
+     "run": "pet-gsd-ears-up-mark-saddle-light-run",
+     "jump": "pet-gsd-ears-up-mark-saddle-light-jump",
+     "slide": "pet-gsd-ears-up-mark-saddle-light-slide"
+    },
+    "mark-saddle": {
+     "run": "pet-gsd-mark-saddle-run",
+     "jump": "pet-gsd-mark-saddle-jump",
+     "slide": "pet-gsd-mark-saddle-slide"
+    },
+    "mark-saddle-light": {
+     "run": "pet-gsd-mark-saddle-light-run",
+     "jump": "pet-gsd-mark-saddle-light-jump",
+     "slide": "pet-gsd-mark-saddle-light-slide"
+    }
+   },
+   "exampleStack": {
+    "coat": "black-and-tan",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#C98A4B"
+     },
+     {
+      "layer": "mark-saddle",
+      "tint": "#4A4548"
+     },
+     {
+      "layer": "ears-up",
+      "tint": "#C98A4B"
+     },
+     {
+      "layer": "ears-up-mark-saddle",
+      "tint": "#4A4548"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      179.0,
+      45.5
+     ],
+     [
+      187.0,
+      43.0
+     ],
+     [
+      187.0,
+      42.0
+     ],
+     [
+      187.0,
+      45.5
+     ],
+     [
+      187.0,
+      45.5
+     ],
+     [
+      181.0,
+      40.5
+     ],
+     [
+      181.0,
+      42.5
+     ],
+     [
+      185.0,
+      41.5
+     ]
+    ],
+    "noseJump": [
+     174.0,
+     47.5
+    ],
+    "noseSlide": [
+     190.0,
+     34.5
+    ],
+    "eyeRunPerFrame": [
+     [
+      161,
+      35
+     ],
+     [
+      170,
+      31
+     ],
+     [
+      170,
+      31
+     ],
+     [
+      170,
+      33
+     ],
+     [
+      170,
+      33
+     ],
+     [
+      164,
+      28
+     ],
+     [
+      163,
+      32
+     ],
+     [
+      168,
+      30
+     ]
+    ]
+   },
+   "alignment": {
+    "runNoseYRange": 5.0,
+    "runBottomGap": [
+     0,
+     1,
+     1,
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    "runRightGap": [
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     1
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 0
+   }
+  },
+  {
+   "id": "collie",
+   "label": "Collie",
+   "name": "Border Collie",
+   "dir": "art/pets/collie/",
+   "defaultCoat": "black-white",
+   "coats": {
+    "black-white": [
+     {
+      "layer": "coat",
+      "tint": "#F6EFE6"
+     },
+     {
+      "layer": "mark-black",
+      "tint": "#4A4548"
+     }
+    ],
+    "red-white": [
+     {
+      "layer": "coat",
+      "tint": "#F6EFE6"
+     },
+     {
+      "layer": "mark-black",
+      "tint": "#D99A63"
+     }
+    ],
+    "blue-merle": [
+     {
+      "layer": "coat",
+      "tint": "#F3EFEA"
+     },
+     {
+      "layer": "mark-black-light",
+      "tint": "#9CA3AE"
+     },
+     {
+      "layer": "mark-merle",
+      "tint": "#4A4548"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "black-white": "#F6EFE6",
+    "red-white": "#F6EFE6",
+    "blue-merle": "#F3EFEA"
+   },
+   "variants": {
+    "ears": {
+     "default": "tipped",
+     "options": [
+      "tipped",
+      "prick",
+      "drop"
+     ]
+    }
+   },
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "detail",
+    "ears-drop",
+    "ears-drop-mark-black",
+    "ears-drop-mark-black-light",
+    "ears-drop-mark-merle",
+    "ears-prick",
+    "ears-prick-mark-black",
+    "ears-prick-mark-black-light",
+    "ears-prick-mark-merle",
+    "ears-tipped",
+    "ears-tipped-mark-black",
+    "ears-tipped-mark-black-light",
+    "ears-tipped-mark-merle",
+    "mark-black",
+    "mark-black-light",
+    "mark-merle"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-collie-acc-bandana-run",
+     "jump": "pet-collie-acc-bandana-jump",
+     "slide": "pet-collie-acc-bandana-slide"
+    },
+    "coat": {
+     "run": "pet-collie-coat-run",
+     "jump": "pet-collie-coat-jump",
+     "slide": "pet-collie-coat-slide"
+    },
+    "detail": {
+     "run": "pet-collie-detail-run",
+     "jump": "pet-collie-detail-jump",
+     "slide": "pet-collie-detail-slide"
+    },
+    "ears-drop": {
+     "run": "pet-collie-ears-drop-run",
+     "jump": "pet-collie-ears-drop-jump",
+     "slide": "pet-collie-ears-drop-slide"
+    },
+    "ears-drop-mark-black": {
+     "run": "pet-collie-ears-drop-mark-black-run",
+     "jump": "pet-collie-ears-drop-mark-black-jump",
+     "slide": "pet-collie-ears-drop-mark-black-slide"
+    },
+    "ears-drop-mark-black-light": {
+     "run": "pet-collie-ears-drop-mark-black-light-run",
+     "jump": "pet-collie-ears-drop-mark-black-light-jump",
+     "slide": "pet-collie-ears-drop-mark-black-light-slide"
+    },
+    "ears-drop-mark-merle": {
+     "run": "pet-collie-ears-drop-mark-merle-run",
+     "jump": "pet-collie-ears-drop-mark-merle-jump",
+     "slide": "pet-collie-ears-drop-mark-merle-slide"
+    },
+    "ears-prick": {
+     "run": "pet-collie-ears-prick-run",
+     "jump": "pet-collie-ears-prick-jump",
+     "slide": "pet-collie-ears-prick-slide"
+    },
+    "ears-prick-mark-black": {
+     "run": "pet-collie-ears-prick-mark-black-run",
+     "jump": "pet-collie-ears-prick-mark-black-jump",
+     "slide": "pet-collie-ears-prick-mark-black-slide"
+    },
+    "ears-prick-mark-black-light": {
+     "run": "pet-collie-ears-prick-mark-black-light-run",
+     "jump": "pet-collie-ears-prick-mark-black-light-jump",
+     "slide": "pet-collie-ears-prick-mark-black-light-slide"
+    },
+    "ears-prick-mark-merle": {
+     "run": "pet-collie-ears-prick-mark-merle-run",
+     "jump": "pet-collie-ears-prick-mark-merle-jump",
+     "slide": "pet-collie-ears-prick-mark-merle-slide"
+    },
+    "ears-tipped": {
+     "run": "pet-collie-ears-tipped-run",
+     "jump": "pet-collie-ears-tipped-jump",
+     "slide": "pet-collie-ears-tipped-slide"
+    },
+    "ears-tipped-mark-black": {
+     "run": "pet-collie-ears-tipped-mark-black-run",
+     "jump": "pet-collie-ears-tipped-mark-black-jump",
+     "slide": "pet-collie-ears-tipped-mark-black-slide"
+    },
+    "ears-tipped-mark-black-light": {
+     "run": "pet-collie-ears-tipped-mark-black-light-run",
+     "jump": "pet-collie-ears-tipped-mark-black-light-jump",
+     "slide": "pet-collie-ears-tipped-mark-black-light-slide"
+    },
+    "ears-tipped-mark-merle": {
+     "run": "pet-collie-ears-tipped-mark-merle-run",
+     "jump": "pet-collie-ears-tipped-mark-merle-jump",
+     "slide": "pet-collie-ears-tipped-mark-merle-slide"
+    },
+    "mark-black": {
+     "run": "pet-collie-mark-black-run",
+     "jump": "pet-collie-mark-black-jump",
+     "slide": "pet-collie-mark-black-slide"
+    },
+    "mark-black-light": {
+     "run": "pet-collie-mark-black-light-run",
+     "jump": "pet-collie-mark-black-light-jump",
+     "slide": "pet-collie-mark-black-light-slide"
+    },
+    "mark-merle": {
+     "run": "pet-collie-mark-merle-run",
+     "jump": "pet-collie-mark-merle-jump",
+     "slide": "pet-collie-mark-merle-slide"
+    }
+   },
+   "exampleStack": {
+    "coat": "black-white",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#F6EFE6"
+     },
+     {
+      "layer": "mark-black",
+      "tint": "#4A4548"
+     },
+     {
+      "layer": "ears-tipped",
+      "tint": "#F6EFE6"
+     },
+     {
+      "layer": "ears-tipped-mark-black",
+      "tint": "#4A4548"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      183.0,
+      48.0
+     ],
+     [
+      186.0,
+      46.5
+     ],
+     [
+      183.0,
+      46.0
+     ],
+     [
+      187.0,
+      48.0
+     ],
+     [
+      187.0,
+      46.0
+     ],
+     [
+      187.0,
+      46.0
+     ],
+     [
+      183.0,
+      47.0
+     ],
+     [
+      185.0,
+      45.0
+     ]
+    ],
+    "noseJump": [
+     171.0,
+     54.5
+    ],
+    "noseSlide": [
+     189.0,
+     29.5
+    ],
+    "eyeRunPerFrame": [
+     [
+      165,
+      40
+     ],
+     [
+      168,
+      39
+     ],
+     [
+      165,
+      38
+     ],
+     [
+      169,
+      40
+     ],
+     [
+      169,
+      39
+     ],
+     [
+      169,
+      38
+     ],
+     [
+      166,
+      39
+     ],
+     [
+      167,
+      37
+     ]
+    ]
+   },
+   "alignment": {
+    "runNoseYRange": 3.0,
+    "runBottomGap": [
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "runRightGap": [
+     0,
+     1,
+     1,
+     0,
+     0,
+     1,
+     0,
+     0
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 0
+   }
+  },
+  {
+   "id": "doxie",
+   "label": "Dachshund",
+   "name": "Dachshund",
+   "dir": "art/pets/doxie/",
+   "defaultCoat": "red",
+   "coats": {
+    "red": [
+     {
+      "layer": "coat",
+      "tint": "#C8692A"
+     }
+    ],
+    "black-and-tan": [
+     {
+      "layer": "coat",
+      "tint": "#C67A35"
+     },
+     {
+      "layer": "mark-blacktan",
+      "tint": "#4A4548"
+     }
+    ],
+    "dapple": [
+     {
+      "layer": "coat",
+      "tint": "#C67A35"
+     },
+     {
+      "layer": "mark-blacktan",
+      "tint": "#4A4548"
+     },
+     {
+      "layer": "mark-dapple",
+      "tint": "#BFB3A2",
+      "alpha": 0.8
+     }
+    ]
+   },
+   "coatSwatch": {
+    "red": "#C8692A",
+    "black-and-tan": "#C67A35",
+    "dapple": "#C67A35"
+   },
+   "variants": {},
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "detail",
+    "mark-blacktan",
+    "mark-dapple"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-doxie-acc-bandana-run",
+     "jump": "pet-doxie-acc-bandana-jump",
+     "slide": "pet-doxie-acc-bandana-slide"
+    },
+    "coat": {
+     "run": "pet-doxie-coat-run",
+     "jump": "pet-doxie-coat-jump",
+     "slide": "pet-doxie-coat-slide"
+    },
+    "detail": {
+     "run": "pet-doxie-detail-run",
+     "jump": "pet-doxie-detail-jump",
+     "slide": "pet-doxie-detail-slide"
+    },
+    "mark-blacktan": {
+     "run": "pet-doxie-mark-blacktan-run",
+     "jump": "pet-doxie-mark-blacktan-jump",
+     "slide": "pet-doxie-mark-blacktan-slide"
+    },
+    "mark-dapple": {
+     "run": "pet-doxie-mark-dapple-run",
+     "jump": "pet-doxie-mark-dapple-jump",
+     "slide": "pet-doxie-mark-dapple-slide"
+    }
+   },
+   "exampleStack": {
+    "coat": "red",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#C8692A"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      187.0,
+      53.5
+     ],
+     [
+      187.0,
+      55.0
+     ],
+     [
+      187.0,
+      55.5
+     ],
+     [
+      187.0,
+      57.5
+     ],
+     [
+      187.0,
+      54.5
+     ],
+     [
+      187.0,
+      55.0
+     ],
+     [
+      187.0,
+      56.5
+     ],
+     [
+      187.0,
+      55.5
+     ]
+    ],
+    "noseJump": [
+     174.0,
+     61.0
+    ],
+    "noseSlide": [
+     196.0,
+     26.0
+    ],
+    "eyeRunPerFrame": [
+     [
+      168,
+      42
+     ],
+     [
+      168,
+      43
+     ],
+     [
+      168,
+      44
+     ],
+     [
+      168,
+      45
+     ],
+     [
+      168,
+      43
+     ],
+     [
+      168,
+      43
+     ],
+     [
+      168,
+      44
+     ],
+     [
+      168,
+      44
+     ]
+    ]
+   },
+   "alignment": {
+    "runNoseYRange": 4.0,
+    "runBottomGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0
+    ],
+    "runRightGap": [
+     1,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "jumpBottomGap": 1,
+    "slideBottomGap": 0
+   }
+  },
+  {
+   "id": "beagle",
+   "label": "Beagle",
+   "name": "Beagle",
+   "dir": "art/pets/beagle/",
+   "defaultCoat": "tricolor",
+   "coats": {
+    "tricolor": [
+     {
+      "layer": "coat",
+      "tint": "#F6EEE4"
+     },
+     {
+      "layer": "mark-tan",
+      "tint": "#E0914D"
+     },
+     {
+      "layer": "mark-black",
+      "tint": "#4A4548"
+     }
+    ],
+    "lemon": [
+     {
+      "layer": "coat-light",
+      "tint": "#FFF8EC"
+     },
+     {
+      "layer": "mark-tan-light",
+      "tint": "#F3D08A"
+     },
+     {
+      "layer": "mark-black-light",
+      "tint": "#EFCB7E"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "tricolor": "#F6EEE4",
+    "lemon": "#FFF8EC"
+   },
+   "variants": {},
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "coat-light",
+    "detail",
+    "mark-black",
+    "mark-black-light",
+    "mark-tan",
+    "mark-tan-light"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-beagle-acc-bandana-run",
+     "jump": "pet-beagle-acc-bandana-jump",
+     "slide": "pet-beagle-acc-bandana-slide"
+    },
+    "coat": {
+     "run": "pet-beagle-coat-run",
+     "jump": "pet-beagle-coat-jump",
+     "slide": "pet-beagle-coat-slide"
+    },
+    "coat-light": {
+     "run": "pet-beagle-coat-light-run",
+     "jump": "pet-beagle-coat-light-jump",
+     "slide": "pet-beagle-coat-light-slide"
+    },
+    "detail": {
+     "run": "pet-beagle-detail-run",
+     "jump": "pet-beagle-detail-jump",
+     "slide": "pet-beagle-detail-slide"
+    },
+    "mark-black": {
+     "run": "pet-beagle-mark-black-run",
+     "jump": "pet-beagle-mark-black-jump",
+     "slide": "pet-beagle-mark-black-slide"
+    },
+    "mark-black-light": {
+     "run": "pet-beagle-mark-black-light-run",
+     "jump": "pet-beagle-mark-black-light-jump",
+     "slide": "pet-beagle-mark-black-light-slide"
+    },
+    "mark-tan": {
+     "run": "pet-beagle-mark-tan-run",
+     "jump": "pet-beagle-mark-tan-jump",
+     "slide": "pet-beagle-mark-tan-slide"
+    },
+    "mark-tan-light": {
+     "run": "pet-beagle-mark-tan-light-run",
+     "jump": "pet-beagle-mark-tan-light-jump",
+     "slide": "pet-beagle-mark-tan-light-slide"
+    }
+   },
+   "exampleStack": {
+    "coat": "tricolor",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#F6EEE4"
+     },
+     {
+      "layer": "mark-tan",
+      "tint": "#E0914D"
+     },
+     {
+      "layer": "mark-black",
+      "tint": "#4A4548"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      185.0,
+      56.5
+     ],
+     [
+      187.0,
+      57.5
+     ],
+     [
+      186.0,
+      57.5
+     ],
+     [
+      188.0,
+      53.5
+     ],
+     [
+      187.0,
+      55.5
+     ],
+     [
+      187.0,
+      57.0
+     ],
+     [
+      187.0,
+      55.5
+     ],
+     [
+      183.0,
+      58.0
+     ]
+    ],
+    "noseJump": [
+     173.0,
+     72.0
+    ],
+    "noseSlide": [
+     193.0,
+     25.5
+    ],
+    "eyeRunPerFrame": [
+     [
+      172,
+      49
+     ],
+     [
+      174,
+      50
+     ],
+     [
+      173,
+      50
+     ],
+     [
+      174,
+      46
+     ],
+     [
+      174,
+      48
+     ],
+     [
+      174,
+      50
+     ],
+     [
+      174,
+      48
+     ],
+     [
+      170,
+      51
+     ]
+    ]
+   },
+   "alignment": {
+    "runNoseYRange": 4.5,
+    "runBottomGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     3
+    ],
+    "runRightGap": [
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 0
+   }
+  },
+  {
+   "id": "frenchie",
+   "label": "Frenchie",
+   "name": "French Bulldog",
+   "dir": "art/pets/frenchie/",
+   "defaultCoat": "fawn",
+   "coats": {
+    "fawn": [
+     {
+      "layer": "coat",
+      "tint": "#E8B67E"
+     },
+     {
+      "layer": "mark-mask",
+      "tint": "#5A4636"
+     }
+    ],
+    "brindle": [
+     {
+      "layer": "coat",
+      "tint": "#A27850"
+     },
+     {
+      "layer": "mark-brindle",
+      "tint": "#3B2A1E",
+      "alpha": 0.92
+     },
+     {
+      "layer": "mark-mask",
+      "tint": "#33261F"
+     }
+    ],
+    "cream": [
+     {
+      "layer": "coat",
+      "tint": "#FFDFAE"
+     },
+     {
+      "layer": "mark-mask-light",
+      "tint": "#B0906F"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "fawn": "#E8B67E",
+    "brindle": "#A27850",
+    "cream": "#FFDFAE"
+   },
+   "variants": {
+    "tail": {
+     "default": "stub",
+     "options": [
+      "stub",
+      "screw"
+     ]
+    }
+   },
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "detail",
+    "mark-brindle",
+    "mark-mask",
+    "mark-mask-light",
+    "tail-screw",
+    "tail-screw-mark-brindle",
+    "tail-screw-mark-mask",
+    "tail-screw-mark-mask-light",
+    "tail-stub",
+    "tail-stub-mark-brindle",
+    "tail-stub-mark-mask",
+    "tail-stub-mark-mask-light"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-frenchie-acc-bandana-run",
+     "jump": "pet-frenchie-acc-bandana-jump",
+     "slide": "pet-frenchie-acc-bandana-slide"
+    },
+    "coat": {
+     "run": "pet-frenchie-coat-run",
+     "jump": "pet-frenchie-coat-jump",
+     "slide": "pet-frenchie-coat-slide"
+    },
+    "detail": {
+     "run": "pet-frenchie-detail-run",
+     "jump": "pet-frenchie-detail-jump",
+     "slide": "pet-frenchie-detail-slide"
+    },
+    "mark-brindle": {
+     "run": "pet-frenchie-mark-brindle-run",
+     "jump": "pet-frenchie-mark-brindle-jump",
+     "slide": "pet-frenchie-mark-brindle-slide"
+    },
+    "mark-mask": {
+     "run": "pet-frenchie-mark-mask-run",
+     "jump": "pet-frenchie-mark-mask-jump",
+     "slide": "pet-frenchie-mark-mask-slide"
+    },
+    "mark-mask-light": {
+     "run": "pet-frenchie-mark-mask-light-run",
+     "jump": "pet-frenchie-mark-mask-light-jump",
+     "slide": "pet-frenchie-mark-mask-light-slide"
+    },
+    "tail-screw": {
+     "run": "pet-frenchie-tail-screw-run",
+     "jump": "pet-frenchie-tail-screw-jump",
+     "slide": "pet-frenchie-tail-screw-slide"
+    },
+    "tail-screw-mark-brindle": {
+     "run": "pet-frenchie-tail-screw-mark-brindle-run",
+     "jump": "pet-frenchie-tail-screw-mark-brindle-jump",
+     "slide": "pet-frenchie-tail-screw-mark-brindle-slide"
+    },
+    "tail-screw-mark-mask": {
+     "run": "pet-frenchie-tail-screw-mark-mask-run",
+     "jump": "pet-frenchie-tail-screw-mark-mask-jump",
+     "slide": "pet-frenchie-tail-screw-mark-mask-slide"
+    },
+    "tail-screw-mark-mask-light": {
+     "run": "pet-frenchie-tail-screw-mark-mask-light-run",
+     "jump": "pet-frenchie-tail-screw-mark-mask-light-jump",
+     "slide": "pet-frenchie-tail-screw-mark-mask-light-slide"
+    },
+    "tail-stub": {
+     "run": "pet-frenchie-tail-stub-run",
+     "jump": "pet-frenchie-tail-stub-jump",
+     "slide": "pet-frenchie-tail-stub-slide"
+    },
+    "tail-stub-mark-brindle": {
+     "run": "pet-frenchie-tail-stub-mark-brindle-run",
+     "jump": "pet-frenchie-tail-stub-mark-brindle-jump",
+     "slide": "pet-frenchie-tail-stub-mark-brindle-slide"
+    },
+    "tail-stub-mark-mask": {
+     "run": "pet-frenchie-tail-stub-mark-mask-run",
+     "jump": "pet-frenchie-tail-stub-mark-mask-jump",
+     "slide": "pet-frenchie-tail-stub-mark-mask-slide"
+    },
+    "tail-stub-mark-mask-light": {
+     "run": "pet-frenchie-tail-stub-mark-mask-light-run",
+     "jump": "pet-frenchie-tail-stub-mark-mask-light-jump",
+     "slide": "pet-frenchie-tail-stub-mark-mask-light-slide"
+    }
+   },
+   "exampleStack": {
+    "coat": "fawn",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#E8B67E"
+     },
+     {
+      "layer": "mark-mask",
+      "tint": "#5A4636"
+     },
+     {
+      "layer": "tail-stub",
+      "tint": "#E8B67E"
+     },
+     {
+      "layer": "tail-stub-mark-mask",
+      "tint": "#5A4636"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      182.0,
+      69.5
+     ],
+     [
+      188.0,
+      65.0
+     ],
+     [
+      182.0,
+      69.5
+     ],
+     [
+      188.0,
+      67.5
+     ],
+     [
+      187.0,
+      67.0
+     ],
+     [
+      188.0,
+      68.0
+     ],
+     [
+      182.0,
+      69.0
+     ],
+     [
+      181.0,
+      69.5
+     ]
+    ],
+    "noseJump": [
+     175.0,
+     84.5
+    ],
+    "noseSlide": [
+     191.0,
+     42.5
+    ],
+    "eyeRunPerFrame": [
+     [
+      172,
+      60
+     ],
+     [
+      178,
+      55
+     ],
+     [
+      172,
+      60
+     ],
+     [
+      177,
+      59
+     ],
+     [
+      178,
+      58
+     ],
+     [
+      178,
+      58
+     ],
+     [
+      172,
+      59
+     ],
+     [
+      171,
+      59
+     ]
+    ]
+   },
+   "alignment": {
+    "runNoseYRange": 4.5,
+    "runBottomGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "runRightGap": [
+     1,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 0
+   }
+  }
+ ]
+}

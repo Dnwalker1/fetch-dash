@@ -217,6 +217,11 @@ export function coatSwatch(b: Breed, coat: string): number {
   return b.coats[coat]?.layers[0].tint ?? BLACK_SWATCH;
 }
 
+/** The chip's second color: the first marking layer, so two-tone coats (Collie, Beagle) read apart. */
+export function coatSwatch2(b: Breed, coat: string): number {
+  return b.coats[coat]?.layers[1]?.tint ?? coatSwatch(b, coat);
+}
+
 /** True once every layer this dog draws is loaded. */
 export function breedReady(scene: Phaser.Scene, c: DogChoice): boolean {
   return layersFor(c).every((l) => (['run', 'jump', 'slide'] as const).every((st) => scene.textures.exists(breedKey(c.breed, l.layer, st))));

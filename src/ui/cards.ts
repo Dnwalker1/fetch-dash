@@ -1,7 +1,7 @@
 import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
-import { BANDANAS, BREEDS, breedById, coatSwatch, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
+import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
@@ -175,7 +175,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     lookRow = `<div class="field">Breed <div class="segs">${seg('breed', pick, [['chewy', '\u{1F3A8} Chewy'], ...BREEDS.map((b): [string, string] => [b.id, esc(b.label)])])}</div></div>`;
     if (breed && dog) {
       const coatChips = Object.entries(breed.coats)
-        .map(([k, v]) => `<button class="chip coat${dog.coat === k ? ' on' : ''}" data-coat="${k}" title="${esc(v.label)}" aria-label="${esc(v.label)}" style="--coat:${hexOf(coatSwatch(breed, k))}"></button>`)
+        .map(([k, v]) => `<button class="chip coat${dog.coat === k ? ' on' : ''}" data-coat="${k}" title="${esc(v.label)}" aria-label="${esc(v.label)}" style="--coat:${hexOf(coatSwatch(breed, k))};--coat2:${hexOf(coatSwatch2(breed, k))}"></button>`)
         .join('');
       const shapes = (['ears', 'tail'] as const)
         .filter((g) => breed.variants[g])
