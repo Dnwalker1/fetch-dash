@@ -167,7 +167,11 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     void fetchPortraitsLeft().then((n) => {
       if (n === undefined || n === portraitsLeft()) return;
       setPortraitsLeft(n);
-      if (document.querySelector('#ui .card.setup')) openSetup(host, opts);
+      if (!document.querySelector('#ui .card.setup')) return;
+      // Keep a name typed while the count was on its way.
+      const typed = document.querySelector<HTMLInputElement>('#ui .card.setup .name');
+      if (typed) saveHero({ ...(loadHero() ?? {}), name: typed.value.trim() });
+      openSetup(host, opts);
     });
   }
   const hero = loadHero();
