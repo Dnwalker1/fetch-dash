@@ -95,3 +95,7 @@ Then open the address it prints, usually http://localhost:5173. To try it on you
 ## Art specs
 
 Every obstacle and gopher-hole picture, with its size, placement and hit box, is listed in [docs/art-specs.md](docs/art-specs.md), so painted replacements drop in without code changes.
+
+## Phone app
+
+The iPhone and Android app lives in [mobile/](mobile/README.md). It is an Expo app that ships this game inside a WebView and builds with EAS.
