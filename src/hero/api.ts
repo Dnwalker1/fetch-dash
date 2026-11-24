@@ -1,8 +1,14 @@
 /**
  * Makes the player's hero portrait with the Design Your Pet generator on
  * goodwookie.com, using the same backend contract as the app
- * (createyourpetappo docs/backend-api.md) and its "Anime Hero" style with
- * the pet's name as the lettering.
+ * (createyourpetappo docs/backend-api.md) and its "Arcade Hero" style: the
+ * pet dashing after the ball in a Player Select card, with the pet's name on
+ * the plate.
+ *
+ * Every call says "X-Client: fetch-dash", so the backend keeps the game's
+ * portraits apart from the app's designs, always makes the Arcade Hero, sends
+ * a clean picture (no watermark) and counts 3 per install
+ * (docs/hero-portraits.md).
  *
  * Turned on by two build settings (put them in .env.local, never in git):
  *   VITE_DYP_API_BASE = https://www.goodwookie.com
@@ -13,7 +19,10 @@
 
 const BASE = (import.meta.env.VITE_DYP_API_BASE as string | undefined)?.replace(/\/$/, '');
 const KEY = import.meta.env.VITE_DYP_APP_KEY as string | undefined;
-const STYLE = (import.meta.env.VITE_DYP_HERO_STYLE as string | undefined) || 'hero';
+// The backend makes the Arcade Hero for the game whatever is sent; this is
+// only here so the request reads clearly in the logs.
+const STYLE = (import.meta.env.VITE_DYP_HERO_STYLE as string | undefined) || 'arcade';
+const CLIENT = 'fetch-dash';
 
 export const LIVE = Boolean(BASE && KEY);
 
@@ -32,15 +41,18 @@ const MESSAGES: Record<string, string> = {
   photo_rejected: "That photo can't be used. Try a different photo of your pet.",
   checker_down: 'The photo checker is taking a break. Try again in a minute.',
   failed: "The portrait didn't come out. Try again, or try another photo.",
+  limit_game: "You've used all your free hero portraits. Make more in Design Your Pet!",
   limit_designs: "You've reached today's portrait limit. Try again later.",
   limit_tries: "You've reached today's limit of tries. Try again later.",
   studio_busy: 'The studio is busy right now. Try again in a minute.',
   text_rejected: "That name can't be used on a portrait. Try a different name.",
+  text_checker_down: 'The name checker is taking a break. Try again in a minute.',
   bad_photo: "That photo couldn't be read. Try a JPG or PNG.",
   bad_photo_type: "That photo couldn't be read. Try a JPG or PNG.",
   upload_unavailable: "The upload didn't work. Check your connection and try again.",
   people_consent_needed: 'Please use a photo of just your pet.',
-  timeout: 'This is taking longer than usual. Try again in a minute.',
+  timeout: "This one is taking a long time. Try again in a few minutes; a portrait that didn't come out isn't counted.",
+  not_for_game: 'That part lives in Design Your Pet.',
   network: "Couldn't reach Design Your Pet. Check your connection and try again.",
 };
 
@@ -49,16 +61,32 @@ export function messageFor(code: string): string {
 }
 
 const DEVICE_KEY = 'fetch-dash-device';
+let sessionId: string | undefined;
+
+/** A random ID like 1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed. randomUUID only
+ * exists on https pages, and the phone app loads the game from the phone, so
+ * there's a fallback. */
+function newId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 function deviceId(): string {
   try {
     let id = localStorage.getItem(DEVICE_KEY);
     if (!id) {
-      id = crypto.randomUUID();
+      id = newId();
       localStorage.setItem(DEVICE_KEY, id);
     }
     return id;
   } catch {
-    return 'no-storage';
+    // Storage blocked: one ID for this visit, so the calls still line up.
+    sessionId ??= newId();
+    return sessionId;
   }
 }
 
@@ -74,6 +102,7 @@ async function call(path: string, init?: RequestInit): Promise<Json> {
         'Content-Type': 'application/json',
         'X-Device-Id': deviceId(),
         'X-App-Key': KEY ?? '',
+        'X-Client': CLIENT,
         ...(init?.headers ?? {}),
       },
     });
@@ -109,10 +138,54 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 export interface LiveResult {
   designId: string;
   url: string;
+  /** Free portraits left on this install, as the server counts them. */
+  portraitsLeft?: number;
+}
+
+export interface HeroOptions {
+  /** Bring the Goodwookie sloth along, riding on the pet's head. */
+  sloth?: boolean;
+}
+
+/** The server's count of free portraits left, or undefined if it can't be reached. */
+export async function fetchPortraitsLeft(): Promise<number | undefined> {
+  if (!LIVE) return undefined;
+  try {
+    const a = await call('/allowance');
+    return portraitsLeftFrom(a);
+  } catch {
+    return undefined;
+  }
+}
+
+function portraitsLeftFrom(body: Json): number | undefined {
+  const a = body.allowance as Json | undefined;
+  const n = a?.portraitsLeft;
+  return typeof n === 'number' ? n : undefined;
+}
+
+/**
+ * Keeps the portrait on the device. The server deletes unordered designs
+ * after 7 days, so a saved web address would stop working. Turned into a
+ * JPEG data URL (about 200 KB); if the picture can't be read, the address is
+ * kept instead.
+ */
+export async function keepOnDevice(url: string, maxSide = 1024): Promise<string> {
+  try {
+    const img = await loadImage(url);
+    const s = Math.min(1, maxSide / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * s);
+    c.height = Math.round(img.height * s);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.88);
+  } catch {
+    return url;
+  }
 }
 
 /** Upload → start the design → wait for it. Calls onStep with a short status line. */
-export async function generateLive(photo: Blob, name: string, onStep: (s: string) => void): Promise<LiveResult> {
+export async function generateLive(photo: Blob, name: string, onStep: (s: string) => void, opts: HeroOptions = {}): Promise<LiveResult> {
   onStep('Uploading your photo…');
   const u = await call('/uploadUrl', { method: 'POST', body: JSON.stringify({ mimeType: 'image/jpeg' }) });
   if (!u.ok) throw new HeroError(String(u.code), messageFor(String(u.code)));
@@ -129,7 +202,10 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
   onStep('Suiting up…');
   let designId = '';
   for (let i = 0; i < 15 && !designId; i++) {
-    const d = await call('/designs', { method: 'POST', body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase() }) });
+    const d = await call('/designs', {
+      method: 'POST',
+      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), sloth: opts.sloth === true }),
+    });
     if (d.ok) designId = String(d.designId);
     else if (d.code === 'one_at_a_time' && d.designId) designId = String(d.designId);
     else if (d.code === 'upload_not_ready') await wait(Number(d.retryAfterMs) || 1000);
@@ -137,19 +213,32 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
   }
   if (!designId) throw new HeroError('upload_unavailable', messageFor('upload_unavailable'));
 
-  const steps = ['Finding the hero in your photo…', 'Adding the cape…', 'Painting the city lights…', 'Lettering the name…', 'Almost there…'];
+  // A portrait usually takes 1 to 3 minutes; a slow one up to about 7. The
+  // server gives up on a lost one after 12, so the game waits up to 10.
+  const steps = [...HERO_STEPS, 'Almost there…'];
   const started = Date.now();
-  for (let n = 0; Date.now() - started < 180_000; n++) {
-    onStep(steps[Math.min(steps.length - 1, Math.floor(n / 5))]);
+  for (let n = 0; Date.now() - started < 600_000; n++) {
+    const slow = Date.now() - started > 240_000;
+    onStep(slow ? 'Still painting. A slow one can take a few minutes…' : steps[Math.min(steps.length - 1, Math.floor(n / 8))]);
     await wait(2000);
-    const d = await call(`/designs/${encodeURIComponent(designId)}`);
+    let d: Json;
+    try {
+      d = await call(`/designs/${encodeURIComponent(designId)}`);
+    } catch (err) {
+      // A dropped connection mid-wait isn't the end: the design keeps going.
+      if (err instanceof HeroError && err.code === 'network') continue;
+      throw err;
+    }
     if (!d.ok) throw new HeroError(String(d.code), messageFor(String(d.code)));
     const status = String(d.status);
-    if (status === 'ready' && d.previewUrl) return { designId, url: String(d.previewUrl) };
+    if (status === 'ready' && d.previewUrl) return { designId, url: String(d.previewUrl), portraitsLeft: portraitsLeftFrom(d) };
     if (status !== 'working') throw new HeroError(status, messageFor(status));
   }
   throw new HeroError('timeout', messageFor('timeout'));
 }
+
+/** The status lines shown while the portrait is made (also used by the stand-in). */
+export const HERO_STEPS = ['Finding the hero in your photo…', 'Rolling out the meadow…', 'Throwing the ball…', 'Painting the dash…', 'Lettering the name…'];
 
 /** Flags a portrait for Don to review (Google Play's AI-content rule). */
 export async function reportDesign(designId: string, reason: 'offensive' | 'person' | 'other'): Promise<void> {

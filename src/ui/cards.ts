@@ -5,9 +5,21 @@ import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
-import { HeroError, LIVE, generateLive, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
+import { HERO_STEPS, HeroError, LIVE, fetchPortraitsLeft, generateLive, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
-import { FREE_PORTRAITS, cap, countPortrait, displayName, loadHero, portraitsLeft, saveHero, type Hero } from '../hero/store';
+import {
+  FREE_PORTRAITS,
+  cap,
+  countPortrait,
+  displayName,
+  loadHero,
+  portraitsLeft,
+  saveHero,
+  setPortraitsLeft,
+  setSlothWanted,
+  slothWanted,
+  type Hero,
+} from '../hero/store';
 
 /**
  * The cards shown over the game: make your hero (start), meet your hero
@@ -70,6 +82,7 @@ let keyHandler: ((e: KeyboardEvent) => void) | undefined;
 let photoFile: Blob | undefined;
 let photoUrl: string | undefined;
 let lastError = '';
+let serverCountChecked = false;
 
 function ui(): HTMLDivElement {
   if (!root) {
@@ -147,6 +160,16 @@ function startRunner(r: HTMLElement, host: CardHost): void {
 // ---------------------------------------------------------------------------
 
 export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
+  // Once per visit, take the server's count of free portraits (it's the one
+  // that counts) and redraw the card if it differs from the device's.
+  if (LIVE && !serverCountChecked) {
+    serverCountChecked = true;
+    void fetchPortraitsLeft().then((n) => {
+      if (n === undefined || n === portraitsLeft()) return;
+      setPortraitsLeft(n);
+      if (document.querySelector('#ui .card.setup')) openSetup(host, opts);
+    });
+  }
   const hero = loadHero();
   const c = host.choice();
   const left = portraitsLeft();
@@ -213,6 +236,8 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
          <input type="file" accept="image/*" />
          <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
        </label>
+       <label class="sloth"><input type="checkbox"${slothWanted() ? ' checked' : ''} />
+         <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head</small></span></label>
        <p class="small">${left} of ${FREE_PORTRAITS} free hero portraits left</p>`
     : `<div class="drop used">
          <img src="${hero?.portrait ?? './hero-example.png'}" alt="" />
@@ -224,7 +249,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     `<div class="card setup">
       <div class="head">
         <h1>Make your pet the hero</h1>
-        <p>Add a photo and Design Your Pet turns it into a hero portrait. Then you play as them!</p>
+        <p>Add a photo and Design Your Pet paints them as an Arcade Hero, dashing after the ball. Then you play as them!</p>
       </div>
       <div class="cols">
         <div class="col left">${photoBox}</div>
@@ -373,6 +398,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     keepName();
     host.play(host.progress().current);
   });
+  r.querySelector<HTMLInputElement>('.sloth input')?.addEventListener('change', (e) => setSlothWanted((e.target as HTMLInputElement).checked));
   r.querySelector('.go')?.addEventListener('click', () => {
     keepName();
     void makeHero(host, opts);
@@ -399,7 +425,7 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
       <div class="orb"><img src="${photoUrl}" alt="" /><i></i></div>
       <h1>Making ${esc(shown)} a hero…</h1>
       <p class="step">Getting ready…</p>
-      <p class="small">This usually takes about 30 seconds.</p>
+      <p class="small">This usually takes a minute or two. Keep the game open.</p>
     </div>`,
   );
   const step = r.querySelector('.step')!;
@@ -408,11 +434,14 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     let hero: Hero;
     if (LIVE) {
       const photo = await preparePhoto(photoFile);
-      const res = await generateLive(photo, name || shown, setStep);
-      hero = { name, portrait: res.url, source: 'live', designId: res.designId };
+      const res = await generateLive(photo, name || shown, setStep, { sloth: slothWanted() });
+      setStep('Saving your hero…');
+      // Kept on the device: the server's copy is deleted after 7 days.
+      hero = { name, portrait: await keepOnDevice(res.url), source: 'live', designId: res.designId };
+      if (res.portraitsLeft !== undefined) setPortraitsLeft(res.portraitsLeft + 1); // countPortrait() below takes the 1 off
     } else {
       const img = await loadImage(photoUrl);
-      for (const s of ['Finding the hero in your photo…', 'Adding the cape…', 'Painting the city lights…', 'Lettering the name…']) {
+      for (const s of HERO_STEPS) {
         setStep(s);
         await new Promise((res) => setTimeout(res, 650));
       }
@@ -424,6 +453,8 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     openHome(host, { reveal: true });
   } catch (err) {
     lastError = err instanceof HeroError ? err.message : messageFor('failed');
+    // The server says they're all used: show the "used" card with the shop link.
+    if (err instanceof HeroError && err.code === 'limit_game') setPortraitsLeft(0);
     openSetup(host, opts);
   }
 }

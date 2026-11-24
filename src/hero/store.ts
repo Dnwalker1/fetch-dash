@@ -3,8 +3,10 @@
  * color are kept with the pet choice in src/art/pets.ts.)
  *
  * The game gives 3 free portraits, separate from Design Your Pet's own
- * limits. This count lives on the device for now; once the live generator
- * is on, the server should count them too (see docs/hero-portraits.md).
+ * limits. With the live generator on, the server counts them per install
+ * (it refuses a 4th) and the game copies its count here with
+ * setPortraitsLeft, so the card shows the right number. The device count is
+ * only the whole story for the stand-in portraits.
  */
 
 export const FREE_PORTRAITS = 3;
@@ -56,6 +58,33 @@ export function portraitsUsed(): number {
 
 export function portraitsLeft(): number {
   return Math.max(0, FREE_PORTRAITS - portraitsUsed());
+}
+
+/** Takes the server's count of portraits left (it's the one that counts). */
+export function setPortraitsLeft(left: number): void {
+  const used = Math.min(FREE_PORTRAITS, Math.max(0, FREE_PORTRAITS - Math.floor(left)));
+  try {
+    localStorage.setItem(USED_KEY, String(used));
+  } catch {
+    // not remembered; the server still counts
+  }
+}
+
+/** Bring the sloth along? Remembered for the next portrait. */
+const SLOTH_KEY = 'fetch-dash-sloth';
+export function slothWanted(): boolean {
+  try {
+    return localStorage.getItem(SLOTH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+export function setSlothWanted(on: boolean): void {
+  try {
+    localStorage.setItem(SLOTH_KEY, on ? '1' : '0');
+  } catch {
+    // fine
+  }
 }
 
 export function countPortrait(): void {
