@@ -270,6 +270,10 @@ export interface Den {
   holeHalf: number;
   /** Middle of the hole across the picture. */
   holeX: number;
+  /** The picture's width, in game pixels. */
+  w: number;
+  /** Grass laid along the cut front edge, in front of the hole, if this earth has one. */
+  tufts?: string;
 }
 
 /** The kind of earth a level's den is dug in. */
@@ -278,16 +282,18 @@ export function denEarth(t: Theme): 'dirt' | 'sand' | 'snow' {
 }
 
 /** Den keys painted from files, one mound per kind of earth (see artFiles.ts). */
-export function denFiles(t: Theme): [string, string] {
+export function denFiles(t: Theme): string[] {
   const e = denEarth(t);
-  return [`den-${e}`, `den-${e}-lip`];
+  const tufts = PAINTED_HOLES[e].tufts;
+  return [`den-${e}`, `den-${e}-lip`, ...(tufts ? [tufts] : [])];
 }
 
 /** Where the hole is in each painted mound, measured from the pictures. */
-const PAINTED_HOLES: Record<'dirt' | 'sand' | 'snow', { holeUp: number; holeHalf: number; holeX: number }> = {
-  dirt: { holeUp: 14.2, holeHalf: 9.2, holeX: 41 },
-  sand: { holeUp: 12.8, holeHalf: 5.8, holeX: 41.5 },
-  snow: { holeUp: 13.2, holeHalf: 5.2, holeX: 41 },
+const PAINTED_HOLES: Record<'dirt' | 'sand' | 'snow', Omit<Den, 'back' | 'lip'>> = {
+  // v2 (Don, 2026-11-23): a flat hole in the verge, 96 x 31, from den-dirt-v2.json
+  dirt: { holeUp: 13.1, holeHalf: 6.8, holeX: 48.7, w: 96, tufts: 'tufts-den' },
+  sand: { holeUp: 12.8, holeHalf: 5.8, holeX: 41.5, w: DEN_W },
+  snow: { holeUp: 13.2, holeHalf: 5.2, holeX: 41, w: DEN_W },
 };
 
 /**
@@ -300,7 +306,8 @@ const PAINTED_HOLES: Record<'dirt' | 'sand' | 'snow', { holeUp: number; holeHalf
 export function paintDen(scene: Phaser.Scene, levelId: number, t: Theme): Den {
   const [fileBack, fileLip] = denFiles(t);
   if (scene.textures.exists(fileBack) && scene.textures.exists(fileLip)) {
-    return { back: fileBack, lip: fileLip, ...PAINTED_HOLES[denEarth(t)] };
+    const hole = PAINTED_HOLES[denEarth(t)];
+    return { back: fileBack, lip: fileLip, ...hole, tufts: hole.tufts && scene.textures.exists(hole.tufts) ? hole.tufts : undefined };
   }
   const back = `den-${levelId}`;
   const lip = `den-${levelId}-lip`;
@@ -384,7 +391,7 @@ export function paintDen(scene: Phaser.Scene, levelId: number, t: Theme): Den {
     c.stroke();
     grain(c, DEN_W, DEN_H, 0.06, 0, 61, 64);
   });
-  return { back, lip, holeUp: DEN_HOLE_UP, holeHalf: 9, holeX: HX };
+  return { back, lip, holeUp: DEN_HOLE_UP, holeHalf: 9, holeX: HX, w: DEN_W };
 }
 
 // ---------- Level 7: Autumn Orchard ----------

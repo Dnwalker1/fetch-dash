@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
+import { addDebugOverlay } from '../ui/debug';
 import { artFromFile, markArt, queueArt } from '../art/artFiles';
 import { LAWN_TOP, halfWidthAt, paintBonusArt } from '../art/bonusArt';
 import { artScale } from '../art/paint';
-import { petFrameUrls, petLookFor, type PetLook } from '../art/petLook';
+import { petFrameUrls, petLookFor, queuePetArt, type PetLook } from '../art/petLook';
 import { SIZE_SCALE, loadPet, savePet, type PetChoice } from '../art/pets';
 import { paintTreats } from '../art/props';
-import { marksFor, queueSheet, sheetFor } from '../art/sheets';
 import * as sfx from '../audio/sfx';
 import { BONUS, GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../config';
 import { cap, displayName, loadHero } from '../hero/store';
@@ -120,6 +120,8 @@ const GRAB_GRACE_MS = 300;
 const SWIPE_MIN = 26;
 /** The pet eases off within this distance of where it's going. */
 const ARRIVE = 60;
+/** The touch joystick, in game px: no move inside `dead`, full speed at `full`, and its ring's size. */
+const STICK = { dead: 6, full: 46, rim: 56 };
 const PILE_TREATS = 3;
 const PILE_REACH = 34;
 const PILE_BACK_MS = 2500;
@@ -311,6 +313,10 @@ export class BonusScene extends Phaser.Scene {
   // input
   private drag?: { id: number; x0: number; y0: number; x: number; y: number; samples: { x: number; y: number; t: number }[] };
   private steer?: { id: number; x: number; y: number };
+  // On a touch screen the thumb works a joystick that appears wherever it lands,
+  // so it never has to sit on top of the pet (and hide it)
+  private stick?: { id: number; x0: number; y0: number; x: number; y: number };
+  private stickG!: Phaser.GameObjects.Graphics;
   private autoUntil = 0;
   private autoBall?: Ball;
   private keys!: Record<'LEFT' | 'RIGHT' | 'UP' | 'DOWN' | 'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
@@ -347,9 +353,7 @@ export class BonusScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const pet = loadPet();
-    const sheet = sheetFor(pet);
-    if (sheet) queueSheet(this, sheet, marksFor(sheet, pet));
+    queuePetArt(this, loadPet());
     queueArt(this, ['ball', ...BONUS_TEXTURES]);
   }
 
@@ -372,6 +376,7 @@ export class BonusScene extends Phaser.Scene {
     this.carrying = undefined;
     this.drag = undefined;
     this.steer = undefined;
+    this.stick = undefined;
     this.autoUntil = 0;
     this.aimAngle = 0;
     this.keyAim = false;
@@ -394,6 +399,8 @@ export class BonusScene extends Phaser.Scene {
     this.ringPulse = this.tweens.add({ targets: this.ring, alpha: 1, scale: rs * 1.06, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.trailG = this.add.graphics().setDepth(-4);
     this.aimG = this.add.graphics().setDepth(HUD - 10);
+    this.stickG = this.add.graphics().setDepth(HUD - 9);
+    addDebugOverlay(this, () => `pet ${Math.hypot(this.pet.vx, this.pet.vy).toFixed(0)} px/s  ${this.stick ? 'stick' : this.steer ? 'point' : ''}  ${this.phase}`);
 
     // The sprinkler, and its spray (an oscillating fan of drops)
     const sp = BONUS.sprinkler;
@@ -452,6 +459,10 @@ export class BonusScene extends Phaser.Scene {
         this.choice = c;
         savePet(c);
         this.applyPet();
+        if (queuePetArt(this, c)) {
+          this.load.once(Phaser.Loader.Events.COMPLETE, () => this.sys.isActive() && this.applyPet());
+          this.load.start();
+        }
       },
       petFrames: (c) => petFrameUrls(this, c, this.frameCache),
       progress: () => this.progress,
@@ -498,6 +509,15 @@ export class BonusScene extends Phaser.Scene {
     };
     if (this.phase === 'over') return undefined;
     if (this.phase === 'ready') return toward(SIT, BONUS.petSpeed * 0.55);
+    if (this.stick) {
+      // The pet runs the way the thumb is pushed, faster the farther it's pushed
+      const s = this.stick;
+      const dx = s.x - s.x0;
+      const dy = s.y - s.y0;
+      const len = Math.hypot(dx, dy);
+      if (len < STICK.dead) return { x: 0, y: 0, speed: 0 };
+      return { x: dx / len, y: dy / len, speed: BONUS.petSpeed * Math.min(1, (len - STICK.dead) / (STICK.full - STICK.dead)) };
+    }
     if (this.steer) return toward(this.steer, BONUS.petSpeed);
     const k = this.keys;
     const kx = (k.RIGHT.isDown || k.D.isDown ? 1 : 0) - (k.LEFT.isDown || k.A.isDown ? 1 : 0);
@@ -597,7 +617,10 @@ export class BonusScene extends Phaser.Scene {
     this.petMarks.forEach((m, i) => {
       const k = look.marks[i];
       m.setTexture(k.run, sp.frame.name);
-      m.setPosition(sp.x, sp.y).setOrigin(ox, 1).setScale(sp.scaleX, sp.scaleY).setFlipX(sp.flipX).setDepth(p.y + 0.01);
+      m.setPosition(sp.x, sp.y).setOrigin(ox, 1).setScale(sp.scaleX, sp.scaleY).setFlipX(sp.flipX).setDepth(p.y + 0.01 + i * 0.001);
+      m.setAlpha(sp.alpha * (k.alpha ?? 1));
+      if (k.tint !== undefined) m.setTint(k.tint);
+      else m.clearTint();
     });
   }
 
@@ -655,6 +678,8 @@ export class BonusScene extends Phaser.Scene {
   private toReady(): void {
     this.phase = 'ready';
     this.readyAt = 0;
+    this.stick = undefined;
+    this.stickG.clear();
     this.carrying = undefined;
     this.balls.forEach((b) => {
       b.img.destroy();
@@ -712,7 +737,7 @@ export class BonusScene extends Phaser.Scene {
       const touch = this.sys.game.device.input.touch;
       this.time.delayedCall(700, () => {
         if (this.phase === 'fetch' && !this.carrying) {
-          this.toast(touch ? `Hold your finger where ${this.name} should run` : 'Steer with the arrow keys, or hold the mouse button', '#fff8e8', 2600);
+          this.toast(touch ? `Put your thumb anywhere and drag: ${this.name} runs that way` : 'Steer with the arrow keys, or hold the mouse button', '#fff8e8', 2600);
         }
       });
     }
@@ -1003,8 +1028,10 @@ export class BonusScene extends Phaser.Scene {
       this.keyAim = false;
       return;
     }
-    this.steer = { id: p.id, ...w };
+    if (p.wasTouch) this.stick = { id: p.id, x0: w.x, y0: w.y, x: w.x, y: w.y };
+    else this.steer = { id: p.id, ...w };
     this.autoUntil = 0; // the player takes over
+    this.drawStick();
   }
 
   private onMove(p: Phaser.Input.Pointer): void {
@@ -1019,6 +1046,52 @@ export class BonusScene extends Phaser.Scene {
       while (d.samples.length > 2 && now - d.samples[0].t > 100) d.samples.shift();
     }
     if (this.steer && this.steer.id === p.id) Object.assign(this.steer, w);
+    const s = this.stick;
+    if (s && s.id === p.id) {
+      s.x = w.x;
+      s.y = w.y;
+      // Dragged past the rim: the joystick follows the thumb, so turning back is instant
+      const dx = s.x - s.x0;
+      const dy = s.y - s.y0;
+      const len = Math.hypot(dx, dy);
+      if (len > STICK.rim) {
+        s.x0 = s.x - (dx / len) * STICK.rim;
+        s.y0 = s.y - (dy / len) * STICK.rim;
+      }
+      this.drawStick();
+    }
+  }
+
+  /** The joystick under the thumb: a faint ring where it landed, and a knob where it is now. */
+  private drawStick(): void {
+    const g = this.stickG;
+    g.clear();
+    const s = this.stick;
+    if (!s) return;
+    g.fillStyle(0xffffff, 0.14).fillCircle(s.x0, s.y0, STICK.rim);
+    g.lineStyle(3, 0xffffff, 0.45).strokeCircle(s.x0, s.y0, STICK.rim);
+    const dx = s.x - s.x0;
+    const dy = s.y - s.y0;
+    const k = Math.min(1, STICK.rim / Math.max(1, Math.hypot(dx, dy)));
+    g.fillStyle(0xffffff, 0.55).fillCircle(s.x0 + dx * k, s.y0 + dy * k, 20);
+    g.lineStyle(2, 0x3a5a2a, 0.5).strokeCircle(s.x0 + dx * k, s.y0 + dy * k, 20);
+    // and an arrow just ahead of the pet, so you can see where it's headed without looking at your thumb
+    const len = Math.hypot(dx, dy);
+    if (len < STICK.dead) return;
+    const ux = dx / len;
+    const uy = dy / len;
+    const ds = depthScale(this.pet.y);
+    const cx = this.pet.x + ux * 58 * ds;
+    const cy = this.pet.y - 18 * ds + uy * 58 * ds * BONUS.ySquash;
+    const r = 13 * ds;
+    g.fillStyle(0xfff3c4, 0.9).lineStyle(2, 0x3a2a10, 0.8);
+    g.beginPath();
+    g.moveTo(cx + ux * r, cy + uy * r);
+    g.lineTo(cx - ux * r * 0.6 - uy * r * 0.8, cy - uy * r * 0.6 + ux * r * 0.8);
+    g.lineTo(cx - ux * r * 0.6 + uy * r * 0.8, cy - uy * r * 0.6 - ux * r * 0.8);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
   }
 
   private onUp(p: Phaser.Input.Pointer): void {
@@ -1037,6 +1110,10 @@ export class BonusScene extends Phaser.Scene {
       else if (this.phase === 'ready') this.nudgeHint();
     }
     if (this.steer && this.steer.id === p.id) this.steer = undefined;
+    if (this.stick && this.stick.id === p.id) {
+      this.stick = undefined;
+      this.drawStick();
+    }
   }
 
   /** A drag's aim and power: its direction sets the aim, its length and speed at the end set how far. */
@@ -1119,6 +1196,8 @@ export class BonusScene extends Phaser.Scene {
     this.paused = true;
     this.drag = undefined;
     this.steer = undefined;
+    this.stick = undefined;
+    this.stickG.clear();
     this.charging = false;
     this.tweens.pauseAll();
     this.spray.pause();
@@ -1279,6 +1358,7 @@ export class BonusScene extends Phaser.Scene {
     this.updateSprinkler();
     this.drawPet(dt);
     this.drawBalls();
+    if (this.stick) this.drawStick();
   }
 
   private endRound(): void {
@@ -1286,6 +1366,8 @@ export class BonusScene extends Phaser.Scene {
     this.phase = 'over';
     this.drag = undefined;
     this.steer = undefined;
+    this.stick = undefined;
+    this.stickG.clear();
     this.charging = false;
     this.aimG.clear();
     this.updateHud();

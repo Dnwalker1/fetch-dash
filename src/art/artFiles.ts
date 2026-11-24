@@ -16,6 +16,7 @@ const PROPS = [
   'clothesline', 'crate', 'creek', 'driftwood', 'fence', 'fence-rail', 'fish', 'haybale', 'hydrant', 'lantern',
   'log', 'pier-pole', 'pond', 'puddle', 'pumpkin', 'rock', 'sandcastle', 'sign', 'sled',
   'snowbranch', 'snowcanopy', 'snowman', 'stump', 'trashcan', 'trough', 'trunk', 'tumbleweed',
+  'tree-park', 'tree-snow', 'tree-autumn', 'tree-blossom', 'tree-jungle',
   'umbrella', 'umbrella-pole', 'vines', 'wood-post',
 ];
 /** Two-frame critters: -0 is wings up (or the arm up), -1 is down. */
@@ -25,6 +26,7 @@ const CRITTERS = [
   'chicken', 'chipmunk', 'crab', 'fox', 'frog', 'gopher', 'lizard', 'monkey', 'mouse', 'rabbit',
   'squirrel', 'streetcat', 'streetdog',
   ...['dirt', 'sand', 'snow'].flatMap((e) => [`den-${e}`, `den-${e}-lip`]),
+  'tufts-den',
 ];
 /**
  * Backyard Toss pictures in public/art/bonus/ (the keys are listed at the top

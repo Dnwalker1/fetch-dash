@@ -9,6 +9,7 @@ Your pet runs on its own. You keep it out of trouble and on task:
 | Jump | Tap | Space |
 | Slide (and fast-fall in the air) | Swipe down | Down arrow |
 | Keep your pet on task (call it back) | Swipe up | Up arrow |
+| Stop (and go again when you let go) | Hold a finger down | Hold the left arrow |
 | Pause | Pause button | P or Esc |
 
 ## Your pet is the hero
@@ -53,13 +54,18 @@ Finishing a level opens the next one. Best scores are kept per level on the devi
   - Something on the trail (squirrel, bunny, crab, bird): if you wait, your pet turns around, the run slows down, and your pet runs back after it. If it gets too far back, the run ends.
   - Something out of reach (a bird or gull overhead, a den hole, a butterfly): your pet stops to stare and the run slows down until you call it back.
 - On the end card, Enter or Space starts the next run.
+- **First run tutorial.** The first time you play Level 1, the game stops at a fence, a branch and a squirrel, with a hand showing the tap, the swipe down and the swipe up. "Replay tutorial" on the home card shows it again.
+- **Neighbors with treats** (levels 4, 9 and 12). A neighbor stands by the trail holding out a treat. Hold to stop on the glowing patch beside them for +75 and a treat. Stop a little short and your pet walks up to them. Nothing bad happens if you run past.
+- **Climbing** (levels 2 and 8). Stone ledges in steps lead up to a ridge with treats and a golden treat (+100). You can jump up through a ledge from below. The trail underneath has its own obstacles. Layout: `CLIMB` in `src/config.ts`; art: `src/art/ledges.ts`.
+- **Dig spots and tunnels** (levels 5 and 9). Swipe down on a dig spot to dig into a tunnel: a low ceiling, stones to jump, roots to slide under, lines of buried bones and a golden one (+100) before you pop back out. Tuning: `TUNNEL` in `src/config.ts`; art: `src/art/tunnel.ts`.
+- **Debug overlay.** Add `?debug=1` to the address for frames per second, the touch or mouse position, and the speed with its multipliers.
 
 ## Bonus round: Backyard Toss
 
 After levels 3, 6 and 9 the end card offers a 60-second bonus round (or skip it), and each one can be replayed from its 🎾 stop on the trail map once that level is done. The camera looks down a backyard lawn at an angle: things farther up the screen are smaller, drawn behind nearer things, and move more slowly.
 
 - **Throw:** swipe up from the bottom half of the screen. The direction aims; a longer, faster swipe throws farther. A dotted arc shows the throw while you drag. On a computer, drag up with the mouse, or hold Space to charge and aim with ← →.
-- **Fetch:** the pet dashes after the ball for a moment, then you steer: hold a finger (or the mouse button) where it should run, or use the arrow keys / WASD.
+- **Fetch:** the pet dashes after the ball for a moment, then you steer. On a phone, put your thumb anywhere and drag: a joystick appears under it, the pet runs the way you drag, and an arrow ahead of the pet shows where it's headed. With a mouse, hold the button where it should run, or use the arrow keys / WASD.
 - **Bring it back** to the glowing circle at the bottom for the next throw. Catching it before it touches the ground is an air catch.
 - **Treats:** 3 for each ball brought back, 3 more for an air catch, 1 for each golden treat on the lawn (3 to a pile, mostly in the far half), and 5 for three air-caught returns in a row. After 3 returns each throw launches 2 balls, and after 6, 3 balls. The sprinkler turns on now and then and pushes the ball. You can't lose.
 - **Cats** get a ball of yarn: it bounces less, rolls farther and leaves a thread that fades.
@@ -85,6 +91,10 @@ Then open the address it prints, usually http://localhost:5173. To try it on you
 ## Tech
 
 [Phaser 3](https://phaser.io) with TypeScript, built with [Vite](https://vite.dev). Later, the web build gets wrapped in an Expo app for iOS and Android.
+
+## Art specs
+
+Every obstacle and gopher-hole picture, with its size, placement and hit box, is listed in [docs/art-specs.md](docs/art-specs.md), so painted replacements drop in without code changes.
 
 ## Phone app
 

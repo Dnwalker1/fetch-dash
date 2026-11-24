@@ -1,3 +1,4 @@
+import { validDog, type DogChoice } from './breeds';
 import Phaser from 'phaser';
 import { circle, css, ellipse, fillOut, grain, lin, line, paint, rad, roundX, roundY, shade, type Ctx } from './paint';
 
@@ -38,9 +39,13 @@ export interface PetChoice {
   look?: string;
   /** marking layers to show on a painted sheet that has them, e.g. 'chest', 'socks' */
   markings?: string[];
+  /** a layered breed dog (see breeds.ts); when set, it's drawn instead of look */
+  dog?: DogChoice;
+  /** save format version */
+  v?: 1;
 }
 
-export const DEFAULT_PET: PetChoice = { species: 'dog', size: 'medium', palette: 'brown' };
+export const DEFAULT_PET: PetChoice = { v: 1, species: 'dog', size: 'medium', palette: 'brown', look: 'chewy' };
 
 const NOSE = 0x2b1a0d;
 const COLLAR = 0xd6402b;
@@ -403,8 +408,13 @@ export function loadPet(): PetChoice {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY) ?? 'null');
     if (raw && (raw.species === 'dog' || raw.species === 'cat') && raw.size in SIZE_SCALE && raw.palette in PALETTES) {
-      const c: PetChoice = { species: raw.species, size: raw.size, palette: raw.palette };
+      const c: PetChoice = { v: 1, species: raw.species, size: raw.size, palette: raw.palette };
       if (typeof raw.look === 'string') c.look = raw.look;
+      const dog = raw.species === 'dog' ? validDog(raw.dog) : undefined;
+      if (dog) {
+        c.dog = dog;
+        delete c.look;
+      }
       if (Array.isArray(raw.markings)) c.markings = raw.markings.filter((m: unknown) => typeof m === 'string');
       return c;
     }

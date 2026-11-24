@@ -1,7 +1,9 @@
 import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
+import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
+import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
 import { HeroError, LIVE, generateLive, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
@@ -162,9 +164,47 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   // Painted sprites for this species, if any are made yet
   const looks = sheetsFor(c.species);
   const look = sheetFor(c);
-  const lookRow = looks.length
-    ? `<div class="field">Look <div class="segs">${seg('look', look?.id ?? 'drawn', [['drawn', 'Drawn'], ...looks.map((l): [string, string] => [l.id, `\u{1F3A8} ${esc(l.label)}`])])}</div></div>`
-    : '';
+  const hexOf = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+  const dog = c.species === 'dog' ? c.dog : undefined;
+  const breed = breedById(dog?.breed);
+  let lookRow: string;
+  let coatRow: string;
+  if (c.species === 'dog') {
+    // Chewy, or one of the layered breeds with its own coats, ears or tail, and a bandana
+    const pick = breed?.id ?? (look ? look.id : 'chewy');
+    lookRow = `<div class="field">Breed <div class="segs">${seg('breed', pick, [['chewy', '\u{1F3A8} Chewy'], ...BREEDS.map((b): [string, string] => [b.id, esc(b.label)])])}</div></div>`;
+    if (breed && dog) {
+      const coatChips = Object.entries(breed.coats)
+        .map(([k, v]) => `<button class="chip coat${dog.coat === k ? ' on' : ''}" data-coat="${k}" title="${esc(v.label)}" aria-label="${esc(v.label)}" style="--coat:${hexOf(coatSwatch(breed, k))};--coat2:${hexOf(coatSwatch2(breed, k))}"></button>`)
+        .join('');
+      const shapes = (['ears', 'tail'] as const)
+        .filter((g) => breed.variants[g])
+        .map((g) => `<div class="field">${g === 'ears' ? 'Ears' : 'Tail'} <div class="segs">${seg(`shape-${g}`, shapeOption(dog, g)!, breed.variants[g]!.map((o): [string, string] => [o, cap(o)]))}</div></div>`)
+        .join('');
+      const bandanas =
+        `<button class="chip coat none${dog.bandana ? '' : ' on'}" data-bandana="" title="No bandana" aria-label="No bandana"></button>` +
+        Object.entries(BANDANAS)
+          .map(([k, v]) => `<button class="chip coat${dog.bandana === k ? ' on' : ''}" data-bandana="${k}" title="${cap(k)}" aria-label="${cap(k)} bandana" style="--coat:${hexOf(v)}"></button>`)
+          .join('');
+      const toggles = [
+        breed.features.tailtip ? `<button class="seg${dog.tailtip ? ' on' : ''}" data-feature="tailtip">White tail tip</button>` : '',
+        breed.features.muzzle ? `<button class="seg${dog.muzzle ? ' on' : ''}" data-feature="muzzle">Gray muzzle</button>` : '',
+      ].join('');
+      coatRow =
+        `<div class="field">Coat <span class="coatname">${esc(breed.coats[dog.coat].label)}</span><div class="chips">${coatChips}</div></div>` +
+        shapes +
+        `<div class="field">Bandana <div class="chips">${bandanas}</div></div>` +
+        (toggles ? `<div class="field">Extras <div class="segs">${toggles}</div></div>` : '');
+    } else {
+      coatRow = `<div class="field">Coat <span class="note">Chewy is painted in his own colors.</span></div>`;
+    }
+  } else {
+    lookRow = looks.length
+      ? `<div class="field">Look <div class="segs">${seg('look', look?.id ?? 'drawn', [['drawn', 'Drawn'], ...looks.map((l): [string, string] => [l.id, `\u{1F3A8} ${esc(l.label)}`])])}</div></div>`
+      : '';
+    coatRow = `<div class="field">Coat <div class="chips">${chips}</div>
+            ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>`;
+  }
 
   const photoBox = left > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
@@ -195,8 +235,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
           <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
           ${lookRow}
-          <div class="field">Coat <div class="chips">${chips}</div>
-            ${look?.coat === 'fixed' ? `<span class="note">This look is painted in ${esc(look.label)}'s own colors.</span>` : hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>
+          ${coatRow}
           <div class="runner"><span>In the game</span><img alt="" /></div>
         </div>
       </div>
@@ -238,6 +277,65 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       host.setChoice({ ...host.choice(), look: id === 'drawn' ? undefined : id });
       openSetup(host, opts);
     }),
+  );
+  // Breed dogs: every change saves and re-opens the card
+  const setDog = (f: (d: DogChoice) => DogChoice | undefined, look?: string) => {
+    keepName();
+    const cur = host.choice();
+    const next: PetChoice = { ...cur };
+    const d = cur.dog ? f(cur.dog) : undefined;
+    if (d) {
+      next.dog = d;
+      delete next.look;
+    } else {
+      delete next.dog;
+      next.look = look;
+    }
+    host.setChoice(next);
+    openSetup(host, opts);
+  };
+  r.querySelectorAll<HTMLButtonElement>('[data-breed]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const id = b.dataset.breed!;
+      const br = breedById(id);
+      keepName();
+      const next: PetChoice = { ...host.choice() };
+      if (br) {
+        // keep the bandana when switching breeds
+        next.dog = { breed: id as BreedId, coat: br.defaultCoat, ...(next.dog?.bandana ? { bandana: next.dog.bandana } : {}) };
+        delete next.look;
+      } else {
+        delete next.dog;
+        next.look = 'chewy';
+      }
+      host.setChoice(next);
+      openSetup(host, opts);
+    }),
+  );
+  r.querySelectorAll<HTMLButtonElement>('[data-coat]').forEach((b) => b.addEventListener('click', () => setDog((d) => ({ ...d, coat: b.dataset.coat! }))));
+  for (const g of ['ears', 'tail'] as const) {
+    r.querySelectorAll<HTMLButtonElement>(`[data-shape-${g}]`).forEach((b) => b.addEventListener('click', () => setDog((d) => ({ ...d, [g]: b.getAttribute(`data-shape-${g}`)! }))));
+  }
+  r.querySelectorAll<HTMLButtonElement>('[data-bandana]').forEach((b) =>
+    b.addEventListener('click', () =>
+      setDog((d) => {
+        const n = { ...d };
+        if (b.dataset.bandana) n.bandana = b.dataset.bandana;
+        else delete n.bandana;
+        return n;
+      }),
+    ),
+  );
+  r.querySelectorAll<HTMLButtonElement>('[data-feature]').forEach((b) =>
+    b.addEventListener('click', () =>
+      setDog((d) => {
+        const k = b.dataset.feature as 'tailtip' | 'muzzle';
+        const n = { ...d };
+        if (n[k]) delete n[k];
+        else n[k] = true;
+        return n;
+      }),
+    ),
   );
   r.querySelectorAll<HTMLButtonElement>('[data-palette]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -440,6 +538,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
         </div>
         <div class="headbtns">
           <button class="btn ghost edit">${hero?.portrait ? 'Edit hero' : '✨ Make a hero portrait'}</button>
+          ${tutorialDone() ? '<button class="btn ghost tut">Replay tutorial</button>' : ''}
           <a class="shoplink" href="${shopUrl('home')}" target="_blank" rel="noopener">Put ${esc(name)} on a shirt →</a>
         </div>
       </div>
@@ -517,6 +616,10 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   r.querySelectorAll<HTMLButtonElement>('.bstop').forEach((b) => b.addEventListener('click', () => pickBonus(Number(b.dataset.after))));
   r.querySelector('.play')?.addEventListener('click', go);
   r.querySelector('.edit')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
+  r.querySelector('.tut')?.addEventListener('click', () => {
+    setTutorialDone(false);
+    host.play(1);
+  });
   // Tap the small hero picture to see the whole portrait; tap again to close it
   const medal = r.querySelector<HTMLButtonElement>('button.medal');
   medal?.addEventListener('click', () => {

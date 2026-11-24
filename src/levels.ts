@@ -1,4 +1,5 @@
 import { GROUND_Y } from './config';
+import type { LedgeStyle } from './art/ledges';
 
 /**
  * The levels. Each one is a trail with its own look, length, speed,
@@ -88,6 +89,14 @@ export interface LevelDef {
   catChaser: ChaserKind;
   /** Out-of-reach distractions. */
   gawk: GawkKind[];
+  /**
+   * Climbing sections: stone ledges in steps up to a high ridge with treats on
+   * top, while the trail below keeps its obstacles. The first comes after
+   * `firstM` meters, then one every `everyM` meters.
+   */
+  climb?: { style: LedgeStyle; firstM: number; everyM: [number, number] };
+  /** Dig spots that lead into a tunnel: the first after `firstM` meters, then one every `everyM`. */
+  dig?: { firstM: number; everyM: [number, number] };
   theme: Theme;
 }
 
@@ -137,6 +146,7 @@ export const LEVELS: LevelDef[] = [
     dogChaser: 'rabbit',
     catChaser: 'bird',
     gawk: ['bird', 'den', 'butterfly'],
+    climb: { style: 'rock', firstM: 140, everyM: [230, 300] },
     theme: {
       skyTop: 0x6fb8f0,
       skyBottom: 0xfbe9c8,
@@ -239,6 +249,7 @@ export const LEVELS: LevelDef[] = [
     dogChaser: 'frog',
     catChaser: 'frog',
     gawk: ['duck', 'den'],
+    dig: { firstM: 150, everyM: [380, 460] },
     theme: {
       skyTop: 0x7d8a99,
       skyBottom: 0xc9d3d9,
@@ -344,6 +355,7 @@ export const LEVELS: LevelDef[] = [
     dogChaser: 'lizard',
     catChaser: 'lizard',
     gawk: ['hawk', 'den'],
+    climb: { style: 'sandstone', firstM: 180, everyM: [280, 360] },
     theme: {
       skyTop: 0x4f9ee8,
       skyBottom: 0xffd9a0,
@@ -375,6 +387,7 @@ export const LEVELS: LevelDef[] = [
     dogChaser: 'chicken',
     catChaser: 'mouse',
     gawk: ['bird', 'person', 'butterfly'],
+    dig: { firstM: 200, everyM: [420, 520] },
     theme: {
       skyTop: 0x6ec4ff,
       skyBottom: 0xe8f6ff,
