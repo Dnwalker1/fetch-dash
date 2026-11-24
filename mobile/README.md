@@ -46,9 +46,24 @@ EAS runs `eas-build-post-install`, which builds and packs the game before
 bundling. On expo.dev the GitHub link uses `mobile` as the base directory, so
 builds can also start from GitHub.
 
+## Icon and splash
+
+- `assets/icon.png`: the 1024 px app icon (iOS, and the Android fallback).
+- `assets/android-icon-foreground.png`: the same art for Android's shaped
+  icons. It's full bleed, with the painting inside the middle 70/108 and a
+  soft extension around it, so circles and rounded squares crop only sky
+  and grass. `android-icon-monochrome.png` is the dog-and-ball silhouette
+  for Android's themed icons.
+- `assets/splash-logo.png`: the logo on the launch screen, set up through the
+  `expo-splash-screen` plugin in `app.json`. Android 12+ shows it inside a
+  circle, so it stays 180 dp wide there.
+- `assets/logo.webp`: the logo on the app's own "Getting the trail ready" screen.
+
+The web game's favicons, home-screen icons and `site.webmanifest` live in
+`public/` and are left out of the app bundle.
+
 ## Not done yet
 
-- App icon and splash are Expo's placeholders.
 - "Save picture" on the end card is a browser download, which a WebView
   ignores. It needs a small bridge to the phone's share sheet.
 - No ads, purchases or store listing yet.

@@ -17,7 +17,7 @@ import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice }
 import { petFrameUrls, petLookFor, queuePetArt, type PetLook } from '../art/petLook';
 import { BRAKE, CLIMB, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress } from '../levels';
-import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, refreshPetFrames, type CardHost } from '../ui/cards';
+import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, openTitle, refreshPetFrames, type CardHost } from '../ui/cards';
 import { loadHero } from '../hero/store';
 import { addDebugOverlay } from '../ui/debug';
 import { setTutorialDone, tutorialDone } from '../tutorial';
@@ -86,6 +86,10 @@ const TRAIL_HAZE = 0.28;
 const JUMP_BUFFER_MS = 150;
 /** A jump still works this soon after running off the top of a hill. */
 const COYOTE_MS = 110;
+
+/** The title screen shows once per launch, not each time the scene restarts. */
+let titleShown = false;
+
 /** Bumps a run can take: the first ones make the pet stumble, the last one ends the run. */
 const PAWS = 3;
 /** After a stumble, the pet can't be bumped again for this long. */
@@ -449,14 +453,22 @@ export class GameScene extends Phaser.Scene {
     this.setupInput();
     addDebugOverlay(this, () => `speed ${this.speed.toFixed(0)} px/s  x${(this.speedFactor * this.brakeFactor).toFixed(2)} (distraction ${this.speedFactor.toFixed(2)}, brake ${this.brakeFactor.toFixed(2)})${this.braking ? ' BRAKING' : ''}${this.onLedge ? ' on-ledge' : ''}`);
 
-    // First visit: make your hero. After that: meet your hero and pick a
-    // level. Between runs: straight to "Tap to run".
+    // The title screen first, once per launch. Then on a first visit: make
+    // your hero; after that: meet your hero and pick a level. Between runs:
+    // straight to "Tap to run".
     if (data?.auto) {
       this.showReady();
     } else {
       this.showReady();
-      if (!loadHero()) openSetup(this.cardHost(), { canGoBack: false });
-      else openHome(this.cardHost());
+      const next = () => {
+        if (!loadHero()) openSetup(this.cardHost(), { canGoBack: false });
+        else openHome(this.cardHost());
+      };
+      if (titleShown) next();
+      else {
+        titleShown = true;
+        openTitle(next);
+      }
     }
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => closeCards());

@@ -24,6 +24,10 @@ const run = (cmd) => execSync(cmd, { cwd: root, stdio: 'inherit' });
 if (!existsSync(join(root, 'node_modules'))) run('npm ci');
 run('npm run build:app');
 
+// Browser-only files (favicons, home-screen icons, the web app manifest) do
+// nothing inside the app, so they stay out of it to keep the download small.
+const WEB_ONLY = /^(icons\/|favicon\.ico$|site\.webmanifest$)/;
+
 const walk = (dir) =>
   readdirSync(dir).flatMap((name) => {
     const p = join(dir, name);
@@ -35,6 +39,7 @@ const hash = createHash('sha256');
 const entries = [];
 for (const src of walk(built).sort()) {
   const rel = relative(built, src).split('\\').join('/');
+  if (WEB_ONLY.test(rel)) continue;
   const dest = join(files, rel + EXT);
   mkdirSync(dirname(dest), { recursive: true });
   cpSync(src, dest);

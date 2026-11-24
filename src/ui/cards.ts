@@ -96,7 +96,7 @@ export function closeCards(): void {
   keyHandler = undefined;
   if (root) {
     root.innerHTML = '';
-    root.classList.remove('open');
+    root.classList.remove('open', 'title');
   }
 }
 
@@ -492,6 +492,23 @@ function heroMedal(hero: Hero | null): string {
   return `<div class="medal empty"><img class="flip" alt="" /></div>`;
 }
 
+/**
+ * The title screen: the Fetch Dash logo and a Play button, shown once when
+ * the game opens, before the hero card or the trail map.
+ */
+export function openTitle(onPlay: () => void): void {
+  const r = show(
+    `<div class="titlecard">
+      <img class="logo" src="./art/logo.webp" alt="Fetch Dash" />
+      <button class="btn primary go">Play ▶</button>
+      <p class="by">A Goodwookie game · Design Your Pet</p>
+    </div>`,
+    () => onPlay(),
+  );
+  r.classList.add('title');
+  r.querySelector('.go')?.addEventListener('click', () => onPlay());
+}
+
 export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void {
   const hero = loadHero();
   const p = host.progress();
@@ -536,6 +553,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
           <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(cap(name))}</h1>
           <p class="lead">${opts.reveal ? 'Your hero is ready. Pick a trail on the map.' : 'Pick a trail on the map.'}</p>
         </div>
+        <img class="headlogo" src="./art/logo.webp" alt="Fetch Dash" />
         <div class="headbtns">
           <button class="btn ghost edit">${hero?.portrait ? 'Edit hero' : '✨ Make a hero portrait'}</button>
           ${tutorialDone() ? '<button class="btn ghost tut">Replay tutorial</button>' : ''}
