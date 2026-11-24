@@ -85,3 +85,7 @@ Then open the address it prints, usually http://localhost:5173. To try it on you
 ## Tech
 
 [Phaser 3](https://phaser.io) with TypeScript, built with [Vite](https://vite.dev). Later, the web build gets wrapped in an Expo app for iOS and Android.
+
+## Phone app
+
+The iPhone and Android app lives in [mobile/](mobile/README.md). It is an Expo app that ships this game inside a WebView and builds with EAS.

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:app": "tsc --noEmit && vite build --mode app"
   },
   "dependencies": {
     "phaser": "3.90.0"
