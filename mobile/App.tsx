@@ -1,12 +1,13 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { prepareGame } from './prepareGame';
 
 const BG = '#1d2b1f';
+const LOGO = require('./assets/logo.webp');
 
 type State =
   | { kind: 'loading'; done: number; total: number }
@@ -68,7 +69,7 @@ export default function App() {
         />
       ) : (
         <View style={styles.center}>
-          <Text style={styles.title}>Fetch Dash</Text>
+          <Image source={LOGO} style={styles.logo} resizeMode="contain" accessibilityLabel="Fetch Dash" />
           {state.kind === 'loading' ? (
             <Text style={styles.note}>
               Getting the trail ready{state.total ? ` (${Math.round((100 * state.done) / state.total)}%)` : '…'}
@@ -95,7 +96,8 @@ function joinUri(dir: string, name: string) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: BG },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  title: { color: '#efe3c6', fontSize: 34, fontWeight: 'bold', marginBottom: 12 },
+  // Same size as the splash screen's logo on iOS, so the hand-over doesn't jump
+  logo: { width: 360, maxWidth: '80%', aspectRatio: 2400 / 702, height: undefined, marginBottom: 16 },
   note: { color: '#d9c8a2', fontSize: 18 },
   button: { marginTop: 16, backgroundColor: '#c79a3e', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
   buttonText: { color: '#16202a', fontSize: 18, fontWeight: 'bold' },

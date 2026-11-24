@@ -331,10 +331,10 @@
 }
 #ui .medal.empty img { width: 78%; height: auto; object-fit: contain; }
 #ui .reveal .medal { animation: shine 1.2s ease-out; }
-#ui .who { flex: 1; min-width: 0; }
+#ui .who { flex: 1 1 0; min-width: 0; }
 #ui .who h1 { margin: 0; }
 #ui .who .lead { margin: 0.1em 0 0; }
-#ui .headbtns { display: flex; flex-direction: column; align-items: flex-end; gap: 0.2em; }
+#ui .headbtns { flex: 1 1 0; display: flex; flex-direction: column; align-items: flex-end; gap: 0.2em; }
 #ui .headbtns .btn { padding: 0.4em 0.9em; font-size: 0.9em; }
 #ui .headbtns .shoplink { margin: 0; font-size: 0.85em; }
 
@@ -545,4 +545,54 @@
 /* Very small phones (iPhone SE sideways): the level map needs the room */
 @media (max-height: 340px) {
   #ui .home .runner { display: none; }
+}
+
+/* Title screen: the Fetch Dash logo over the dimmed trail, and a Play button */
+#ui.open.title {
+  background: radial-gradient(ellipse at 50% 45%, rgba(22, 32, 42, 0.5) 0%, rgba(22, 32, 42, 0.85) 100%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+#ui .titlecard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 3vh, 22px);
+  width: min(920px, 92vw);
+  animation: pop 0.35s ease-out;
+}
+#ui .titlecard .logo {
+  width: 100%;
+  max-height: 58vh;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.45));
+}
+#ui .titlecard .go {
+  flex: none;
+  min-width: min(320px, 60vw);
+  font-size: clamp(18px, 4.6vh, 28px);
+  padding: 0.45em 1.6em;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  animation: breathe 1.8s ease-in-out 0.6s infinite;
+}
+#ui .titlecard .by {
+  margin: 0;
+  color: var(--cream);
+  font-size: clamp(11px, 2.2vh, 14px);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+@keyframes breathe { 50% { transform: scale(1.05); } }
+
+/* Small logo in the middle of the trail map's header */
+#ui .headlogo {
+  flex: none;
+  height: clamp(40px, 12vh, 78px);
+  width: auto;
+  max-width: 34%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+@media (max-width: 620px) {
+  #ui .headlogo { display: none; }
 }

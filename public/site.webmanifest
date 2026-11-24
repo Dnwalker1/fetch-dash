@@ -1,0 +1,14 @@
+{
+  "name": "Fetch Dash",
+  "short_name": "Fetch Dash",
+  "description": "A one-tap runner where your own pet is the hero.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#1d2b1f",
+  "theme_color": "#1d2b1f",
+  "icons": [
+    { "src": "icons/android-chrome-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/android-chrome-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

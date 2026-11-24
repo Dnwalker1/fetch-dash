@@ -8,11 +8,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "backgroundColor": "#1d2b1f",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1d2b1f"
-    },
     "ios": {
       "bundleIdentifier": "com.goodwookie.fetchdash",
       "supportsTablet": true,
@@ -26,14 +21,27 @@
     "android": {
       "package": "com.goodwookie.fetchdash",
       "adaptiveIcon": {
-        "backgroundColor": "#1d2b1f",
+        "backgroundColor": "#9fd0ef",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["expo-asset"],
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-logo.png",
+          "backgroundColor": "#1d2b1f",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "ios": {
+            "imageWidth": 360
+          }
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "6e3c7ef2-1962-46e4-b00f-6f63757d99ee"
