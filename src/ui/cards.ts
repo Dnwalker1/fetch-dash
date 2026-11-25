@@ -85,8 +85,7 @@ const SHOP = 'https://www.goodwookie.com/design-your-pet';
 const shopUrl = (where: string) => `${SHOP}?utm_source=fetch-dash&utm_medium=game&utm_campaign=${where}`;
 /** The Design Your Pet app in the stores. */
 const DYP_PLAY = 'https://play.google.com/store/apps/details?id=com.goodwookie.designyourpet&referrer=utm_source%3Dfetch-dash%26utm_medium%3Dgame';
-/** TODO: the App Store link for Design Your Pet. Until it's here, iPhones get the website. */
-const DYP_APP_STORE = '';
+const DYP_APP_STORE = 'https://apps.apple.com/us/app/design-your-pet-by-goodwookie/id6828224743';
 
 let root: HTMLDivElement | undefined;
 let runnerTimer: number | undefined;

@@ -68,8 +68,7 @@ doesn't send it is counted by `text`. `GET /allowance` and a ready
 `allowance: { portraitsLeft, portraitsUsed, perPet, maxPets, total, pets: [{ name, used, left }] }`.
 The game takes the server's `pets` over its own tally. When the free portraits
 run out, the game shows a pop-up with links to the Design Your Pet app (Google
-Play on Android; the App Store once `DYP_APP_STORE` in `src/ui/cards.ts` is
-filled in) and goodwookie.com.
+Play on Android, the App Store on iPhone) and goodwookie.com.
 
 The rule's numbers live in `wix-backend/backend/fetchDashPets.js` (paste into
 the Wix site) and `src/hero/store.ts`; change both together.
@@ -125,8 +124,6 @@ starts another while there's room.
   Hero sample once the style is live.
 - The stand-in portrait in `src/hero/demo.ts` still draws the Anime Hero
   layout. It only shows when the live settings are missing.
-- Fill in `DYP_APP_STORE` in `src/ui/cards.ts` with Design Your Pet's App
-  Store link. Until then, iPhones get the website button only.
 - Don pastes the per-pet backend into Wix and publishes (files and steps were
   delivered 25 Nov 2026). Until then, the server still counts 3 per ID in
   total, and the game shows the pop-up when it refuses.
