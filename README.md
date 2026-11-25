@@ -23,22 +23,31 @@ Until the live generator is switched on, the game makes a stand-in portrait on t
 
 ## Levels
 
+The order mixes the ways of playing so the same kind never comes twice in a row (see `docs/levels-round-2.md`). Lengths and speeds follow each level's place in the order.
+
 | Level | Trail | Length | What's new |
 | --- | --- | --- | --- |
 | 1 | Park Trail | 600 m | Fences, puddles, low branches. Squirrels (dogs) and birds (cats). |
-| 2 | Hilltop Trail | 800 m | Rolling hills. Logs and rocks to jump. Bunnies to chase. |
-| 3 | Sunset Beach | 1000 m | Gentle dunes at sunset. Sandcastles, driftwood, beach umbrellas to slide under. Crabs and seagulls. |
-| 4 | Main Street | 1000 m | Downtown at dusk under the street lamps. Trash cans, hydrants and sidewalk signs to jump, shop awnings to slide under. Dogs chase a cat, cats run from a dog, pigeons fly over, and neighbors wave hello (dogs only). |
-| 5 | Rainy Riverside | 1100 m | Rain, willows and a river. Stumps and creeks to jump. Frogs hop past, ducks fly over. |
-| 6 | Snowy Night | 1200 m | Moonlight, stars and falling snow. Snowmen and sleds to jump, snowy branches to slide under. A fox (dogs) or a cardinal (cats), and owls overhead. |
-| 7 | Autumn Orchard | 1250 m | Falling leaves. Hay bales and pumpkins to jump, autumn branches to slide under. Chipmunks (dogs), mice (cats), crows. |
-| 8 | Desert Canyon | 1300 m | Red rock mesas. Cacti and rolling tumbleweeds to jump, stone arches to slide under. Lizards and hawks. |
-| 9 | Sunny Farm | 1350 m | Red barn and windmill. Hay bales and water troughs to jump, clotheslines to slide under. A chicken (dogs), mice (cats), the farmer waves. |
-| 10 | Blossom Garden | 1400 m | Falling petals. Stone lanterns and koi ponds to jump, blossom branches to slide under. |
-| 11 | Jungle Falls | 1450 m | Big hills and waterfalls. Creeks, logs and stumps to jump, hanging vines to slide under. Monkeys (dogs) and parrots (cats). |
-| 12 | Fireworks Pier | 1500 m | The finale at night on the boardwalk, with fireworks. Crates and barrels to jump, flag banners to slide under. Seagulls and balloons. |
+| 2 | Hilltop Trail | 750 m | Rolling hills and climbing ledges. Logs and rocks to jump. Bunnies to chase. |
+| 3 | Sunset Beach | 900 m | Gentle dunes at sunset. Sandcastles, driftwood, beach umbrellas to slide under. Crabs and seagulls. |
+| 4 | Open Meadow | 950 m | **Run to the horizon:** the trail turns into the screen; swipe left and right to change lanes. |
+| 5 | Main Street | 1000 m | Downtown at dusk. Trash cans, hydrants, signs, awnings. A cat (dogs) or a dog (cats), pigeons, neighbors with treats. |
+| 6 | Lake Crossing | 1025 m | **Swimming** for most of the run: tap to hop over floating logs, swipe down to dive under footbridges. |
+| 7 | Rainy Riverside | 1075 m | Rain, willows, dig spots and tunnels. Frogs and ducks. |
+| 8 | Desert Canyon | 1125 m | Red rock mesas and climbing ledges. Cacti, tumbleweeds, stone arches. Lizards and hawks. |
+| 9 | Snowy Night | 1150 m | Moonlight and falling snow. Snowmen, sleds, snowy branches. A fox or a cardinal, and owls. |
+| 10 | Jungle Falls | 1200 m | Waterfalls and swimming stretches. Vines to slide under. Monkeys and parrots. |
+| 11 | Sunflower Road | 1250 m | **Run to the horizon** down a country road through the sunflowers. |
+| 12 | Sunny Farm | 1275 m | Barn, windmill, dig spots and tunnels. A chicken or mice, and the farmer waves. |
+| 13 | Autumn Orchard | 1325 m | Falling leaves. Hay bales, pumpkins, autumn branches. Chipmunks, mice, crows. |
+| 14 | Mountain Switchbacks | 1375 m | **Tall climbing ledges** up to a high ridge. |
+| 15 | Thunderstorm Trail | 1400 m | Lightning, rain and **swimming stretches** where the trail floods. |
+| 16 | Blossom Garden | 1450 m | Falling petals. Stone lanterns, koi ponds, blossom branches. |
+| 17 | Night Woods | 1500 m | **Dark:** only the pet's little light shows the trail ahead. Fireflies, owls, a fox. |
+| 18 | Fireworks Pier | 1525 m | Night on the boardwalk with fireworks. Crates, barrels, banners. |
+| 19 | Moon Run | 1575 m | **Low gravity** in a space helmet: floaty jumps over craters and moon rocks, a moon-cheese ball, flying saucers. |
 
-Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`. Levels 1 to 6 use painted backgrounds made in Grok (`public/art/l1` to `l6`: sky, far and mid strips, keyed and made seamless); the other levels, and all the critters and obstacles, are drawn in code in `src/art/`.
+Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`. Levels use painted backgrounds made in Grok (`public/art/l<art>`: sky, far and mid strips, keyed and made seamless). The round 2 levels borrow other levels' paintings until theirs are painted; `docs/levels-round-2.md` lists what's needed.
 
 ## How to play
 
@@ -55,14 +64,16 @@ Finishing a level opens the next one. Best scores are kept per level on the devi
   - Something out of reach (a bird or gull overhead, a den hole, a butterfly): your pet stops to stare and the run slows down until you call it back.
 - On the end card, Enter or Space starts the next run.
 - **First run tutorial.** The first time you play Level 1, the game stops at a fence, a branch and a squirrel, with a hand showing the tap, the swipe down and the swipe up. "Replay tutorial" on the home card shows it again.
-- **Neighbors with treats** (levels 4, 9 and 12). A neighbor stands by the trail holding out a treat. Hold to stop on the glowing patch beside them for +75 and a treat. Stop a little short and your pet walks up to them. Nothing bad happens if you run past.
-- **Climbing** (levels 2 and 8). Stone ledges in steps lead up to a ridge with treats and a golden treat (+100). You can jump up through a ledge from below. The trail underneath has its own obstacles. Layout: `CLIMB` in `src/config.ts`; art: `src/art/ledges.ts`.
-- **Dig spots and tunnels** (levels 5 and 9). Swipe down on a dig spot to dig into a tunnel: a low ceiling, stones to jump, roots to slide under, lines of buried bones and a golden one (+100) before you pop back out. Tuning: `TUNNEL` in `src/config.ts`; art: `src/art/tunnel.ts`.
+- **Neighbors with treats** (levels 5, 12 and 18). A neighbor stands by the trail holding out a treat. Hold to stop on the glowing patch beside them for +75 and a treat. Stop a little short and your pet walks up to them. Nothing bad happens if you run past.
+- **Climbing** (levels 2, 8 and 14). Stone ledges in steps lead up to a ridge with treats and a golden treat (+100). You can jump up through a ledge from below. The trail underneath has its own obstacles. Layout: `CLIMB` in `src/config.ts`; art: `src/art/ledges.ts`.
+- **Dig spots and tunnels** (levels 7 and 12). Swipe down on a dig spot to dig into a tunnel: a low ceiling, stones to jump, roots to slide under, lines of buried bones and a golden one (+100) before you pop back out. Tuning: `TUNNEL` in `src/config.ts`; art: `src/art/tunnel.ts`.
+- **Runs to the horizon** (levels 4 and 11). Swipe (or arrow) left and right to change lanes, tap to jump. Tuning: `HORIZON`; code: `src/scenes/horizon.ts`.
+- **Swimming** (levels 6, 10 and 15). Tap hops out of the water, swipe down dives. The pet is slower in the water (cats more so: `SPECIES`). Tuning: `SWIM`.
 - **Debug overlay.** Add `?debug=1` to the address for frames per second, the touch or mouse position, and the speed with its multipliers.
 
 ## Bonus round: Backyard Toss
 
-After levels 3, 6 and 9 the end card offers a 60-second bonus round (or skip it), and each one can be replayed from its 🎾 stop on the trail map once that level is done. The camera looks down a backyard lawn at an angle: things farther up the screen are smaller, drawn behind nearer things, and move more slowly.
+After levels 3, 6, 9, 12 and 15 the end card offers a 60-second bonus round (or skip it), and each one can be replayed from its 🎾 stop on the trail map once that level is done. The camera looks down a backyard lawn at an angle: things farther up the screen are smaller, drawn behind nearer things, and move more slowly.
 
 - **Throw:** swipe up from the bottom half of the screen. The direction aims; a longer, faster swipe throws farther. A dotted arc shows the throw while you drag. On a computer, drag up with the mouse, or hold Space to charge and aim with ← →.
 - **Fetch:** the pet dashes after the ball for a moment, then you steer. On a phone, put your thumb anywhere and drag: a joystick appears under it, the pet runs the way you drag, and an arrow ahead of the pet shows where it's headed. With a mouse, hold the button where it should run, or use the arrow keys / WASD.

@@ -445,6 +445,39 @@ function paintVerge(c: Ctx, t: Theme): void {
   }
 }
 
+/** Grey moon dust with little craters, and paw prints along the trodden path. */
+function paintMoon(c: Ctx, t: Theme): void {
+  const r = seeded(19);
+  c.fillStyle = lin(c, 0, S, 0, H, [[0, shade(t.grass, 0.12)], [0.3, t.grass], [1, shade(t.grass, -0.45)]]);
+  c.fillRect(0, S, W, H - S);
+  const [top, bot] = pathEdges();
+  bandPath(c, top, bot);
+  c.fillStyle = lin(c, 0, S + 16, 0, S + 51, [[0, t.dirt, 0.5], [0.25, t.dirt, 0.95], [0.8, t.dirt, 0.95], [1, t.dirt, 0.5]]);
+  c.fill();
+  for (let x = 20; x < W; x += 64) pawPrint(c, x, (x / 64) % 2 ? S + 37 : S + 28, 1.15, t.dirtDark, 0xffffff);
+  // little craters: a dark bowl with a lit rim on the far side
+  for (let i = 0; i < 46; i++) {
+    const x = r() * W;
+    const y = S + 6 + r() * (H - S - 12);
+    const rx = 3 + r() * (y > S + 60 ? 16 : 7);
+    wrapX(x, rx + 2, (px) => {
+      ellipse(c, px, y, rx, rx * 0.32);
+      c.fillStyle = css(shade(t.grass, -0.35), 0.55);
+      c.fill();
+      ellipse(c, px, y + rx * 0.08, rx * 0.8, rx * 0.22);
+      c.fillStyle = css(shade(t.grass, -0.5), 0.45);
+      c.fill();
+      c.beginPath();
+      c.ellipse(px, y, rx, rx * 0.32, 0, 0.1, Math.PI - 0.1);
+      c.strokeStyle = css(shade(t.grass, 0.45), 0.6);
+      c.lineWidth = 1;
+      c.stroke();
+    });
+  }
+  pebbles(c, r, 60, () => [S + 4, H - 8], shade(t.grassDark, -0.1));
+  grain(c, W, H, 0.07, 0.08, 5);
+}
+
 export function paintGround(scene: Phaser.Scene, levelId: number, t: Theme): string {
   const key = `ground-${levelId}`;
   const tex = paint(scene, key, W, H, (c) => {
@@ -453,6 +486,7 @@ export function paintGround(scene: Phaser.Scene, levelId: number, t: Theme): str
     else if (t.tufts === 'snow') paintSnow(c, t);
     else if (t.tufts === 'street') paintStreet(c, t);
     else if (t.tufts === 'boards') paintBoards(c, t);
+    else if (t.tufts === 'moon') paintMoon(c, t);
     else paintGrass(c, t);
   });
   if (tex) {

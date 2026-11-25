@@ -72,7 +72,7 @@ function flower(c: Ctx, x: number, y: number, s: number, color: number): void {
 }
 
 export function paintForeground(scene: Phaser.Scene, levelId: number, t: Theme): string | null {
-  if (t.tufts === 'street') return null;
+  if (t.tufts === 'street' || t.tufts === 'moon') return null;
   const key = `fg-${levelId}`;
   paint(scene, key, FG_W, FG_H, (c) => {
     const r = seeded(500 + levelId);

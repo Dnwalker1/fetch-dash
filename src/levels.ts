@@ -2,23 +2,31 @@ import { GROUND_Y } from './config';
 import type { LedgeStyle } from './art/ledges';
 
 /**
- * The levels. Each one is a trail with its own look, length, speed,
- * obstacles and critters. To add a level, add an entry here, with its
- * painted pictures in public/art and any new props in src/art.
+ * The levels. Each one is a trail with its own look, obstacles and critters,
+ * and some have their own way to play (climbing, tunnels, swimming, a run
+ * into the screen, a dark wood, low gravity).
+ *
+ * A level has two numbers: `art`, which never changes and names its pictures
+ * (public/art/l<art>) and anything painted for it, and `id`, its place on the
+ * trail map (Level 1, Level 2...). The play order is ORDER below, picked so
+ * the same way of playing never comes twice in a row; a level's length and
+ * speed come from its place in that order, so the game still gets steadily
+ * harder. To add a level, add a spec to SPECS and put its art number in ORDER.
  */
 
 export type ObstacleKind =
   | 'fence' | 'fence-rail' | 'puddle' | 'branch' | 'log' | 'rock' | 'sandcastle' | 'driftwood' | 'umbrella'
   | 'trashcan' | 'hydrant' | 'sign' | 'awning' | 'stump' | 'creek' | 'snowman' | 'sled' | 'snowbranch'
   | 'haybale' | 'pumpkin' | 'autumnbranch' | 'cactus' | 'tumbleweed' | 'arch' | 'trough' | 'clothesline'
-  | 'lantern' | 'pond' | 'blossombranch' | 'vines' | 'crate' | 'barrel' | 'banner';
+  | 'lantern' | 'pond' | 'blossombranch' | 'vines' | 'crate' | 'barrel' | 'banner'
+  | 'moon-rock' | 'crater' | 'moon-flag' | 'space-arch';
 
 export type ChaserKind =
   | 'squirrel' | 'rabbit' | 'crab' | 'bird' | 'cat' | 'dog' | 'frog' | 'fox' | 'cardinal'
-  | 'chipmunk' | 'mouse' | 'lizard' | 'chicken' | 'monkey' | 'parrot' | 'seagull';
+  | 'chipmunk' | 'mouse' | 'lizard' | 'chicken' | 'monkey' | 'parrot' | 'seagull' | 'moonbug';
 export type GawkKind =
   | 'bird' | 'den' | 'butterfly' | 'gull' | 'pigeon' | 'person' | 'duck' | 'owl'
-  | 'crow' | 'hawk' | 'parrot' | 'balloon';
+  | 'crow' | 'hawk' | 'parrot' | 'balloon' | 'ufo';
 
 /** One scrolling background layer: texture, height in px, scroll speed vs. the trail. */
 export interface Layer {
@@ -58,7 +66,9 @@ export interface Theme {
   cloudTint?: number;
   /** Stars twinkle in the sky. */
   night?: boolean;
-  weather?: 'rain' | 'snow' | 'leaves' | 'petals' | 'fireworks';
+  weather?: 'rain' | 'snow' | 'leaves' | 'petals' | 'fireworks' | 'fireflies';
+  /** Lightning now and then (with rain). */
+  storm?: boolean;
   /** Little colored bits scattered on the grass (fallen leaves, petals). */
   speckle?: number;
   grass: number;
@@ -68,11 +78,17 @@ export interface Theme {
   /** Tint used for the pale "sky haze" over the farthest layer. */
   haze: number;
   /** Little marks drawn along the ground. 'street' draws a sidewalk and road instead of a dirt path. */
-  tufts: 'grass' | 'sand' | 'street' | 'snow' | 'boards';
+  tufts: 'grass' | 'sand' | 'street' | 'snow' | 'boards' | 'moon';
 }
 
+/** The ways a level can play, shown on the trail map. */
+export type PlayStyle = 'run' | 'climb' | 'dig' | 'swim' | 'horizon' | 'dark' | 'space';
+
 export interface LevelDef {
+  /** Its place on the trail map (1 = first). Worked out from ORDER. */
   id: number;
+  /** Names its pictures and painted bits; never changes when levels are reordered. */
+  art: number;
   name: string;
   tagline: string;
   /** Little landmark shown next to the level's stop on the trail map. */
@@ -94,20 +110,42 @@ export interface LevelDef {
    * top, while the trail below keeps its obstacles. The first comes after
    * `firstM` meters, then one every `everyM` meters.
    */
-  climb?: { style: LedgeStyle; firstM: number; everyM: [number, number] };
+  climb?: { style: LedgeStyle; firstM: number; everyM: [number, number]; tall?: boolean };
   /** Dig spots that lead into a tunnel: the first after `firstM` meters, then one every `everyM`. */
   dig?: { firstM: number; everyM: [number, number] };
+  /**
+   * Swimming: stretches where the trail turns into water. The first starts
+   * after `firstM` meters; each is `lengthM` long, with `gapM` of dry trail
+   * before the next.
+   */
+  swim?: { firstM: number; lengthM: [number, number]; gapM: [number, number]; obstacles: SwimObstacle[] };
+  /**
+   * Runs into the screen: the trail turns toward the horizon for `lengthM`
+   * meters, with `gapM` of side-on trail between. Obstacles come in three
+   * lanes; `scenery` is what grows along the sides.
+   */
+  horizon?: { firstM: number; lengthM: number; gapM: [number, number]; obstacles: ObstacleKind[]; scenery: 'meadow' | 'sunflowers' };
+  /** A dark level: the pet carries a little light, and the trail ahead is lit by it. */
+  dark?: boolean;
+  /** Low gravity (the Moon): this share of the usual pull, so jumps float. */
+  gravity?: number;
+  /** What the thrown ball is here (a moon-cheese ball on the Moon). */
+  ball?: string;
   theme: Theme;
 }
 
-export const LEVELS: LevelDef[] = [
+/** What floats in the water or hangs over it: hop over logs, crates and lily pads, dive under the footbridge. */
+export type SwimObstacle = 'float-log' | 'float-crate' | 'lily' | 'footbridge';
+
+/** A level as written in SPECS: its place, length and speed are filled in from ORDER. */
+type LevelSpec = Omit<LevelDef, 'id' | 'goalMeters' | 'speed'>;
+
+const SPECS: LevelSpec[] = [
   {
-    id: 1,
+    art: 1,
     name: 'Park Trail',
     tagline: 'A sunny run through the park',
     icon: '🌳',
-    goalMeters: 600,
-    speed: { start: 300, max: 750, gainPerSecond: 6 },
     obstacles: { fence: 4, puddle: 3, branch: 3 },
     hills: { height: 0, length: 1 },
     dogChaser: 'squirrel',
@@ -135,12 +173,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 2,
+    art: 2,
     name: 'Hilltop Trail',
     tagline: 'Up and down the rolling hills',
     icon: '⛰️',
-    goalMeters: 800,
-    speed: { start: 310, max: 760, gainPerSecond: 6.5 },
     obstacles: { log: 3, rock: 3, branch: 3, fence: 1 },
     hills: { height: 70, length: 1500 },
     dogChaser: 'rabbit',
@@ -169,12 +205,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 3,
+    art: 3,
     name: 'Sunset Beach',
     tagline: 'Race the sunset along the sand',
     icon: '🌴',
-    goalMeters: 1000,
-    speed: { start: 320, max: 780, gainPerSecond: 7 },
     obstacles: { sandcastle: 3, driftwood: 3, umbrella: 3, puddle: 1 },
     hills: { height: 34, length: 1100 },
     dogChaser: 'crab',
@@ -204,12 +238,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 4,
+    art: 4,
     name: 'Main Street',
     tagline: 'Downtown at dusk, lights coming on',
     icon: '🏙️',
-    goalMeters: 1000,
-    speed: { start: 330, max: 790, gainPerSecond: 7 },
     obstacles: { trashcan: 3, hydrant: 3, sign: 2, awning: 3 },
     hills: { height: 0, length: 1 },
     dogChaser: 'cat',
@@ -238,12 +270,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 5,
+    art: 5,
     name: 'Rainy Riverside',
     tagline: 'Splash along the river in the rain',
     icon: '🌧️',
-    goalMeters: 1100,
-    speed: { start: 340, max: 800, gainPerSecond: 7.5 },
     obstacles: { stump: 3, creek: 3, log: 2, rock: 2, branch: 3 },
     hills: { height: 40, length: 1300 },
     dogChaser: 'frog',
@@ -274,12 +304,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 6,
+    art: 6,
     name: 'Snowy Night',
     tagline: 'A moonlit dash through the snow',
     icon: '❄️',
-    goalMeters: 1200,
-    speed: { start: 350, max: 820, gainPerSecond: 8 },
     obstacles: { snowman: 3, sled: 3, snowbranch: 3, rock: 1 },
     hills: { height: 60, length: 1600 },
     dogChaser: 'fox',
@@ -311,12 +339,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 7,
+    art: 7,
     name: 'Autumn Orchard',
     tagline: 'Crunchy leaves and apple trees',
     icon: '🍎',
-    goalMeters: 1250,
-    speed: { start: 360, max: 830, gainPerSecond: 8 },
     obstacles: { haybale: 3, pumpkin: 3, autumnbranch: 3, 'fence-rail': 1 },
     hills: { height: 50, length: 1400 },
     dogChaser: 'chipmunk',
@@ -344,12 +370,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 8,
+    art: 8,
     name: 'Desert Canyon',
     tagline: 'Red rocks and rolling tumbleweeds',
     icon: '🌵',
-    goalMeters: 1300,
-    speed: { start: 365, max: 840, gainPerSecond: 8 },
     obstacles: { cactus: 3, tumbleweed: 3, rock: 2, arch: 3 },
     hills: { height: 50, length: 1400 },
     dogChaser: 'lizard',
@@ -376,12 +400,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 9,
+    art: 9,
     name: 'Sunny Farm',
     tagline: 'Barns, hay and a very busy chicken',
     icon: '🐄',
-    goalMeters: 1350,
-    speed: { start: 370, max: 850, gainPerSecond: 8.5 },
     obstacles: { haybale: 3, trough: 3, 'fence-rail': 2, clothesline: 3 },
     hills: { height: 30, length: 1200 },
     dogChaser: 'chicken',
@@ -408,12 +430,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 10,
+    art: 10,
     name: 'Blossom Garden',
     tagline: 'Pink petals and quiet ponds',
     icon: '🌸',
-    goalMeters: 1400,
-    speed: { start: 375, max: 860, gainPerSecond: 8.5 },
     obstacles: { lantern: 3, pond: 3, blossombranch: 3, rock: 1 },
     hills: { height: 30, length: 1100 },
     dogChaser: 'rabbit',
@@ -442,17 +462,16 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 11,
+    art: 11,
     name: 'Jungle Falls',
     tagline: 'Vines, waterfalls and cheeky monkeys',
     icon: '🦜',
-    goalMeters: 1450,
-    speed: { start: 380, max: 870, gainPerSecond: 9 },
     obstacles: { vines: 3, log: 2, stump: 2, creek: 3 },
     hills: { height: 70, length: 1500 },
     dogChaser: 'monkey',
     catChaser: 'parrot',
     gawk: ['parrot', 'den'],
+    swim: { firstM: 220, lengthM: [70, 100], gapM: [240, 320], obstacles: ['float-log', 'lily', 'footbridge'] },
     theme: {
       skyTop: 0x5fb8d8,
       skyBottom: 0xdaf2e0,
@@ -473,12 +492,10 @@ export const LEVELS: LevelDef[] = [
     },
   },
   {
-    id: 12,
+    art: 12,
     name: 'Fireworks Pier',
     tagline: 'The big finale on the boardwalk',
     icon: '🎆',
-    goalMeters: 1500,
-    speed: { start: 385, max: 880, gainPerSecond: 9 },
     obstacles: { crate: 3, barrel: 3, banner: 3, trashcan: 1 },
     hills: { height: 0, length: 1 },
     dogChaser: 'seagull',
@@ -507,7 +524,261 @@ export const LEVELS: LevelDef[] = [
       tufts: 'boards',
     },
   },
+  // ---------- Round 2 (25 November): new ways to play ----------
+  // Their pictures borrow other levels' paintings, tinted, until Elon paints
+  // their own (see docs/levels-round-2.md for the list).
+  {
+    art: 13,
+    name: 'Open Meadow',
+    tagline: 'The trail turns toward the faraway hills',
+    icon: '🌼',
+    obstacles: { fence: 3, rock: 3, branch: 3, log: 2 },
+    hills: { height: 30, length: 1300 },
+    dogChaser: 'rabbit',
+    catChaser: 'bird',
+    gawk: ['butterfly', 'bird', 'den'],
+    horizon: { firstM: 70, lengthM: 190, gapM: [70, 100], obstacles: ['rock', 'log', 'stump'], scenery: 'meadow' },
+    theme: {
+      skyTop: 0x8fd3ff,
+      skyBottom: 0xe8f6ff,
+      skyImage: 'art/l9/sky.webp',
+      layers: [
+        { key: 'l10-far', src: 'art/l10/far.webp', scale: 0.8, factor: 0.12, tint: 0xb8d8c8 },
+        { key: 'l1-far', src: 'art/l1/far.webp', scale: 1.7, factor: 0.3 },
+      ],
+      raysAlpha: 0.4,
+      cloudsAlpha: 1,
+      speckle: 0xf6e27a,
+      grass: 0x93be4e,
+      grassDark: 0x72a03a,
+      dirt: 0xc4a473,
+      dirtDark: 0xa8895e,
+      haze: 0xe8f6ff,
+      tufts: 'grass',
+    },
+  },
+  {
+    art: 14,
+    name: 'Sunflower Road',
+    tagline: 'A country road through the sunflowers',
+    icon: '🌻',
+    obstacles: { haybale: 3, 'fence-rail': 2, rock: 2, branch: 3 },
+    hills: { height: 24, length: 1200 },
+    dogChaser: 'chicken',
+    catChaser: 'mouse',
+    gawk: ['crow', 'bird', 'den'],
+    horizon: { firstM: 60, lengthM: 220, gapM: [70, 110], obstacles: ['haybale', 'rock', 'pumpkin'], scenery: 'sunflowers' },
+    theme: {
+      skyTop: 0x7fb6e0,
+      skyBottom: 0xffe8b8,
+      skyImage: 'art/l7/sky.webp',
+      layers: [
+        { key: 'l9-far', src: 'art/l9/far.webp', scale: 0.8, factor: 0.15 },
+        { key: 'sunflowers', h: 120, factor: 0.45 },
+      ],
+      raysAlpha: 0.5,
+      cloudsAlpha: 0.9,
+      speckle: 0xf2c84a,
+      grass: 0xa6b24a,
+      grassDark: 0x86933a,
+      dirt: 0xc39a62,
+      dirtDark: 0xa57f4e,
+      haze: 0xffe8b8,
+      tufts: 'grass',
+    },
+  },
+  {
+    art: 15,
+    name: 'Lake Crossing',
+    tagline: 'Paddle across the lake to the far shore',
+    icon: '🦆',
+    obstacles: { log: 3, rock: 2, branch: 3, stump: 2 },
+    hills: { height: 0, length: 1 },
+    dogChaser: 'frog',
+    catChaser: 'frog',
+    gawk: ['duck', 'butterfly'],
+    swim: { firstM: 50, lengthM: [170, 230], gapM: [40, 70], obstacles: ['float-log', 'float-crate', 'lily', 'footbridge'] },
+    theme: {
+      skyTop: 0x8fc8f0,
+      skyBottom: 0xfbe6d8,
+      skyImage: 'art/l10/sky.webp',
+      layers: [
+        { key: 'l2-far', src: 'art/l2/far.webp', scale: 1, factor: 0.12, lift: 10 },
+        { key: 'l5-mid', src: 'art/l5/mid.webp', scale: 0.65, factor: 0.35 },
+      ],
+      raysAlpha: 0.35,
+      cloudsAlpha: 0.8,
+      grass: 0x7fae4a,
+      grassDark: 0x5f8f36,
+      dirt: 0xa88a62,
+      dirtDark: 0x8a6f4c,
+      haze: 0xf3e6e6,
+      tufts: 'grass',
+    },
+  },
+  {
+    art: 16,
+    name: 'Thunderstorm Trail',
+    tagline: 'The storm turns the trail into streams',
+    icon: '⛈️',
+    obstacles: { stump: 3, log: 2, puddle: 2, branch: 3, rock: 1 },
+    hills: { height: 40, length: 1300 },
+    dogChaser: 'rabbit',
+    catChaser: 'mouse',
+    gawk: ['duck', 'den'],
+    swim: { firstM: 110, lengthM: [55, 90], gapM: [110, 170], obstacles: ['float-log', 'float-crate', 'footbridge'] },
+    theme: {
+      skyTop: 0x4a5462,
+      skyBottom: 0x8d97a3,
+      skyImage: 'art/l5/sky.webp',
+      layers: [
+        { key: 'l5-far', src: 'art/l5/far.webp', scale: 0.75, factor: 0.12, lift: 40, tint: 0x8890a0 },
+        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45, tint: 0x8a96a2 },
+      ],
+      raysAlpha: 0,
+      cloudsAlpha: 0.9,
+      cloudTint: 0x7a8490,
+      weather: 'rain',
+      storm: true,
+      grass: 0x5f7f46,
+      grassDark: 0x4a6838,
+      dirt: 0x64523c,
+      dirtDark: 0x4f402e,
+      haze: 0x8d97a3,
+      tufts: 'grass',
+    },
+  },
+  {
+    art: 17,
+    name: 'Mountain Switchbacks',
+    tagline: 'Leap up the ledges, high above the valley',
+    icon: '🏔️',
+    obstacles: { rock: 3, log: 2, branch: 3, stump: 2 },
+    hills: { height: 80, length: 1600 },
+    dogChaser: 'chipmunk',
+    catChaser: 'bird',
+    gawk: ['hawk', 'den'],
+    climb: { style: 'rock', firstM: 100, everyM: [170, 230], tall: true },
+    theme: {
+      skyTop: 0x5fa8e8,
+      skyBottom: 0xeaf2ff,
+      skyImage: 'art/l2/sky.webp',
+      layers: [
+        { key: 'l6-far', src: 'art/l6/far.webp', scale: 0.85, factor: 0.12, lift: 0, tint: 0xe4ecff },
+        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45 },
+      ],
+      raysAlpha: 0.45,
+      cloudsAlpha: 0.8,
+      grass: 0x86b04a,
+      grassDark: 0x668e38,
+      dirt: 0x9c8466,
+      dirtDark: 0x806a50,
+      haze: 0xeaf2ff,
+      tufts: 'grass',
+    },
+  },
+  {
+    art: 18,
+    name: 'Night Woods',
+    tagline: 'Follow your little light through the dark woods',
+    icon: '🦉',
+    obstacles: { log: 3, stump: 3, rock: 2, branch: 3 },
+    hills: { height: 40, length: 1300 },
+    dogChaser: 'fox',
+    catChaser: 'mouse',
+    gawk: ['owl', 'den'],
+    dark: true,
+    theme: {
+      skyTop: 0x0c1430,
+      skyBottom: 0x26335e,
+      sun: { x: 760, y: 100, r: 34, color: 0xf4f1dc, glow: 0xc9d6ff },
+      skyImage: 'art/l6/sky.webp',
+      layers: [
+        { key: 'l5-far', src: 'art/l5/far.webp', scale: 0.75, factor: 0.12, lift: 40, tint: 0x46557e },
+        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45, tint: 0x56689a },
+      ],
+      raysAlpha: 0,
+      cloudsAlpha: 0.2,
+      cloudTint: 0x6a78a0,
+      night: true,
+      weather: 'fireflies',
+      grass: 0x3f5a3a,
+      grassDark: 0x30482e,
+      dirt: 0x4a3e32,
+      dirtDark: 0x3a3028,
+      haze: 0x26335e,
+      tufts: 'grass',
+    },
+  },
+  {
+    art: 19,
+    name: 'Moon Run',
+    tagline: 'One giant leap for dog (and cat) kind',
+    icon: '🚀',
+    obstacles: { 'moon-rock': 3, crater: 3, 'moon-flag': 1, 'space-arch': 3 },
+    hills: { height: 36, length: 1500 },
+    dogChaser: 'moonbug',
+    catChaser: 'moonbug',
+    gawk: ['ufo'],
+    gravity: 0.45,
+    ball: 'moon-ball',
+    theme: {
+      skyTop: 0x05060f,
+      skyBottom: 0x141a33,
+      skyImage: 'art/l12/sky.webp',
+      layers: [
+        { key: 'earth-rise', h: 140, factor: 0.02, lift: 190 },
+        { key: 'moon-far', h: 130, factor: 0.15 },
+      ],
+      raysAlpha: 0,
+      cloudsAlpha: 0,
+      night: true,
+      grass: 0xb8b8c4,
+      grassDark: 0x8e8ea0,
+      dirt: 0x9a9aac,
+      dirtDark: 0x77778a,
+      haze: 0x141a33,
+      tufts: 'moon',
+    },
+  },
 ];
+
+/**
+ * The play order, by art number: the same way of playing never comes twice
+ * in a row (run, climb, dig, swim, horizon, dark, space).
+ */
+const ORDER = [1, 2, 3, 13, 4, 15, 5, 8, 6, 11, 14, 9, 7, 17, 16, 10, 18, 12, 19];
+
+/** How long a level is, and how fast it runs, from its place (1 = first) in the order. */
+function pace(n: number): Pick<LevelDef, 'goalMeters' | 'speed'> {
+  const goal = n <= 3 ? [600, 750, 900][n - 1] : Math.round((900 + (n - 3) * 42) / 25) * 25;
+  return {
+    goalMeters: goal,
+    speed: {
+      start: Math.round(300 + (n - 1) * 5),
+      max: Math.round(750 + (n - 1) * 7.5),
+      gainPerSecond: Math.round((6 + (n - 1) * 0.18) * 10) / 10,
+    },
+  };
+}
+
+export const LEVELS: LevelDef[] = ORDER.map((art, i) => {
+  const spec = SPECS.find((s) => s.art === art);
+  if (!spec) throw new Error(`No level with art ${art}`);
+  return { ...spec, id: i + 1, ...pace(i + 1) };
+});
+
+/** How a level plays, for the map's labels. */
+export function playStyle(l: LevelDef): PlayStyle {
+  if (l.gravity) return 'space';
+  if (l.horizon) return 'horizon';
+  if (l.swim && !l.climb && !l.dig && l.art !== 11) return 'swim';
+  if (l.dark) return 'dark';
+  if (l.climb) return 'climb';
+  if (l.dig) return 'dig';
+  if (l.swim) return 'swim';
+  return 'run';
+}
 
 export function levelById(id: number): LevelDef {
   return LEVELS.find((l) => l.id === id) ?? LEVELS[0];
@@ -547,8 +818,14 @@ function smooth(t: number): number {
 
 const PROGRESS_KEY = 'fetch-dash-progress';
 const OLD_BEST_KEY = 'fetch-dash-best';
+/**
+ * Saved progress before round 2 counted levels in the old order (1 to 12).
+ * Version 2 counts them in ORDER; older saves are moved over once.
+ */
+const PROGRESS_V = 2;
 
 export interface Progress {
+  v?: number;
   unlocked: number; // highest level the player can pick
   current: number; // the level to start on
   best: Record<number, number>;
@@ -558,14 +835,20 @@ export interface Progress {
 }
 
 /** A Backyard Toss bonus round opens after each of these levels. */
-export const BONUS_AFTER = [3, 6, 9];
+export const BONUS_AFTER = [3, 6, 9, 12, 15];
+
+/** Where a level from the old order (its art number) sits now. */
+function moved(oldId: number): number {
+  return LEVELS.find((l) => l.art === oldId)?.id ?? oldId;
+}
 
 export function loadProgress(): Progress {
-  const fresh: Progress = { unlocked: 1, current: 1, best: {}, done: [], stars: {}, bonusTreats: 0 };
+  const fresh: Progress = { v: PROGRESS_V, unlocked: 1, current: 1, best: {}, done: [], stars: {}, bonusTreats: 0 };
   try {
     const raw = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? 'null');
     if (raw && typeof raw.unlocked === 'number') {
-      return {
+      const p: Progress = {
+        v: PROGRESS_V,
         unlocked: Math.min(LEVELS.length, Math.max(1, raw.unlocked)),
         current: Math.min(LEVELS.length, Math.max(1, raw.current ?? 1)),
         best: raw.best ?? {},
@@ -573,6 +856,17 @@ export function loadProgress(): Progress {
         stars: raw.stars ?? {},
         bonusTreats: Math.max(0, Math.floor(Number(raw.bonusTreats) || 0)),
       };
+      if (raw.v !== PROGRESS_V) {
+        // From the old order: move each level's results to its new place, and
+        // open every level up to the farthest one finished (plus the next)
+        const remap = (r: Record<number, number>) => Object.fromEntries(Object.entries(r).map(([k, v]) => [moved(Number(k)), v]));
+        p.best = remap(p.best);
+        p.stars = remap(p.stars);
+        p.done = p.done.map(moved);
+        p.current = moved(p.current);
+        p.unlocked = Math.min(LEVELS.length, Math.max(p.unlocked, ...p.done.map((d) => d + 1), p.current));
+      }
+      return p;
     }
     // Carry over the best score from before there were levels
     const old = Number(localStorage.getItem(OLD_BEST_KEY)) || 0;
