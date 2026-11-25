@@ -120,8 +120,6 @@ starts another while there's room.
 
 ## 4. Still to do
 
-- Replace `public/hero-example.png` (still the old Anime Hero) with an Arcade
-  Hero sample once the style is live.
 - The stand-in portrait in `src/hero/demo.ts` still draws the Anime Hero
   layout. It only shows when the live settings are missing.
 - Don pastes the per-pet backend into Wix and publishes (files and steps were

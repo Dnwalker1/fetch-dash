@@ -250,7 +250,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
 
   const photoBox = allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
-         <img src="${hasPhoto ? photoUrl : './hero-example.png'}" alt="" />
+         <img src="${hasPhoto ? photoUrl : './hero-example.webp'}" alt="" />
          ${hasPhoto ? '' : '<span class="tag">Example</span>'}
          <input type="file" accept="image/*" />
          <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
@@ -259,7 +259,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
          <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head</small></span></label>
        <p class="small allow">${allowanceLine(name)}</p>`
     : `<div class="drop used">
-         <img src="${hero?.portrait ?? './hero-example.png'}" alt="" />
+         <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
        </div>
        <p class="small">You've used all ${TOTAL_PORTRAITS} free hero portraits.</p>
        <button class="btn gold more">Keep designing in Design Your Pet</button>`;
