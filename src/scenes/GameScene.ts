@@ -231,7 +231,7 @@ export class GameScene extends Phaser.Scene {
   private pauseBtn?: Phaser.GameObjects.Text;
   private startedAt = 0;
   private uiTap = false; // set when a tap lands on a game button, so it doesn't also jump or start
-  private heroBtn?: Phaser.GameObjects.Container;
+  private mapBtn?: Phaser.GameObjects.Container;
   private wasOnGround = true;
   private dustTimer = 0;
   private obstacles!: Phaser.Physics.Arcade.Group;
@@ -343,7 +343,7 @@ export class GameScene extends Phaser.Scene {
     this.grounded = true;
     this.layers = [];
     this.shownHints = new Set<string>();
-    this.heroBtn = undefined;
+    this.mapBtn = undefined;
     this.paws = PAWS;
     this.safeUntil = 0;
     this.paused = false;
@@ -726,14 +726,14 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- Run lifecycle ----------
 
-  /** "Tap to run" with the level name, plus a small My hero button. */
+  /** "Tap to run" with the level name, plus a small Map button (opens the trail map). */
   private showReady(): void {
     this.centerText.setFontSize(30);
     this.centerText.setText(`Level ${this.level.id}  ·  ${this.level.name}\n\nTap to run!`);
-    if (this.heroBtn) return;
-    const btn = this.add.container(GAME_WIDTH - 90, 70).setDepth(20);
+    if (this.mapBtn) return;
+    const btn = this.add.container(GAME_WIDTH - 70, 70).setDepth(20);
     const bg = this.add
-      .rectangle(0, 0, 150, 36, 0xfbf6ea, 0.95)
+      .rectangle(0, 0, 110, 36, 0xfbf6ea, 0.95)
       .setStrokeStyle(2, 0xc79a3e)
       .setInteractive({ useHandCursor: true });
     bg.on('pointerdown', () => {
@@ -743,10 +743,10 @@ export class GameScene extends Phaser.Scene {
     btn.add(bg);
     btn.add(
       this.add
-        .text(0, 0, '\u{1F43E} My hero', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a', resolution: RENDER_SCALE })
+        .text(0, 0, '\u{1F43E} Map', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a', resolution: RENDER_SCALE })
         .setOrigin(0.5),
     );
-    this.heroBtn = btn;
+    this.mapBtn = btn;
   }
 
   private startRun(): void {
@@ -756,8 +756,8 @@ export class GameScene extends Phaser.Scene {
     savePet(this.choice);
     saveProgress(this.progress);
     this.centerText.setText('');
-    this.heroBtn?.destroy();
-    this.heroBtn = undefined;
+    this.mapBtn?.destroy();
+    this.mapBtn = undefined;
     this.pauseBtn?.setVisible(true);
     if (this.level.id === 1 && !tutorialDone()) {
       // First run: the game stops at a fence, a branch and a squirrel to show each move
@@ -2196,7 +2196,11 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.drawSky();
     }
-    t.layers.forEach((l, i) => {
+    // A painted strip that didn't load (no connection, say) is left out, so
+    // the level shows its sky and trail instead of a placeholder pattern.
+    const layers = t.layers.filter((l) => !l.src || this.textures.exists(l.key));
+    if (layers.length < t.layers.length) console.warn(`Level ${this.level.id}: some painted scenery didn't load`);
+    layers.forEach((l, i) => {
       const scale = l.scale ?? 1;
       // Painted strips have 4 clear rows on top. Showing from row 2 to just short of
       // the bottom keeps the strip's top and bottom edges from bleeding into each other.
