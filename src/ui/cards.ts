@@ -4,7 +4,7 @@ import { sheetFor, sheetsFor } from '../art/sheets';
 import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
-import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
+import { BONUS_AFTER, LEVELS, levelById, playStyle, type PlayStyle, type Progress } from '../levels';
 import { HERO_STEPS, HeroError, LIVE, fetchAllowance, generateLive, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
 import {
@@ -636,12 +636,39 @@ function portraitBlock(host: CardHost, hero: Hero | null, ribbon?: string): stri
 }
 
 /** Where each level sits on the trail map, in a 1000 x 260 box. */
+/**
+ * Where each level's stop sits on the map (a 1000 x 260 box): the trail runs
+ * left to right along the top, turns at the right edge and comes back along
+ * the bottom.
+ */
 function mapPoints(n: number): { x: number; y: number }[] {
-  return Array.from({ length: n }, (_, i) => ({
-    x: 70 + (i * 860) / Math.max(1, n - 1),
-    y: 128 + 74 * Math.sin(i * 0.95),
-  }));
+  const top = Math.ceil(n / 2);
+  const bottom = n - top;
+  return Array.from({ length: n }, (_, i) => {
+    if (i < top) return { x: 110 + (i * 780) / Math.max(1, top - 1), y: 90 + 12 * Math.sin(i * 1.3) };
+    const j = i - top;
+    return { x: 890 - ((j + 0.5) * 760) / Math.max(1, bottom), y: 192 + 10 * Math.sin(j * 1.3 + 1) };
+  });
 }
+
+/** The whole trail on the map: in from the left, through every stop, round the bend, and on to the ball. */
+function mapTrail(pts: { x: number; y: number }[]): { full: { x: number; y: number }[]; at: (stop: number) => number } {
+  const top = Math.ceil(pts.length / 2);
+  const full = [{ x: 0, y: pts[0].y + 14 }, ...pts.slice(0, top), { x: 968, y: (pts[top - 1].y + (pts[top]?.y ?? 192)) / 2 }, ...pts.slice(top), { x: 40, y: 200 }];
+  // stop k (1 = first) is at full[k], or one further along once past the bend
+  return { full, at: (k) => (k <= top ? k : k + 1) };
+}
+
+/** How a level plays, in a few words, on the map. */
+const STYLE_LABEL: Record<PlayStyle, string> = {
+  run: 'Trail run',
+  climb: 'Climbing',
+  dig: 'Dig spots and tunnels',
+  swim: 'Swimming',
+  horizon: 'Run to the horizon',
+  dark: 'Night run',
+  space: 'Low gravity',
+};
 
 /** The middle of the trail's curve from pts[i] to pts[i + 1] (the same curve trailPath draws). */
 function curveMid(pts: { x: number; y: number }[], i: number): { x: number; y: number } {
@@ -701,9 +728,10 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   const name = displayName(hero, host.choice().species);
   const pts = mapPoints(LEVELS.length);
   // The trail runs in from the left edge and on to the ball past the last stop
-  const lastPt = pts[pts.length - 1];
-  const full = [{ x: 0, y: pts[0].y + 40 }, ...pts, { x: 985, y: lastPt.y - 30 }];
-  const walked = full.slice(0, Math.min(full.length, p.unlocked + 1));
+  const { full, at } = mapTrail(pts);
+  const ballPt = full[full.length - 1];
+  const walked = full.slice(0, Math.min(full.length, at(p.unlocked) + 1));
+  const topRow = Math.ceil(LEVELS.length / 2);
   // Each trail gets a soft patch of its own ground color on the map
   const patches = LEVELS.map((l, i) => {
     const c = l.theme.grass;
@@ -714,17 +742,17 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
     const locked = l.id > p.unlocked;
     const done = p.done.includes(l.id);
     const { x, y } = pts[i];
-    const above = y > 128;
+    const above = i < topRow;
     return `<button class="stop${locked ? ' locked' : ''}${done ? ' done' : ''}${l.id === p.current ? ' on' : ''}" data-level="${l.id}"
         style="left:${x / 10}%; top:${y / 2.6}%; --ring:${hex(l.theme.grassDark)}" ${locked ? 'disabled' : ''} title="${esc(l.name)}" aria-label="Level ${l.id}: ${esc(l.name)}">
         <b>${locked ? '🔒' : l.id}</b>
         ${done ? `<em class="mini">${starRow(p.stars[l.id] ?? 0)}</em>` : ''}
       </button>
-      <span class="mark" style="left:${x / 10}%; top:${(above ? y - 50 : y + 52) / 2.6}%">${l.icon}</span>`;
+      <span class="mark" style="left:${x / 10}%; top:${(above ? y - 44 : y + 42) / 2.6}%">${l.icon}</span>`;
   }).join('');
-  // Backyard Toss bonus stops on the trail after levels 3, 6 and 9, open once that level is done
+  // Backyard Toss bonus stops on the trail after the levels in BONUS_AFTER, open once that level is done
   const cat = host.choice().species === 'cat';
-  const bonusAt = new Map(BONUS_AFTER.filter((a) => a < LEVELS.length).map((a) => [a, curveMid(full, a)]));
+  const bonusAt = new Map(BONUS_AFTER.filter((a) => a < LEVELS.length).map((a) => [a, curveMid(full, at(a))]));
   const bonusStops = [...bonusAt].map(([a, { x, y }]) => {
     const open = p.done.includes(a);
     return `<button class="bstop${open ? '' : ' locked'}" data-after="${a}" style="left:${x / 10}%; top:${y / 2.6}%" ${open ? '' : 'disabled'}
@@ -756,7 +784,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
         ${stops}
         ${bonusStops}
         <span class="jar" title="Treats from bonus rounds">${cat ? '🐟' : '🦴'} Treat jar: ${p.bonusTreats}</span>
-        <span class="ball" style="left:98.5%; top:${(lastPt.y - 30) / 2.6}%">🎾</span>
+        <span class="ball" style="left:${ballPt.x / 10}%; top:${ballPt.y / 2.6}%">🎾</span>
         <span class="compass">🧭</span>
         <div class="mappet"><img class="flip" alt="" /></div>
       </div>
@@ -809,7 +837,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
     if (info) {
       info.innerHTML = `<b>Level ${id} · ${esc(l.name)}</b>
         <span class="stars">${starRow(prog.stars[id] ?? 0)}</span>
-        <small>${esc(l.tagline)} · ${l.goalMeters} m${best ? ` · Best ${best}` : ''}</small>`;
+        <small>${STYLE_LABEL[playStyle(l)]} · ${esc(l.tagline)} · ${l.goalMeters} m${best ? ` · Best ${best}` : ''}</small>`;
     }
     const play = r.querySelector('.play');
     if (play) play.textContent = `Play Level ${id} ▶`;
@@ -848,7 +876,7 @@ export function openEnd(host: CardHost, res: RunResult): void {
     : esc(res.reason.replace('!', '')) + '!';
   const primary = res.won && next ? `Level ${next.id}: ${next.name} ▶` : res.won ? 'Play again ▶' : 'Run again ▶';
   const primaryLevel = res.won && next ? next.id : res.level;
-  // After levels 3, 6 and 9 the bonus round comes next (it can be skipped)
+  // After the levels in BONUS_AFTER the bonus round comes next (it can be skipped)
   const bonus = res.won && BONUS_AFTER.includes(res.level) && host.playBonus ? () => host.playBonus!(res.level) : undefined;
   const go = () => (bonus ? bonus() : host.play(primaryLevel));
 

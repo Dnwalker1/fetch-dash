@@ -165,3 +165,69 @@ export const BONUS = {
   // A sprinkler that turns on now and then and pushes the ball along
   sprinkler: { x: 655, y: 285, reach: 120, push: 520, onMs: 3200, offMs: [5000, 8000] as [number, number] },
 };
+
+/**
+ * Taller climbing sections (levels with `climb.tall`, like Mountain
+ * Switchbacks): two more steps, up to a ridge a full jump above the usual one.
+ */
+export const CLIMB_TALL = [
+  { dx: 0, w: 200, h: 90 },
+  { dx: 300, w: 200, h: 150 },
+  { dx: 600, w: 220, h: 205 },
+  { dx: 920, w: 220, h: 255 },
+  { dx: 1250, w: 420, h: 290 },
+];
+
+/**
+ * Swimming stretches (levels with `swim`): the trail turns into water. The pet
+ * paddles along with the water line across its body; a tap hops it up out of
+ * the water (over floating logs), a swipe down dives it under (a footbridge).
+ * Lengths in px are at 300 px/s and stretch with the run's speed.
+ */
+export const SWIM = {
+  sink: 30, // how far below the bank the pet's feet are while it swims (px)
+  bankPx: 90, // the sloping bank at each end of the water
+  diveSink: 26, // how much deeper a diving pet goes
+  diveMs: 650, // how long a dive lasts
+  clearEndPx: 1400, // no water this close to the finish
+  gap: [380, 640] as [number, number], // between things in the water
+};
+
+/**
+ * The runs into the screen (levels with `horizon`). The trail turns and heads
+ * for a vanishing point on the horizon; the pet runs in one of three lanes.
+ * Distances are along the trail in px, like the rest of the run.
+ */
+export const HORIZON = {
+  horizonY: 232, // where the land meets the sky
+  vanishX: 560, // the vanishing point, a little right of center, so the side-view pet reads as running away
+  nearY: 500, // the pet's feet
+  laneGap: 170, // between lanes at the pet's distance
+  petX: 430, // the middle lane at the pet's distance
+  focal: 420, // bigger = flatter (things shrink more slowly with distance)
+  spawnZ: 2300, // how far ahead things appear
+  gap: [520, 820] as [number, number], // between rows of obstacles
+  hitZ: 40, // how close in depth counts as touching
+  jumpHeight: 150, // px at full size
+  jumpMs: 620,
+  treatHeight: 30,
+};
+
+/**
+ * How cats differ on the new kinds of trail. A level is written once, and
+ * these numbers bend it for each species (more of this comes with the cat
+ * round: see the closed-testing plan).
+ */
+export const SPECIES = {
+  dog: { swimSpeed: 0.85, swimHop: 0.8, laneMs: 170, horizonJump: 1 },
+  // Cats swim grudgingly (slower) but spring higher out of the water, and
+  // they're quicker side to side
+  cat: { swimSpeed: 0.72, swimHop: 0.92, laneMs: 120, horizonJump: 1.2 },
+};
+
+/** The dark levels: how far the pet's light reaches. */
+export const NIGHT = {
+  dark: 0.78, // how dark it is outside the light
+  ahead: 440, // the light reaches this far in front of the pet
+  radius: 120, // the glow around the pet itself
+};
