@@ -108,11 +108,16 @@ export function petCounts(): PetCount[] {
 /** Takes the server's list and total (it's the one that counts). */
 export function setServerPets(pets: PetCount[], totalUsed?: number): void {
   const next: PetCounts = {};
+  const mine = readPets();
+  const hero = loadHero()?.name.trim() ?? '';
   let sum = 0;
   for (const p of pets) {
     const k = petKey(p.name);
     if (k && p.used > 0) {
-      next[k] = { name: p.name, used: Math.min(PORTRAITS_PER_PET, Math.floor(p.used)) };
+      // Older portraits only have the lettered name ("CHEWY"): show it as the player typed it
+      let name = p.name;
+      if (name === name.toUpperCase()) name = [mine[k]?.name, petKey(hero) === k ? hero : ''].find((n) => n && n !== n.toUpperCase()) ?? name;
+      next[k] = { name, used: Math.min(PORTRAITS_PER_PET, Math.floor(p.used)) };
       sum += next[k].used;
     }
   }
