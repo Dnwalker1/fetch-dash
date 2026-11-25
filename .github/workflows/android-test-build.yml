@@ -1,0 +1,87 @@
+# Builds an installable Android test APK of the phone app (mobile/) on EAS.
+#
+# Start it from the Actions tab: "Android test build" > "Run workflow", and pick
+# the branch to build. The build itself runs on Expo's servers with the
+# "preview" profile, so the Expo environment variables for preview
+# (VITE_DYP_API_BASE, VITE_DYP_APP_KEY) are picked up there, as before.
+# When it finishes, the run summary links the APK and the build page.
+name: Android test build
+
+on:
+  workflow_dispatch:
+    inputs:
+      wait:
+        description: Wait for the APK and link it in the run summary (uses about 10 to 20 Actions minutes)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-test-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # The EXPO_TOKEN secret lives in this GitHub environment.
+    environment: fetch-dash-token
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Check for the Expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN is empty. It must be a secret in the GitHub environment this job names."
+            exit 1
+          fi
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Build the APK on EAS
+        env:
+          WAIT: ${{ inputs.wait }}
+        run: |
+          if [ "$WAIT" = "true" ]; then wait_flag=--wait; else wait_flag=--no-wait; fi
+          eas build --profile preview --platform android --non-interactive --json $wait_flag > build.json
+          id=$(jq -r '.[0].id' build.json)
+          status=$(jq -r '.[0].status' build.json)
+          apk=$(jq -r '.[0].artifacts.buildUrl // empty' build.json)
+          page="https://expo.dev/accounts/goodwookies-team/projects/fetch-dash/builds/$id"
+          {
+            echo "## Android test build"
+            echo ""
+            echo "- Branch: \`${GITHUB_REF_NAME}\` at \`${GITHUB_SHA::7}\`"
+            echo "- EAS build: [$id]($page) ($status)"
+            if [ -n "$apk" ]; then
+              echo "- APK: [download]($apk)"
+            else
+              echo "- APK: not ready yet. The build page has it, and a QR code, when the build finishes."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "EAS build page: $page"
+          [ -n "$apk" ] && echo "APK: $apk"
+          if [ "$WAIT" = "true" ] && [ "$status" != "FINISHED" ]; then
+            echo "::error::EAS build ended as $status. See $page"
+            exit 1
+          fi

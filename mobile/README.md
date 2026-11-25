@@ -42,6 +42,16 @@ npx eas-cli@latest build --profile preview --platform android   # installable AP
 npx eas-cli@latest build --profile production --platform all    # store builds
 ```
 
+The easiest way to get a test APK is from GitHub: Actions tab, "Android test
+build", "Run workflow", and pick the branch. It starts the preview build on
+EAS with the `EXPO_TOKEN` secret from the repo's GitHub environment, and the
+run summary links the APK when it's done
+(`.github/workflows/android-test-build.yml`).
+
+Each profile in `eas.json` names its Expo environment (development, preview,
+production), so the `VITE_DYP_*` variables set on expo.dev are loaded the
+same way whether a build starts from GitHub, the command line or expo.dev.
+
 EAS runs `eas-build-post-install`, which builds and packs the game before
 bundling. On expo.dev the GitHub link uses `mobile` as the base directory, so
 builds can also start from GitHub.
