@@ -183,6 +183,8 @@ export interface ServerAllowance {
   pets?: { name: string; used: number }[];
   /** Left in all (newer server), or left on the install (older server). */
   portraitsLeft?: number;
+  /** Used in all, including any without a pet name. */
+  portraitsUsed?: number;
 }
 
 /** The server's count of free portraits, or undefined if it can't be reached. */
@@ -201,6 +203,7 @@ function allowanceFrom(body: Json): ServerAllowance | undefined {
   if (!a) return undefined;
   const out: ServerAllowance = {};
   if (typeof a.portraitsLeft === 'number') out.portraitsLeft = a.portraitsLeft;
+  if (typeof a.portraitsUsed === 'number') out.portraitsUsed = a.portraitsUsed;
   if (Array.isArray(a.pets)) {
     out.pets = (a.pets as Json[])
       .filter((p) => p && typeof p.name === 'string' && typeof p.used === 'number')

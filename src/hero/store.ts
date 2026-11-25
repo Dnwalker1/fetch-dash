@@ -96,18 +96,27 @@ function writePets(p: PetCounts): void {
   }
 }
 
-/** The pets that have portraits, oldest first. */
+/** The pets that have portraits, oldest first. (Key "" holds portraits the
+ * server counts without a pet name, from before this rule: they use up the 9
+ * but aren't a pet.) */
 export function petCounts(): PetCount[] {
-  return Object.values(readPets()).filter((p) => p.used > 0);
+  return Object.entries(readPets())
+    .filter(([k, p]) => k && p.used > 0)
+    .map(([, p]) => p);
 }
 
-/** Takes the server's list (it's the one that counts). */
-export function setServerPets(pets: PetCount[]): void {
+/** Takes the server's list and total (it's the one that counts). */
+export function setServerPets(pets: PetCount[], totalUsed?: number): void {
   const next: PetCounts = {};
+  let sum = 0;
   for (const p of pets) {
     const k = petKey(p.name);
-    if (k && p.used > 0) next[k] = { name: p.name, used: Math.min(PORTRAITS_PER_PET, Math.floor(p.used)) };
+    if (k && p.used > 0) {
+      next[k] = { name: p.name, used: Math.min(PORTRAITS_PER_PET, Math.floor(p.used)) };
+      sum += next[k].used;
+    }
   }
+  if (totalUsed !== undefined && totalUsed > sum) next[''] = { name: '', used: Math.floor(totalUsed - sum) };
   writePets(next);
 }
 
@@ -149,11 +158,10 @@ export interface Allowance {
 
 export function allowanceFor(name: string): Allowance {
   const pets = readPets();
-  const all = Object.values(pets).filter((p) => p.used > 0);
-  const used = all.reduce((n, p) => n + p.used, 0);
+  const used = Object.values(pets).reduce((n, p) => n + Math.max(0, p.used), 0);
   const totalLeft = Math.max(0, TOTAL_PORTRAITS - used);
-  const newPetsLeft = Math.max(0, MAX_PETS - all.length);
-  const mine = pets[petKey(name)];
+  const newPetsLeft = Math.max(0, MAX_PETS - petCounts().length);
+  const mine = petKey(name) ? pets[petKey(name)] : undefined;
   const isNew = !mine || mine.used <= 0;
   const petLeft = isNew ? PORTRAITS_PER_PET : Math.max(0, PORTRAITS_PER_PET - mine.used);
   let blocked: LimitReason | undefined;

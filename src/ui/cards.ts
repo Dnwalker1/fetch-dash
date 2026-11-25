@@ -180,7 +180,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       // An older server only counts one total; its refusals still show the pop-up.
       if (!a?.pets) return;
       const before = JSON.stringify(petCounts());
-      setServerPets(a.pets);
+      setServerPets(a.pets, a.portraitsUsed);
       if (JSON.stringify(petCounts()) === before) return;
       if (!document.querySelector('#ui .card.setup') || document.querySelector('#ui .limitpop')) return;
       // Keep a name typed while the count was on its way.
@@ -487,7 +487,7 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
       // Kept on the device: the server's copy is deleted after 7 days.
       hero = { name, portrait: await keepOnDevice(res.url), source: 'live', designId: res.designId };
       // The server's count already has this one in it
-      if (res.allowance?.pets) setServerPets(res.allowance.pets);
+      if (res.allowance?.pets) setServerPets(res.allowance.pets, res.allowance.portraitsUsed);
       else countPortrait(name || shown);
     } else {
       const img = await loadImage(photoUrl);
@@ -510,7 +510,7 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     if (limit) {
       // Pick up the server's count, so the card shows the same thing
       const a = await fetchAllowance();
-      if (a?.pets) setServerPets(a.pets);
+      if (a?.pets) setServerPets(a.pets, a.portraitsUsed);
     } else {
       lastError = err instanceof HeroError ? err.message : messageFor('failed');
     }

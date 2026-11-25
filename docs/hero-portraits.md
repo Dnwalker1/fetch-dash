@@ -127,6 +127,6 @@ starts another while there's room.
   layout. It only shows when the live settings are missing.
 - Fill in `DYP_APP_STORE` in `src/ui/cards.ts` with Design Your Pet's App
   Store link. Until then, iPhones get the website button only.
-- Wire `fetchDashPets.js` into the live `appBackend.js` / `http-functions.js`
-  (see `wix-backend/README.md`). Until it's live, the server still counts 3
-  per ID in total, and the game shows the pop-up when it refuses.
+- Don pastes the per-pet backend into Wix and publishes (files and steps were
+  delivered 25 Nov 2026). Until then, the server still counts 3 per ID in
+  total, and the game shows the pop-up when it refuses.
