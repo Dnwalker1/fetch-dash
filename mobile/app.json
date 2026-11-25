@@ -40,7 +40,8 @@
             "imageWidth": 360
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

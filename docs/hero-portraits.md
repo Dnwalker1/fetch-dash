@@ -38,10 +38,9 @@ site) then:
 - always makes the **Arcade Hero** style;
 - gives a clean 1024 px portrait with **no watermark** (the 4K print file
   stays private, as for the app);
-- allows **3 portraits per install, in total** (`GAME_PORTRAITS_TOTAL` in
-  `backend/dypSettings.js`), counted in the `FetchDashPlayers` collection,
-  which the 7-day clean-up doesn't touch. A 4th is refused with
-  `limit_game`. Only portraits that came out count;
+- gives **3 free portraits per pet, for up to 3 pets: 9 per player** (see
+  "Free portraits" below), counted in the `FetchDashPlayers` collection,
+  which the 7-day clean-up doesn't touch. Only portraits that came out count;
 - still applies the daily tries limit and the site-wide hourly limit;
 - lets the game use only `allowance`, `uploadUrl`, `designs`, `designs/<id>`
   and `report`. Previews, checkout and orders answer `not_for_game`;
@@ -49,15 +48,58 @@ site) then:
   `Access-Control-Allow-Origin: *` on every answer), so both the web page and
   the phone app's WebView (which has no web address) can call it.
 
-To change the number of free portraits, change `GAME_PORTRAITS_TOTAL` on the
-Wix site and `FREE_PORTRAITS` in `src/hero/store.ts` to match. The server's
-count wins: the card asks `GET /allowance` once per visit and after each
-portrait.
+## 2a. Free portraits: 3 per pet, 9 per player (25 Nov 2026)
+
+Don's rule. **A pet is its name**, the one lettered on the portrait:
+`Chewy`, `chewy ` and `CHEWY!` are one pet (lower case, letters and digits
+only: `petKey` in `src/hero/store.ts` and `wix-backend/backend/fetchDashPets.js`
+must match). Renaming one pet can reach 9 for it; the 9 cap is what holds the
+cost.
+
+| Asked for | Server answers |
+| --- | --- |
+| a 4th portrait of one pet | `limit_pet` |
+| a 4th pet name | `limit_pets` |
+| anything after 9 | `limit_game` |
+
+`POST /designs` gets `pet` (the name) in its body; an older game build that
+doesn't send it is counted by `text`. `GET /allowance` and a ready
+`GET /designs/<id>` send
+`allowance: { portraitsLeft, portraitsUsed, perPet, maxPets, total, pets: [{ name, used, left }] }`.
+The game takes the server's `pets` over its own tally. When the free portraits
+run out, the game shows a pop-up with links to the Design Your Pet app (Google
+Play on Android; the App Store once `DYP_APP_STORE` in `src/ui/cards.ts` is
+filled in) and goodwookie.com.
+
+The rule's numbers live in `wix-backend/backend/fetchDashPets.js` (paste into
+the Wix site) and `src/hero/store.ts`; change both together.
+
+### Which ID is counted
+
+| Where | `X-Device-Id` | Survives |
+| --- | --- | --- |
+| Android app | UUID made from a SHA-256 of the Android ID (`mobile/playerId.ts`) | uninstall, clearing storage. Resets on a factory reset. |
+| iPhone app | random UUID kept in the Keychain, this device only | deleting the app. Resets when the phone is erased. |
+| Web page | random UUID in the browser's storage | nothing: clearing site data, a private window or another browser start again |
+
+Before this, the app also used the browser-storage ID, so a reinstall gave 3
+fresh portraits. The app now also sends that older ID as `?legacyId=` (with
+`?idKind=android-id|ios-keychain|web`) on `/allowance` and `POST /designs`, so
+the server can carry a phone's earlier count over to its new ID.
+
+Google Play: the Android ID is used only to stop abuse of the free
+portraits, never for ads or tracking, and only its one-way hash leaves the
+phone. List it in the Data safety form as "Device or other IDs", collected,
+not shared, purpose "Fraud prevention, security, and compliance".
+
+The header is sent by the game, so anyone holding the app key could send a
+made-up ID. The daily tries limit and the site-wide hourly limit are the
+backstop for that.
 
 ## 3. What the game does
 
 1. `POST /uploadUrl` → `PUT` the photo (shrunk to 1600 px, JPEG)
-2. `POST /designs { fileId, style: "arcade", text: NAME, sloth }`, retrying
+2. `POST /designs { fileId, style: "arcade", text: NAME, pet: Name, sloth }`, retrying
    `upload_not_ready`
 3. Polls `GET /designs/<id>` every 2 s for up to 10 minutes (most take 1 to 3;
    after 4 it says "Still painting…"). A dropped connection mid-wait just
@@ -68,8 +110,14 @@ portrait.
 5. "Report picture" on the end card calls `POST /report` (Google Play's
    AI-content rule), only for live portraits.
 
-Errors (`no_pet`, `photo_rejected`, `limit_game`, limits, busy) come back to
-the photo card in plain language, and a failed portrait isn't counted.
+Errors (`no_pet`, `photo_rejected`, limits, busy) come back to the photo
+card in plain language, and a failed portrait isn't counted. The free-portrait
+limits (`limit_pet`, `limit_pets`, `limit_game`) open the Design Your Pet
+pop-up instead.
+
+The photo card has a "Your pets" row once a pet has a portrait: tapping one
+brings back its name, look and portrait (kept on the device), and "+ New pet"
+starts another while there's room.
 
 ## 4. Still to do
 
@@ -77,3 +125,8 @@ the photo card in plain language, and a failed portrait isn't counted.
   Hero sample once the style is live.
 - The stand-in portrait in `src/hero/demo.ts` still draws the Anime Hero
   layout. It only shows when the live settings are missing.
+- Fill in `DYP_APP_STORE` in `src/ui/cards.ts` with Design Your Pet's App
+  Store link. Until then, iPhones get the website button only.
+- Wire `fetchDashPets.js` into the live `appBackend.js` / `http-functions.js`
+  (see `wix-backend/README.md`). Until it's live, the server still counts 3
+  per ID in total, and the game shows the pop-up when it refuses.
