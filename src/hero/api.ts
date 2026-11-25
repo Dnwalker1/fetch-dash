@@ -7,8 +7,8 @@
  *
  * Every call says "X-Client: fetch-dash", so the backend keeps the game's
  * portraits apart from the app's designs, always makes the Arcade Hero, sends
- * a clean picture (no watermark) and counts 3 per install
- * (docs/hero-portraits.md).
+ * a clean picture (no watermark) and counts the free portraits: 3 per pet,
+ * for up to 3 pets (docs/hero-portraits.md).
  *
  * Turned on by two build settings (put them in .env.local, never in git):
  *   VITE_DYP_API_BASE = https://www.goodwookie.com
@@ -42,6 +42,8 @@ const MESSAGES: Record<string, string> = {
   checker_down: 'The photo checker is taking a break. Try again in a minute.',
   failed: "The portrait didn't come out. Try again, or try another photo.",
   limit_game: "You've used all your free hero portraits. Make more in Design Your Pet!",
+  limit_pet: "That pet has had its 3 free hero portraits. Make more in Design Your Pet!",
+  limit_pets: "You've made free portraits for 3 pets. Pick one of them, or keep going in Design Your Pet!",
   limit_designs: "You've reached today's portrait limit. Try again later.",
   limit_tries: "You've reached today's limit of tries. Try again later.",
   studio_busy: 'The studio is busy right now. Try again in a minute.',
@@ -75,7 +77,9 @@ function newId(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-function deviceId(): string {
+/** The game's own ID, kept in its storage. Gone after a reinstall, clearing
+ * the app's storage, or clearing the browser. */
+function storedId(): string {
   try {
     let id = localStorage.getItem(DEVICE_KEY);
     if (!id) {
@@ -88,6 +92,31 @@ function deviceId(): string {
     sessionId ??= newId();
     return sessionId;
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The phone app's player ID (mobile/playerId.ts), which survives a
+ * reinstall: from the Android ID, or kept in the iPhone's Keychain. */
+function appPlayer(): { id: string; kind: string } | undefined {
+  const p = (window as { __FETCH_DASH_PLAYER?: { id?: unknown; kind?: unknown } | null }).__FETCH_DASH_PLAYER;
+  if (p && typeof p.id === 'string' && UUID.test(p.id)) return { id: p.id, kind: String(p.kind ?? 'app') };
+  return undefined;
+}
+
+/** The ID the server counts free portraits against: the app's player ID if
+ * there is one, else the game's own (the web page). */
+function deviceId(): string {
+  return appPlayer()?.id ?? storedId();
+}
+
+/** Tells the server which kind of ID this is, and the game's older ID, so a
+ * phone that made portraits before the app had a player ID keeps its count. */
+function idQuery(): string {
+  const app = appPlayer();
+  const q = new URLSearchParams({ idKind: app?.kind ?? 'web' });
+  if (app) q.set('legacyId', storedId());
+  return q.toString();
 }
 
 type Json = Record<string, unknown>;
@@ -138,8 +167,8 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 export interface LiveResult {
   designId: string;
   url: string;
-  /** Free portraits left on this install, as the server counts them. */
-  portraitsLeft?: number;
+  /** The server's free-portrait count after this one, when it sends it. */
+  allowance?: ServerAllowance;
 }
 
 export interface HeroOptions {
@@ -147,21 +176,40 @@ export interface HeroOptions {
   sloth?: boolean;
 }
 
-/** The server's count of free portraits left, or undefined if it can't be reached. */
-export async function fetchPortraitsLeft(): Promise<number | undefined> {
+/** The server's free-portrait count for this phone. */
+export interface ServerAllowance {
+  /** Pets with portraits, and how many each has used. Missing from a server
+   * that still counts one total per install. */
+  pets?: { name: string; used: number }[];
+  /** Left in all (newer server), or left on the install (older server). */
+  portraitsLeft?: number;
+  /** Used in all, including any without a pet name. */
+  portraitsUsed?: number;
+}
+
+/** The server's count of free portraits, or undefined if it can't be reached. */
+export async function fetchAllowance(): Promise<ServerAllowance | undefined> {
   if (!LIVE) return undefined;
   try {
-    const a = await call('/allowance');
-    return portraitsLeftFrom(a);
+    const a = await call(`/allowance?${idQuery()}`);
+    return allowanceFrom(a);
   } catch {
     return undefined;
   }
 }
 
-function portraitsLeftFrom(body: Json): number | undefined {
+function allowanceFrom(body: Json): ServerAllowance | undefined {
   const a = body.allowance as Json | undefined;
-  const n = a?.portraitsLeft;
-  return typeof n === 'number' ? n : undefined;
+  if (!a) return undefined;
+  const out: ServerAllowance = {};
+  if (typeof a.portraitsLeft === 'number') out.portraitsLeft = a.portraitsLeft;
+  if (typeof a.portraitsUsed === 'number') out.portraitsUsed = a.portraitsUsed;
+  if (Array.isArray(a.pets)) {
+    out.pets = (a.pets as Json[])
+      .filter((p) => p && typeof p.name === 'string' && typeof p.used === 'number')
+      .map((p) => ({ name: String(p.name), used: Number(p.used) }));
+  }
+  return out;
 }
 
 /**
@@ -202,9 +250,10 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
   onStep('Suiting up…');
   let designId = '';
   for (let i = 0; i < 15 && !designId; i++) {
-    const d = await call('/designs', {
+    const d = await call(`/designs?${idQuery()}`, {
       method: 'POST',
-      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), sloth: opts.sloth === true }),
+      // `pet` is the name the free portraits are counted under (3 per pet).
+      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true }),
     });
     if (d.ok) designId = String(d.designId);
     else if (d.code === 'one_at_a_time' && d.designId) designId = String(d.designId);
@@ -231,7 +280,7 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
     }
     if (!d.ok) throw new HeroError(String(d.code), messageFor(String(d.code)));
     const status = String(d.status);
-    if (status === 'ready' && d.previewUrl) return { designId, url: String(d.previewUrl), portraitsLeft: portraitsLeftFrom(d) };
+    if (status === 'ready' && d.previewUrl) return { designId, url: String(d.previewUrl), allowance: allowanceFrom(d) };
     if (status !== 'working') throw new HeroError(status, messageFor(status));
   }
   throw new HeroError('timeout', messageFor('timeout'));

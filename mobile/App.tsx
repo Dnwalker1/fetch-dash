@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import { getPlayerId, playerIdScript, type PlayerId } from './playerId';
 import { prepareGame } from './prepareGame';
 
 const BG = '#1d2b1f';
@@ -11,7 +12,7 @@ const LOGO = require('./assets/logo.webp');
 
 type State =
   | { kind: 'loading'; done: number; total: number }
-  | { kind: 'ready'; dir: string }
+  | { kind: 'ready'; dir: string; player: PlayerId | null }
   | { kind: 'error'; message: string };
 
 export default function App() {
@@ -22,8 +23,9 @@ export default function App() {
   useEffect(() => {
     let live = true;
     setState({ kind: 'loading', done: 0, total: 0 });
-    prepareGame((done, total) => live && setState({ kind: 'loading', done, total }))
-      .then((dir) => live && setState({ kind: 'ready', dir: dir.uri }))
+    // The player ID (for the free hero portraits) is ready before the game starts.
+    Promise.all([prepareGame((done, total) => live && setState({ kind: 'loading', done, total })), getPlayerId()])
+      .then(([dir, player]) => live && setState({ kind: 'ready', dir: dir.uri, player }))
       .catch((e: unknown) => live && setState({ kind: 'error', message: String(e) }));
     return () => {
       live = false;
@@ -46,6 +48,10 @@ export default function App() {
           allowingReadAccessToURL={state.dir}
           javaScriptEnabled
           domStorageEnabled
+          // The ID goodwookie.com counts free hero portraits against (playerId.ts).
+          // Given twice, in case a phone skips the early one; the game reads it late.
+          injectedJavaScriptBeforeContentLoaded={playerIdScript(state.player)}
+          injectedJavaScript={playerIdScript(state.player)}
           // Sound effects start on the first tap without asking.
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback

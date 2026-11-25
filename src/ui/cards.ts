@@ -5,20 +5,28 @@ import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, type Progress } from '../levels';
-import { HERO_STEPS, HeroError, LIVE, fetchPortraitsLeft, generateLive, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
+import { HERO_STEPS, HeroError, LIVE, fetchAllowance, generateLive, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
 import {
-  FREE_PORTRAITS,
+  MAX_PETS,
+  PORTRAITS_PER_PET,
+  TOTAL_PORTRAITS,
+  allowanceFor,
   cap,
   countPortrait,
   displayName,
   loadHero,
-  portraitsLeft,
+  markPetUsedUp,
+  petCounts,
+  petKey,
+  rememberPet,
   saveHero,
-  setPortraitsLeft,
+  savedPet,
+  setServerPets,
   setSlothWanted,
   slothWanted,
   type Hero,
+  type LimitReason,
 } from '../hero/store';
 
 /**
@@ -75,6 +83,9 @@ function starRow(n: number): string {
 
 const SHOP = 'https://www.goodwookie.com/design-your-pet';
 const shopUrl = (where: string) => `${SHOP}?utm_source=fetch-dash&utm_medium=game&utm_campaign=${where}`;
+/** The Design Your Pet app in the stores. */
+const DYP_PLAY = 'https://play.google.com/store/apps/details?id=com.goodwookie.designyourpet&referrer=utm_source%3Dfetch-dash%26utm_medium%3Dgame';
+const DYP_APP_STORE = 'https://apps.apple.com/us/app/design-your-pet-by-goodwookie/id6828224743';
 
 let root: HTMLDivElement | undefined;
 let runnerTimer: number | undefined;
@@ -164,10 +175,13 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   // that counts) and redraw the card if it differs from the device's.
   if (LIVE && !serverCountChecked) {
     serverCountChecked = true;
-    void fetchPortraitsLeft().then((n) => {
-      if (n === undefined || n === portraitsLeft()) return;
-      setPortraitsLeft(n);
-      if (!document.querySelector('#ui .card.setup')) return;
+    void fetchAllowance().then((a) => {
+      // An older server only counts one total; its refusals still show the pop-up.
+      if (!a?.pets) return;
+      const before = JSON.stringify(petCounts());
+      setServerPets(a.pets, a.portraitsUsed);
+      if (JSON.stringify(petCounts()) === before) return;
+      if (!document.querySelector('#ui .card.setup') || document.querySelector('#ui .limitpop')) return;
       // Keep a name typed while the count was on its way.
       const typed = document.querySelector<HTMLInputElement>('#ui .card.setup .name');
       if (typed) saveHero({ ...(loadHero() ?? {}), name: typed.value.trim() });
@@ -176,9 +190,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   }
   const hero = loadHero();
   const c = host.choice();
-  const left = portraitsLeft();
   const hasPhoto = Boolean(photoFile);
   const name = hero?.name ?? '';
+  const allow = allowanceFor(name);
+  const pets = petCounts();
 
   const chips = (Object.keys(PALETTES) as string[])
     .map(
@@ -233,7 +248,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
             ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>`;
   }
 
-  const photoBox = left > 0
+  const photoBox = allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
          <img src="${hasPhoto ? photoUrl : './hero-example.png'}" alt="" />
          ${hasPhoto ? '' : '<span class="tag">Example</span>'}
@@ -242,12 +257,22 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
        </label>
        <label class="sloth"><input type="checkbox"${slothWanted() ? ' checked' : ''} />
          <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head</small></span></label>
-       <p class="small">${left} of ${FREE_PORTRAITS} free hero portraits left</p>`
+       <p class="small allow">${allowanceLine(name)}</p>`
     : `<div class="drop used">
          <img src="${hero?.portrait ?? './hero-example.png'}" alt="" />
        </div>
-       <p class="small">You've used your ${FREE_PORTRAITS} free portraits. Make more in
-         <a href="${shopUrl('portraits-used')}" target="_blank" rel="noopener">Design Your Pet</a>.</p>`;
+       <p class="small">You've used all ${TOTAL_PORTRAITS} free hero portraits.</p>
+       <button class="btn gold more">Keep designing in Design Your Pet</button>`;
+  // The pets that already have portraits, to switch between them
+  const petRow = pets.length
+    ? `<div class="field">Your pets <div class="segs pets">${pets
+        .map((p) => {
+          const left = Math.max(0, PORTRAITS_PER_PET - p.used);
+          const on = petKey(p.name) === petKey(name);
+          return `<button class="seg${on ? ' on' : ''}" data-pet="${esc(p.name)}">${esc(p.name)} <small>${left ? `${left} left` : 'all used'}</small></button>`;
+        })
+        .join('')}${allow.newPetsLeft > 0 && allow.totalLeft > 0 && !allow.isNew ? '<button class="seg add" data-pet="">+ New pet</button>' : ''}</div></div>`
+    : '';
 
   const r = show(
     `<div class="card setup">
@@ -261,6 +286,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
           <label class="field">Name
             <input class="name" maxlength="14" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" />
           </label>
+          ${petRow}
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
           <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
           ${lookRow}
@@ -271,7 +297,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       ${lastError ? `<p class="error">${esc(lastError)}</p>` : ''}
       <div class="actions">
         ${opts.canGoBack ? '<button class="btn ghost back">Back</button>' : '<button class="btn ghost skip">Skip, just play</button>'}
-        ${left > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
+        ${allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
       </div>
       <p class="fine">Use a photo of just your pet${LIVE ? '' : '. This preview makes a stand-in portrait on your device; the real one comes from Design Your Pet'}.</p>
     </div>`,
@@ -280,10 +306,19 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   startRunner(r, host);
 
   const nameInput = r.querySelector<HTMLInputElement>('.name')!;
-  const keepName = () => {
-    const h = loadHero();
-    saveHero({ ...(h ?? {}), name: nameInput.value.trim() });
-  };
+  const keepName = () => keepHeroName(host, nameInput.value.trim());
+
+  // Switch to one of the pets with portraits, or start a new one
+  r.querySelectorAll<HTMLButtonElement>('[data-pet]').forEach((b) =>
+    b.addEventListener('click', () => {
+      keepName();
+      const next = b.dataset.pet ?? '';
+      keepHeroName(host, next);
+      openSetup(host, opts);
+      if (!next) document.querySelector<HTMLInputElement>('#ui .card.setup .name')?.focus({ preventScroll: true });
+    }),
+  );
+  r.querySelector('.more')?.addEventListener('click', () => openLimitPopup('total', name));
 
   r.querySelectorAll<HTMLButtonElement>('[data-species]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -405,11 +440,19 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   r.querySelector<HTMLInputElement>('.sloth input')?.addEventListener('change', (e) => setSlothWanted((e.target as HTMLInputElement).checked));
   r.querySelector('.go')?.addEventListener('click', () => {
     keepName();
+    // This pet's free portraits are used (or 3 pets have theirs): explain where to go next
+    const blocked = allowanceFor(nameInput.value.trim()).blocked;
+    if (blocked) return openLimitPopup(blocked, nameInput.value.trim());
     void makeHero(host, opts);
   });
   // The portrait letters the name, so it needs one before it can be made
   const go = r.querySelector<HTMLButtonElement>('.go');
+  const allowLine = r.querySelector('.allow');
   const nameNeeded = () => {
+    // Each name is its own pet, so the count follows the name as it's typed
+    if (allowLine) allowLine.innerHTML = allowanceLine(nameInput.value.trim());
+    const k = petKey(nameInput.value);
+    r.querySelectorAll<HTMLButtonElement>('.pets [data-pet]').forEach((c) => c.classList.toggle('on', Boolean(c.dataset.pet) && petKey(c.dataset.pet!) === k));
     if (!go) return;
     const empty = !nameInput.value.trim();
     go.disabled = empty;
@@ -442,7 +485,9 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
       setStep('Saving your hero…');
       // Kept on the device: the server's copy is deleted after 7 days.
       hero = { name, portrait: await keepOnDevice(res.url), source: 'live', designId: res.designId };
-      if (res.portraitsLeft !== undefined) setPortraitsLeft(res.portraitsLeft + 1); // countPortrait() below takes the 1 off
+      // The server's count already has this one in it
+      if (res.allowance?.pets) setServerPets(res.allowance.pets, res.allowance.portraitsUsed);
+      else countPortrait(name || shown);
     } else {
       const img = await loadImage(photoUrl);
       for (const s of HERO_STEPS) {
@@ -450,17 +495,123 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
         await new Promise((res) => setTimeout(res, 650));
       }
       hero = { name, portrait: await makeDemoPortrait(img, name || shown), source: 'demo' };
+      countPortrait(name || shown);
     }
-    countPortrait();
     saveHero(hero);
+    rememberPet(hero, host.choice());
     photoFile = undefined;
     openHome(host, { reveal: true });
   } catch (err) {
-    lastError = err instanceof HeroError ? err.message : messageFor('failed');
-    // The server says they're all used: show the "used" card with the shop link.
-    if (err instanceof HeroError && err.code === 'limit_game') setPortraitsLeft(0);
+    const code = err instanceof HeroError ? err.code : 'failed';
+    // The server says no more free portraits: the pop-up says why and where to go next
+    const limit: LimitReason | undefined = code === 'limit_pet' ? 'pet' : code === 'limit_pets' ? 'pets' : code === 'limit_game' ? 'total' : undefined;
+    if (limit === 'pet') markPetUsedUp(name || shown);
+    if (limit) {
+      // Pick up the server's count, so the card shows the same thing
+      const a = await fetchAllowance();
+      if (a?.pets) setServerPets(a.pets, a.portraitsUsed);
+    } else {
+      lastError = err instanceof HeroError ? err.message : messageFor('failed');
+    }
     openSetup(host, opts);
+    if (limit) openLimitPopup(limit, name || shown);
   }
+}
+
+/** Keeps the typed name. A different name is a different pet: the current
+ * pet's portrait and look are put aside, and the named pet's come back. */
+function keepHeroName(host: CardHost, name: string): void {
+  const h = loadHero();
+  if (h?.portrait && petKey(h.name) && petKey(h.name) !== petKey(name)) {
+    rememberPet(h, host.choice());
+    const back = savedPet<PetChoice>(name);
+    if (back) {
+      host.setChoice(back.choice);
+      saveHero({ ...back.hero, name: name || back.hero.name });
+    } else {
+      saveHero({ name });
+    }
+    return;
+  }
+  if (!h?.portrait && petKey(name) && petKey(h?.name ?? '') !== petKey(name)) {
+    // Switching back to a pet that has a portrait saved on this device
+    const back = savedPet<PetChoice>(name);
+    if (back) {
+      host.setChoice(back.choice);
+      saveHero({ ...back.hero, name });
+      return;
+    }
+  }
+  saveHero({ ...(h ?? {}), name });
+}
+
+/** "Chewy: 2 of 3 free portraits left · 7 of 9 in all" */
+function allowanceLine(name: string): string {
+  const a = allowanceFor(name);
+  const all = `${a.totalLeft} of ${TOTAL_PORTRAITS} in all`;
+  const who = a.petName ? `<b>${esc(a.petName)}</b>` : 'This pet';
+  if (a.blocked === 'pets') return `You've made portraits for ${MAX_PETS} pets. Pick one above to make more · ${all}`;
+  if (a.blocked === 'pet') return `${who} has used ${PORTRAITS_PER_PET} of ${PORTRAITS_PER_PET} free portraits · ${all}`;
+  if (a.isNew && petCounts().length) return `${name ? `New pet ${who}` : 'A new pet'}: ${a.petLeft} free portraits · ${all}`;
+  return `${who}: ${a.petLeft} of ${PORTRAITS_PER_PET} free hero portraits left${petCounts().length ? ` · ${all}` : ''}`;
+}
+
+function isAndroid(): boolean {
+  return /Android/i.test(navigator.userAgent);
+}
+function isIos(): boolean {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * The pop-up when the free portraits run out (for this pet, for new pets, or
+ * all 9): says why, and how to keep designing in the Design Your Pet app or
+ * on goodwookie.com.
+ */
+export function openLimitPopup(reason: LimitReason, name: string): void {
+  document.querySelector('#ui .limitpop')?.remove();
+  const pet = allowanceFor(name).petName || 'your pet';
+  const others = petCounts()
+    .filter((p) => p.used < PORTRAITS_PER_PET)
+    .map((p) => p.name);
+  const a = allowanceFor('');
+  let title: string;
+  let why: string;
+  if (reason === 'pet') {
+    title = `That's all ${PORTRAITS_PER_PET} free portraits for ${esc(cap(pet))}`;
+    why = `Fetch Dash gives every pet ${PORTRAITS_PER_PET} free hero portraits, for up to ${MAX_PETS} pets.`;
+    if (others.length) why += ` You can still make portraits of ${esc(others.join(' or '))}.`;
+    else if (a.newPetsLeft > 0 && a.totalLeft > 0) why += ` You can still make portraits of ${a.newPetsLeft === 1 ? 'one more pet' : `${a.newPetsLeft} more pets`}.`;
+  } else if (reason === 'pets') {
+    title = `You've made portraits for ${MAX_PETS} pets`;
+    why = `Fetch Dash gives free hero portraits to up to ${MAX_PETS} pets per phone${others.length ? `. ${esc(others.join(' and '))} still ${others.length === 1 ? 'has' : 'have'} some left` : ''}.`;
+  } else {
+    title = `You've used all your free hero portraits`;
+    why = `Fetch Dash gives ${PORTRAITS_PER_PET} free portraits per pet, for up to ${MAX_PETS} pets. Your heroes stay in the game.`;
+  }
+  const appUrl = isAndroid() ? DYP_PLAY : isIos() ? DYP_APP_STORE : DYP_PLAY;
+  const appLabel = isAndroid() || isIos() ? '📱 Get the Design Your Pet app' : '📱 Design Your Pet on Google Play';
+  const box = document.createElement('div');
+  box.className = 'limitpop';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.innerHTML = `<div class="box">
+      <h2>${title}</h2>
+      <p>${why}</p>
+      <p class="keep">Keep designing ${reason === 'pet' ? esc(pet) : 'your pets'} in <b>Design Your Pet</b>: lots more art styles, up to 5 free designs every 24 hours, and you can put any design on a shirt, sticker or poster.</p>
+      <div class="links">
+        ${appUrl ? `<a class="btn primary" href="${appUrl}" target="_blank" rel="noopener">${appLabel}</a>` : ''}
+        <a class="btn gold" href="${shopUrl(`limit-${reason}`)}" target="_blank" rel="noopener">🌐 Design on goodwookie.com</a>
+      </div>
+      <button class="btn ghost close">Back to the game</button>
+    </div>`;
+  const close = () => box.remove();
+  box.querySelector('.close')!.addEventListener('click', close);
+  box.addEventListener('click', (e) => {
+    if (e.target === box) close();
+  });
+  ui().appendChild(box);
+  box.querySelector<HTMLElement>('.close')!.focus({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------------------
