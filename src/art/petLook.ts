@@ -5,6 +5,15 @@ import { makeSheetAnim, marksFor, queueSheet, sheetFor, sheetFrameUrls, sheetKey
 import { BREED_FIT, BREED_ORIGIN_X, BREED_RES, CELL, breedById, breedDir, breedFrameUrls, breedKey, breedReady, dogKey, layersFor, makeBreedAnim, queueBreed, shapeOption } from './breeds';
 import { CAT_FIT, CAT_ORIGIN_X, CAT_RES, catFrameUrls, catKey, catLayersFor, catReady, makeCatAnim, queueCat } from './cats';
 
+/**
+ * The dog's breed choice, for a dog only: switching to a cat keeps the dog's
+ * breed in the choice (so switching back restores it), and it must not draw
+ * the cat as that breed.
+ */
+function dogOf(c: PetChoice): PetChoice['dog'] {
+  return c.species === 'dog' ? c.dog : undefined;
+}
+
 /** The textures the pet is drawn with right now (a painted sheet, or the code-drawn pet). */
 export interface PetLook {
   anim: string;
@@ -48,7 +57,8 @@ const CAT_STAND = 4;
 
 /** Queues the pet's painted pictures (breed layers, a sheet or the painted cat). Returns false if there was nothing to load. */
 export function queuePetArt(scene: Phaser.Scene, c: PetChoice): boolean {
-  if (c.dog) return queueBreed(scene, c.dog);
+  const dog = dogOf(c);
+  if (dog) return queueBreed(scene, dog);
   const sheet = sheetFor(c);
   if (sheet) return queueSheet(scene, sheet, marksFor(sheet, c));
   if (c.species === 'cat') return queueCat(scene, c.palette);
@@ -57,12 +67,13 @@ export function queuePetArt(scene: Phaser.Scene, c: PetChoice): boolean {
 
 /** How the pet is drawn: its painted sheet (or the painted cat) once that's loaded, otherwise the code-drawn pet. */
 export function petLookFor(scene: Phaser.Scene, c: PetChoice): PetLook {
-  if (c.dog && breedReady(scene, c.dog)) {
-    const [base, ...rest] = layersFor(c.dog);
-    const k = (layer: string) => ({ run: breedKey(c.dog!.breed, layer, 'run'), jump: breedKey(c.dog!.breed, layer, 'jump'), slide: breedKey(c.dog!.breed, layer, 'slide') });
+  const dog = dogOf(c);
+  if (dog && breedReady(scene, dog)) {
+    const [base, ...rest] = layersFor(dog);
+    const k = (layer: string) => ({ run: breedKey(dog!.breed, layer, 'run'), jump: breedKey(dog!.breed, layer, 'jump'), slide: breedKey(dog!.breed, layer, 'slide') });
     const b = k(base.layer);
     return {
-      anim: makeBreedAnim(scene, c.dog),
+      anim: makeBreedAnim(scene, dog),
       idle: b.run,
       jump: b.jump,
       slide: b.slide,
@@ -136,9 +147,10 @@ export const BACK_POSES: Pose[] = ['back-run', 'back-jump', 'back-lean-left', 'b
 
 /** Each layer this pet draws (base first), with its texture key and file for a pose. None for the code-drawn pet. */
 function poseLayers(c: PetChoice): { key: (p: Pose) => string; url: (p: Pose) => string }[] | undefined {
-  if (c.dog) {
-    const b = c.dog.breed;
-    return layersFor(c.dog).map((l) => ({ key: (p) => `pet-${b}-${l.layer}-${p}`, url: (p) => `${breedDir(b)}${l.layer}-${p}.webp` }));
+  const dog = dogOf(c);
+  if (dog) {
+    const b = dog.breed;
+    return layersFor(dog).map((l) => ({ key: (p) => `pet-${b}-${l.layer}-${p}`, url: (p) => `${breedDir(b)}${l.layer}-${p}.webp` }));
   }
   const sheet = sheetFor(c);
   if (sheet) {
@@ -245,13 +257,14 @@ export function extraLookFor(scene: Phaser.Scene, c: PetChoice, look: PetLook): 
 
 /** The pet's painted card picture (fully painted, not tinted), or none for the code-drawn pet. */
 export function cardArtUrl(c: PetChoice): string | undefined {
-  if (c.dog) {
-    const b = breedById(c.dog.breed);
+  const dog = dogOf(c);
+  if (dog) {
+    const b = breedById(dog.breed);
     if (!b) return undefined;
-    let name = `card-${c.dog.coat in b.coats ? c.dog.coat : b.defaultCoat}`;
+    let name = `card-${dog.coat in b.coats ? dog.coat : b.defaultCoat}`;
     // the default shape has no suffix
     for (const g of ['ears', 'tail'] as const) {
-      const opt = shapeOption(c.dog, g);
+      const opt = shapeOption(dog, g);
       if (opt && opt !== b.variants[g]?.[0]) name += `-${g}-${opt}`;
     }
     return `${breedDir(b.id)}${name}.webp`;
@@ -263,11 +276,12 @@ export function cardArtUrl(c: PetChoice): string | undefined {
 
 /** Data URLs of a pet's run frames, for the little flipbooks on the cards. */
 export function petFrameUrls(scene: Phaser.Scene, c: PetChoice, cache: Map<string, string[]>): string[] {
-  if (c.dog && breedReady(scene, c.dog)) {
-    const key = `${c.dog.breed}|${dogKey(c.dog)}`;
+  const dog = dogOf(c);
+  if (dog && breedReady(scene, dog)) {
+    const key = `${dog.breed}|${dogKey(dog)}`;
     const hit = cache.get(key);
     if (hit) return hit;
-    const frames = breedFrameUrls(scene, c.dog);
+    const frames = breedFrameUrls(scene, dog);
     cache.set(key, frames);
     return frames;
   }

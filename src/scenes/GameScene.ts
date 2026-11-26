@@ -121,6 +121,15 @@ const DEN_SCALE = 1.1;
 const TRAIL_HAZE = 0.28;
 /** A jump pressed this soon before landing happens on landing. */
 const JUMP_BUFFER_MS = 200;
+/** A jump rises at least this long before letting go of Space cuts it short, */
+const JUMP_MIN_MS = 120;
+/** and letting go keeps this share of its rising speed. */
+const JUMP_CUT = 0.8;
+/** Held, the first part of the rise floats: this share of gravity is taken off for this long. */
+const JUMP_FLOAT = 0.2;
+const JUMP_FLOAT_MS = 200;
+/** A treat is caught anywhere in a square this big (game px) around it. */
+const TREAT_HIT = 36;
 /** After a jump comes down, this long (s) to react before the next thing on the trail. */
 const LAND_REACT_S = 0.45;
 /** At the finish the pet slows from a run to a stop over this long (s). */
@@ -293,6 +302,11 @@ export class GameScene extends Phaser.Scene {
   private lastJumpAt = -1000;
   private lastGroundedAt = 0;
   private jumpQueuedAt = -1000;
+  /** Space is held down; a jump started with it goes higher the longer it's held (see cutJump) */
+  private spaceDown = false;
+  private tapFromKey = false;
+  private jumpFromKey = false;
+  private jumpCut = false;
   private paws = PAWS;
   private safeUntil = 0;
   private pawIcons: Phaser.GameObjects.Text[] = [];
@@ -672,11 +686,18 @@ export class GameScene extends Phaser.Scene {
   private setupInput(): void {
     const keys = this.input.keyboard;
     keys?.on('keydown-SPACE', (e: KeyboardEvent) => {
-      if (cardsOpen()) return;
+      this.spaceDown = true;
+      // (holding the key fires it over and over: that's a longer jump, not more jumps)
+      if (cardsOpen() || e.repeat) return;
       if (this.paused) this.resume();
       else if (this.state === 'ready') this.startRun();
-      else this.withTime(e, () => this.onTap());
+      else {
+        this.tapFromKey = true;
+        this.withTime(e, () => this.onTap());
+        this.tapFromKey = false;
+      }
     });
+    keys?.on('keyup-SPACE', () => (this.spaceDown = false));
     this.downKey = keys?.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN, false);
     keys?.on('keydown-DOWN', (e: KeyboardEvent) => {
       if (cardsOpen()) return;
@@ -840,12 +861,35 @@ export class GameScene extends Phaser.Scene {
     this.stopSlide();
     this.grounded = false;
     this.lastJumpAt = this.clock();
+    this.jumpFromKey = this.tapFromKey;
+    this.jumpCut = false;
     // Floaty, higher jumps on the Moon; a smaller hop up out of the water
     const g = this.level.gravity;
     const lift = (g ? 1.2 * Math.sqrt(g) : 1) * (this.swimming ? SPECIES[this.choice.species].swimHop : 1);
     this.petBody.setVelocityY(PET.jumpVelocity * lift);
     if (this.swimming) this.splash(8);
     sfx.jump();
+  }
+
+  /**
+   * The longer Space is held, the higher the jump: a quick tap is a hop
+   * (about three quarters of the height, still enough for every fence), and
+   * holding floats it up to about 15% higher than before. Letting go early
+   * stops it rising sooner. (A tap on the screen jumps when the finger
+   * lifts, so it's always the usual full jump.)
+   */
+  private steerJump(dt: number): void {
+    if (!this.jumpFromKey || this.jumpCut || this.grounded) return;
+    const vy = this.petBody.velocity.y;
+    if (vy >= 0) return;
+    const held = this.clock() - this.lastJumpAt;
+    if (this.spaceDown) {
+      if (held < JUMP_FLOAT_MS) this.petBody.setVelocityY(vy - this.physics.world.gravity.y * JUMP_FLOAT * dt);
+      return;
+    }
+    if (held < JUMP_MIN_MS) return;
+    this.jumpCut = true;
+    this.petBody.setVelocityY(vy * JUMP_CUT);
   }
 
   /** Left or right: a lane over, on a run into the screen. */
@@ -1080,7 +1124,7 @@ export class GameScene extends Phaser.Scene {
     this.stopSlide();
     // the ball comes off the trail and into the pet's mouth
     let ball = this.ball;
-    if (!ball?.active) ball = this.ball = this.art(this.add.image(0, 0, this.level.ball ?? 'ball'));
+    if (!ball?.active) ball = this.ball = this.art(this.add.image(0, 0, this.ballKey()));
     if (ball.body) {
       this.decor.remove(ball);
       this.physics.world.disable(ball);
@@ -1155,6 +1199,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.state !== 'playing' || this.paused) return;
     const dt = deltaMs / 1000;
+    if (!this.horizon) this.steerJump(dt);
 
     // The brakes: down to a stop quickly, back up to speed a little slower
     const wantStop = this.braking && !this.chasing;
@@ -1474,7 +1519,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       this.placeObstacle(x, kind);
     }
-    if (Math.random() < SPAWN.treatChance) this.spawnTreats(x + 220);
+    if (Math.random() < SPAWN.treatChance) this.spawnTreats(x);
 
     // Gaps grow with speed so the game stays fair as it speeds up
     // (and on the Moon, where a jump takes longer to come down)
@@ -1576,26 +1621,61 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Four treats: a low line to run through, or a high arc to jump for. The
+   * arc follows the path of a full jump at today's speed, through the middle
+   * of the pet, so a full jump started anywhere in a window of about a fifth
+   * of a second catches all four (not only one exact moment). The arc is
+   * far enough past the obstacle at `x` to land from jumping it and jump again.
+   */
   private spawnTreats(x: number): void {
     this.treatsSpawned += 4;
     const high = Math.random() < 0.5;
+    const g = this.physics.world.gravity.y;
+    const lift = this.level.gravity ? 1.2 * Math.sqrt(this.level.gravity) : 1;
+    const v = -PET.jumpVelocity * lift;
+    const top = (v * v) / (2 * g);
+    const speed = Math.max(150, this.speed);
+    const mid = x + speed * ((2 * v) / g) + 60;
+    const gyMid = this.groundAt(mid);
     for (let i = 0; i < 4; i++) {
-      const tx = x + i * 45;
-      const gy = this.groundAt(tx);
-      const y = high ? gy - 120 - Math.sin((i / 3) * Math.PI) * 50 : gy - 30;
+      const tx = high ? mid + (i - 1.5) * 45 : x + 220 + i * 45;
+      let y: number;
+      if (high) {
+        const dt = (tx - mid) / speed;
+        y = gyMid - (top - (g * dt * dt) / 2) - this.petH * 0.45;
+      } else {
+        y = this.groundAt(tx) - 30;
+      }
       const t = this.art(this.add.image(tx, y, this.choice.species === 'cat' ? 'fish' : 'bone').setDepth(1));
       this.treats.add(t);
       const body = t.body as Body;
       body.setAllowGravity(false);
       body.setVelocityX(-this.speed);
+      this.roomyTreat(t);
     }
+    // (and the next obstacle waits until after that jump comes down)
+    if (high) this.lastObstacleEnd = Math.max(this.lastObstacleEnd, this.distancePx + mid - (speed * v) / g);
+    if (high) this.hint('high-treats', this.say('Jump for the high treats!', 'Hold Space to jump higher for the high treats!'));
+  }
+
+  /** A treat counts as caught a little outside its picture, so a near miss still gets it. */
+  private roomyTreat(t: Img): void {
+    const b = t.body as Body;
+    b.setSize(Math.max(t.width, TREAT_HIT / t.scaleX), Math.max(t.height, TREAT_HIT / t.scaleY), true);
+  }
+
+  /** What's thrown for the pet: the level's own ball (the Moon's), a ball of yarn for a cat, or the tennis ball. */
+  private ballKey(): string {
+    if (this.level.ball) return this.level.ball;
+    return this.choice.species === 'cat' && this.textures.exists('toss-yarn') ? 'toss-yarn' : 'ball';
   }
 
   /** The thrown ball waits on the trail; reaching it finishes the level. */
   private spawnBall(remainingPx: number): void {
     this.ballSpawned = true;
     const x = PET.homeX + this.petW / 2 + remainingPx;
-    this.ball = this.art(this.add.image(x, this.groundAt(x) - 14, this.level.ball ?? 'ball').setDepth(1));
+    this.ball = this.art(this.add.image(x, this.groundAt(x) - 14, this.ballKey()).setDepth(1));
     this.addDecor(this.ball);
     this.toast('There’s the ball!', '#1f6f2a');
   }
@@ -2545,6 +2625,7 @@ export class GameScene extends Phaser.Scene {
     const body = t.body as Body;
     body.setAllowGravity(false);
     body.setVelocityX(-this.speed);
+    this.roomyTreat(t);
   }
 
   /** Dens move with the ground, sit on it and tilt with the hill. */
@@ -2981,9 +3062,11 @@ export class GameScene extends Phaser.Scene {
   private loadLook(): void {
     const side = queuePetArt(this, this.choice);
     const poses = queuePoses(this, this.choice, posesFor(this.level));
-    if (!side && !poses) return;
+    if (this.choice.species === 'cat') queueArt(this, ['toss-yarn']);
+    if (!side && !poses && this.load.list.size === 0) return;
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (!this.sys.isActive() || !this.petSprite?.active) return;
+      markArt(this);
       this.applyPet();
       this.updatePetSprite();
       refreshPetFrames(this.cardHost());
@@ -3264,6 +3347,8 @@ function queueLevel(scene: Phaser.Scene, l: LevelDef, pet: PetChoice): void {
     ...(l.theme.weather === 'fireflies' ? ['firefly'] : []),
     ...(l.gravity ? ['helmet'] : []),
     ...(l.ball ? [l.ball] : []),
+    // (a cat chases a ball of yarn)
+    ...(pet.species === 'cat' ? ['toss-yarn'] : []),
   ];
   queueArt(scene, [...propKeys(kinds), ...swimKeys, ...extras, ...critterKeys(l)]);
 }
