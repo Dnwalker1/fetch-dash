@@ -47,7 +47,7 @@ The order mixes the ways of playing so the same kind never comes twice in a row 
 | 18 | Fireworks Pier | 1525 m | Night on the boardwalk with fireworks. Crates, barrels, banners. |
 | 19 | Moon Run | 1575 m | **Low gravity** in a space helmet: floaty jumps over craters and moon rocks, a moon-cheese ball, flying saucers. |
 
-Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`. Levels use painted backgrounds made in Grok (`public/art/l<art>`: sky, far and mid strips, keyed and made seamless). The round 2 levels borrow other levels' paintings until theirs are painted; `docs/levels-round-2.md` lists what's needed.
+Finishing a level opens the next one. Best scores are kept per level on the device. Levels are defined in `src/levels.ts`. Levels use painted backgrounds made in Grok (`public/art/l<art>`: sky, far and mid strips, keyed and made seamless). The round 2 levels (13 to 19 by art number) and their props are Elon's paintings from 26 November; `docs/levels-round-2.md` lists them with their sizes.
 
 ## How to play
 

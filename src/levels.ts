@@ -525,8 +525,7 @@ const SPECS: LevelSpec[] = [
     },
   },
   // ---------- Round 2 (25 November): new ways to play ----------
-  // Their pictures borrow other levels' paintings, tinted, until Elon paints
-  // their own (see docs/levels-round-2.md for the list).
+  // Painted by Elon (26 November) from the list in docs/levels-round-2.md.
   {
     art: 13,
     name: 'Open Meadow',
@@ -541,10 +540,10 @@ const SPECS: LevelSpec[] = [
     theme: {
       skyTop: 0x8fd3ff,
       skyBottom: 0xe8f6ff,
-      skyImage: 'art/l9/sky.webp',
+      skyImage: 'art/l13/sky.webp',
       layers: [
-        { key: 'l10-far', src: 'art/l10/far.webp', scale: 0.8, factor: 0.12, tint: 0xb8d8c8 },
-        { key: 'l1-far', src: 'art/l1/far.webp', scale: 1.7, factor: 0.3 },
+        { key: 'l13-far', src: 'art/l13/far.webp', scale: 0.85, factor: 0.12 },
+        { key: 'l13-mid', src: 'art/l13/mid.webp', scale: 0.6, factor: 0.4 },
       ],
       raysAlpha: 0.4,
       cloudsAlpha: 1,
@@ -571,10 +570,10 @@ const SPECS: LevelSpec[] = [
     theme: {
       skyTop: 0x7fb6e0,
       skyBottom: 0xffe8b8,
-      skyImage: 'art/l7/sky.webp',
+      skyImage: 'art/l14/sky.webp',
       layers: [
-        { key: 'l9-far', src: 'art/l9/far.webp', scale: 0.8, factor: 0.15 },
-        { key: 'sunflowers', h: 120, factor: 0.45 },
+        { key: 'l14-far', src: 'art/l14/far.webp', scale: 0.75, factor: 0.15 },
+        { key: 'l14-mid', src: 'art/l14/mid.webp', scale: 0.6, factor: 0.45 },
       ],
       raysAlpha: 0.5,
       cloudsAlpha: 0.9,
@@ -601,10 +600,10 @@ const SPECS: LevelSpec[] = [
     theme: {
       skyTop: 0x8fc8f0,
       skyBottom: 0xfbe6d8,
-      skyImage: 'art/l10/sky.webp',
+      skyImage: 'art/l15/sky.webp',
       layers: [
-        { key: 'l2-far', src: 'art/l2/far.webp', scale: 1, factor: 0.12, lift: 10 },
-        { key: 'l5-mid', src: 'art/l5/mid.webp', scale: 0.65, factor: 0.35 },
+        { key: 'l15-far', src: 'art/l15/far.webp', scale: 0.8, factor: 0.12 },
+        { key: 'l15-mid', src: 'art/l15/mid.webp', scale: 0.6, factor: 0.35 },
       ],
       raysAlpha: 0.35,
       cloudsAlpha: 0.8,
@@ -630,10 +629,10 @@ const SPECS: LevelSpec[] = [
     theme: {
       skyTop: 0x4a5462,
       skyBottom: 0x8d97a3,
-      skyImage: 'art/l5/sky.webp',
+      skyImage: 'art/l16/sky.webp',
       layers: [
-        { key: 'l5-far', src: 'art/l5/far.webp', scale: 0.75, factor: 0.12, lift: 40, tint: 0x8890a0 },
-        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45, tint: 0x8a96a2 },
+        { key: 'l16-far', src: 'art/l16/far.webp', scale: 0.8, factor: 0.12 },
+        { key: 'l16-mid', src: 'art/l16/mid.webp', scale: 0.55, factor: 0.45 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0.9,
@@ -662,10 +661,10 @@ const SPECS: LevelSpec[] = [
     theme: {
       skyTop: 0x5fa8e8,
       skyBottom: 0xeaf2ff,
-      skyImage: 'art/l2/sky.webp',
+      skyImage: 'art/l17/sky.webp',
       layers: [
-        { key: 'l6-far', src: 'art/l6/far.webp', scale: 0.85, factor: 0.12, lift: 0, tint: 0xe4ecff },
-        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45 },
+        { key: 'l17-far', src: 'art/l17/far.webp', scale: 0.85, factor: 0.12 },
+        { key: 'l17-mid', src: 'art/l17/mid.webp', scale: 0.6, factor: 0.45 },
       ],
       raysAlpha: 0.45,
       cloudsAlpha: 0.8,
@@ -692,10 +691,10 @@ const SPECS: LevelSpec[] = [
       skyTop: 0x0c1430,
       skyBottom: 0x26335e,
       sun: { x: 760, y: 100, r: 34, color: 0xf4f1dc, glow: 0xc9d6ff },
-      skyImage: 'art/l6/sky.webp',
+      skyImage: 'art/l18/sky.webp',
       layers: [
-        { key: 'l5-far', src: 'art/l5/far.webp', scale: 0.75, factor: 0.12, lift: 40, tint: 0x46557e },
-        { key: 'l2-mid', src: 'art/l2/mid.webp', scale: 0.7, factor: 0.45, tint: 0x56689a },
+        { key: 'l18-far', src: 'art/l18/far.webp', scale: 0.85, factor: 0.12 },
+        { key: 'l18-mid', src: 'art/l18/mid.webp', scale: 0.55, factor: 0.45 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0.2,
@@ -725,10 +724,11 @@ const SPECS: LevelSpec[] = [
     theme: {
       skyTop: 0x05060f,
       skyBottom: 0x141a33,
-      skyImage: 'art/l12/sky.webp',
+      skyImage: 'art/l19/sky.webp',
       layers: [
-        { key: 'earth-rise', h: 140, factor: 0.02, lift: 190 },
-        { key: 'moon-far', h: 130, factor: 0.15 },
+        { key: 'l19-earth', src: 'art/l19/earth-rise.webp', scale: 0.5, factor: 0.02, lift: 190 },
+        { key: 'l19-far', src: 'art/l19/far.webp', scale: 0.8, factor: 0.12 },
+        { key: 'l19-mid', src: 'art/l19/mid.webp', scale: 0.6, factor: 0.4 },
       ],
       raysAlpha: 0,
       cloudsAlpha: 0,

@@ -59,13 +59,14 @@ swim slower (0.72 vs 0.85 of running speed) but hop higher out of the water,
 and change lanes faster (120 vs 170 ms) and jump higher on horizon runs. The
 full cat profile (speed, jump, slide, ledges, tunnels) is the next round.
 
-## What needs painting (for Elon)
+## Painted art (Elon, 26 November)
 
-Everything below is a stand-in today: either another level's painting reused
-(tinted), or painted in code. Same rules as `docs/art-specs.md`: WebP,
-transparent background, 2x game size. Send them over and they get wired in
-(the file list in `src/art/artFiles.ts` and the level's `layers` in
-`src/levels.ts`).
+Everything in the two tables below is painted and wired in: the backgrounds in
+`public/art/l13` to `l19` (each level's `layers` in `src/levels.ts`), the
+sprites in `public/art/props` and `public/art/critters` (listed in
+`src/art/artFiles.ts`). The code in `src/art/round2.ts` paints a stand-in only
+if a file fails to load. The tables stay as the size reference for repaints.
+Same rules as `docs/art-specs.md`: WebP, transparent background, 2x game size.
 
 ### Backgrounds (one folder each: `public/art/l<art>/`)
 
@@ -73,7 +74,7 @@ Same sizes as the existing levels: `sky` 1280 x 720 (fills the screen), `far`
 about 1170 wide, `mid` about 1184 wide, both tiling left to right, keyed on
 magenta like the others.
 
-| Folder | Level | sky | far | mid | Borrowed today |
+| Folder | Level | sky | far | mid | Before 26 November |
 |---|---|---|---|---|---|
 | l13 | Open Meadow | bright summer sky | distant blue hills | wildflower meadow with a few round trees | l9 sky, l10 far (tinted), l1 far |
 | l14 | Sunflower Road | warm late-summer sky | rolling farm fields | rows of sunflowers | l7 sky, l9 far, code-painted sunflowers |

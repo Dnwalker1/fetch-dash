@@ -3,18 +3,16 @@ import { GAME_HEIGHT, GAME_WIDTH, NIGHT } from '../config';
 import { blade, circle, css, ellipse, fillOut, grain, leaf, lin, line, paint, rad, roundX, roundY, rrect, seeded, shade, type Ctx } from './paint';
 
 /**
- * Art for the second round of levels (25 November), painted in code until
- * Elon paints the real pictures (docs/levels-round-2.md lists them with
- * sizes). A painted file listed in artFiles.ts with the same key replaces
- * any of these.
+ * Art for the second round of levels (25 November), painted in code. Elon's
+ * painted files (26 November, listed in artFiles.ts) replace these; each is
+ * painted here only if its file fails to load.
  *
  *   water, water-cap   the water in swimming stretches, and its soft end at the bank
  *   lily, footbridge   things in the water (floating logs and crates reuse log and crate)
  *   splash             one drop of a splash
- *   sunflowers         a background layer of sunflowers (Sunflower Road)
  *   hz-*               scenery along the sides of the runs into the screen
  *   firefly            Night Woods
- *   moon-*, crater, space-arch, space-pole, moonbug, ufo-0/1, earth-rise, helmet   Moon Run
+ *   moon-*, crater, space-arch, space-pole, moonbug, ufo-0/1, helmet   Moon Run
  */
 
 const TAU = Math.PI * 2;
@@ -135,40 +133,6 @@ export function paintWater(scene: Phaser.Scene): void {
     line(c, [[4, 4], [166, 4]], 0x6a4426, 3);
     for (const x of [10, 60, 110, 160]) line(c, [[x, 4], [x, 9]], 0x6a4426, 2.4);
     grain(c, 170, 24, 0.08, 0, 6, 170);
-  });
-}
-
-/** A background layer of sunflowers, 1024 x 120, on a clear background. */
-export function paintSunflowers(scene: Phaser.Scene): void {
-  const W = 1024;
-  const H = 120;
-  paint(scene, 'sunflowers', W, H, (c) => {
-    const r = seeded(88);
-    // the leafy band along the bottom, then three rows of flowers, far to near
-    c.fillStyle = lin(c, 0, H - 40, 0, H, [[0, 0x5f8a2e, 0], [0.4, 0x4f7a26], [1, 0x3a5e1c]]);
-    c.fillRect(0, H - 40, W, 40);
-    for (const row of [0, 1, 2]) {
-      const s = 0.6 + row * 0.2;
-      const base = H - 8 + row * 2;
-      for (let x = (row * 23) % 40; x < W; x += 26 + r() * 12) {
-        const h = (60 + r() * 26) * s;
-        const head = 9 * s + r() * 2;
-        wrap(x, 30, W, (px) => {
-          line(c, [[px, base], [px + 2, base - h / 2], [px, base - h]], 0x3f6a20, 2.2 * s);
-          leaf(c, px + 1, base - h * 0.45, 12 * s, 5 * s, -0.5, 0x5a8f2e, 0x3f6a20);
-          leaf(c, px, base - h * 0.62, 11 * s, 5 * s, Math.PI + 0.5, 0x5a8f2e, 0x3f6a20);
-          for (let k = 0; k < 12; k++) {
-            const a = (k / 12) * TAU;
-            ellipse(c, px + Math.cos(a) * head * 0.95, base - h + Math.sin(a) * head * 0.95, head * 0.62, head * 0.26, a);
-            c.fillStyle = css(k % 2 ? 0xf6c42a : 0xffd84a);
-            c.fill();
-          }
-          circle(c, px, base - h, head * 0.55);
-          c.fillStyle = rad(c, px - 1, base - h - 1, 0, px, base - h, head * 0.55, [[0, 0x8a5a2a], [1, 0x4a2a12]]);
-          c.fill();
-        });
-      }
-    }
   });
 }
 
@@ -399,60 +363,5 @@ export function paintMoonArt(scene: Phaser.Scene): void {
     // the collar ring at the neck
     ellipse(c, 32, 57, 20, 5);
     fillOut(c, lin(c, 0, 52, 0, 62, [[0, 0xf0f0f6], [1, 0x9a9aac]]), 0x4a4a58, 1.2);
-  });
-  // Earth hanging in the black sky, and grey moon hills
-  paint(scene, 'earth-rise', 1024, 140, (c) => {
-    const x = 700;
-    const y = 62;
-    const R = 34;
-    circle(c, x, y, R * 1.5);
-    c.fillStyle = rad(c, x, y, R, x, y, R * 1.5, [[0, 0x7ac8ff, 0.3], [1, 0x7ac8ff, 0]]);
-    c.fill();
-    circle(c, x, y, R);
-    c.fillStyle = rad(c, x - 10, y - 10, 2, x, y, R, [[0, 0x8ad0ff], [0.7, 0x2a6ac8], [1, 0x163a80]]);
-    c.fill();
-    c.save();
-    circle(c, x, y, R);
-    c.clip();
-    for (const [dx, dy, rx, ry, rot] of [[-10, -6, 12, 8, 0.4], [12, 10, 10, 13, -0.3], [-4, 18, 7, 5, 0]] as const) {
-      ellipse(c, x + dx, y + dy, rx, ry, rot);
-      c.fillStyle = css(0x5aa04a, 0.9);
-      c.fill();
-    }
-    for (const [dx, dy, rx] of [[0, -18, 20], [-16, 6, 14], [14, -4, 12]] as const) {
-      ellipse(c, x + dx, y + dy, rx, 3, 0.2);
-      c.fillStyle = css(0xffffff, 0.6);
-      c.fill();
-    }
-    // night side
-    circle(c, x + 16, y + 6, R);
-    c.fillStyle = css(0x050814, 0.45);
-    c.fill();
-    c.restore();
-  });
-  paint(scene, 'moon-far', 1024, 130, (c) => {
-    const r = seeded(7);
-    for (const [base, amp, col, seed] of [[60, 40, 0x6a6a80, 2], [92, 28, 0x8a8aa0, 5]] as const) {
-      c.beginPath();
-      c.moveTo(0, 130);
-      for (let x = 0; x <= 1024; x += 8) {
-        const y = base - amp * (0.5 + 0.3 * Math.sin((x / 1024) * TAU * 3 + seed) + 0.2 * Math.sin((x / 1024) * TAU * 7 + seed * 2));
-        c.lineTo(x, y);
-      }
-      c.lineTo(1024, 130);
-      c.closePath();
-      c.fillStyle = lin(c, 0, base - amp, 0, 130, [[0, shade(col, 0.25)], [1, shade(col, -0.3)]]);
-      c.fill();
-    }
-    for (let i = 0; i < 30; i++) {
-      const x = r() * 1024;
-      const y = 96 + r() * 30;
-      const rx = 4 + r() * 14;
-      wrap(x, rx, 1024, (px) => {
-        ellipse(c, px, y, rx, rx * 0.25);
-        c.fillStyle = css(0x4a4a5e, 0.5);
-        c.fill();
-      });
-    }
   });
 }

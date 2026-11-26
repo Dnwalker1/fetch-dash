@@ -18,13 +18,17 @@ const PROPS = [
   'snowbranch', 'snowcanopy', 'snowman', 'stump', 'trashcan', 'trough', 'trunk', 'tumbleweed',
   'tree-park', 'tree-snow', 'tree-autumn', 'tree-blossom', 'tree-jungle',
   'umbrella', 'umbrella-pole', 'vines', 'wood-post',
+  // round 2 (Elon, 26 November): water, horizon scenery, Night Woods, Moon Run
+  'water', 'water-cap', 'lily', 'footbridge',
+  'hz-bush', 'hz-flowers', 'hz-tree', 'hz-sunflower', 'hz-post', 'firefly',
+  'moon-rock', 'crater', 'moon-flag', 'space-arch', 'space-pole', 'moon-ball', 'helmet',
 ];
 /** Two-frame critters: -0 is wings up (or the arm up), -1 is down. */
-const FLAPPERS = ['balloon', 'bird', 'butterfly', 'cardinal', 'crow', 'duck', 'gull', 'hawk', 'owl', 'parrot', 'person', 'pigeon'];
+const FLAPPERS = ['balloon', 'bird', 'butterfly', 'cardinal', 'crow', 'duck', 'gull', 'hawk', 'owl', 'parrot', 'person', 'pigeon', 'ufo'];
 const CRITTERS = [
   ...FLAPPERS.flatMap((k) => [`${k}-0`, `${k}-1`]),
   'chicken', 'chipmunk', 'crab', 'fox', 'frog', 'gopher', 'lizard', 'monkey', 'mouse', 'rabbit',
-  'squirrel', 'streetcat', 'streetdog',
+  'squirrel', 'streetcat', 'streetdog', 'moonbug',
   ...['dirt', 'sand', 'snow'].flatMap((e) => [`den-${e}`, `den-${e}-lip`]),
   'tufts-den',
 ];

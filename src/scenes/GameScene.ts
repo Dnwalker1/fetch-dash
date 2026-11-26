@@ -12,7 +12,7 @@ import { LEDGE_H, ledgeTexture, pillarTexture } from '../art/ledges';
 import { TUNNEL_CEILING, paintDigSpot, paintRoots, paintTunnel } from '../art/tunnel';
 import { makeLevelArt } from '../art/levelArt';
 import { makeLevelArt2 } from '../art/levelArt2';
-import { WATER_CAP_W, WATER_SURFACE, paintHorizonArt, paintMoonArt, paintNightLight, paintSunflowers, paintWater } from '../art/round2';
+import { WATER_CAP_W, WATER_SURFACE, paintHorizonArt, paintMoonArt, paintNightLight, paintWater } from '../art/round2';
 import { HorizonRun } from './horizon';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
@@ -360,11 +360,16 @@ export class GameScene extends Phaser.Scene {
     // the pet's painted sprites, if it has them
     queuePetArt(this, loadPet());
     // the painted props and critters this level uses (anything without a file is painted in code)
-    // (the tunnels have stones in them)
     // (the tunnels have stones in them; the runs into the screen and the water have their own things)
     const kinds = [...(Object.keys(l.obstacles) as ObstacleKind[]), ...(l.dig ? (['rock'] as ObstacleKind[]) : []), ...(l.horizon?.obstacles ?? [])];
-    const swimKeys = (l.swim?.obstacles ?? []).map((k) => SWIMMERS[k].key).concat(l.swim?.obstacles.includes('footbridge') ? ['wood-post'] : []);
-    queueArt(this, [...propKeys(kinds), ...swimKeys, ...critterKeys(l)]);
+    const swimKeys = (l.swim?.obstacles ?? []).map((k) => SWIMMERS[k].key).concat(l.swim ? ['water', 'water-cap'] : [], l.swim?.obstacles.includes('footbridge') ? ['wood-post'] : []);
+    const extras = [
+      ...(l.horizon ? ['hz-bush', 'hz-flowers', 'hz-tree', 'hz-sunflower', 'hz-post'] : []),
+      ...(l.theme.weather === 'fireflies' ? ['firefly'] : []),
+      ...(l.gravity ? ['helmet'] : []),
+      ...(l.ball ? [l.ball] : []),
+    ];
+    queueArt(this, [...propKeys(kinds), ...swimKeys, ...extras, ...critterKeys(l)]);
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
@@ -433,7 +438,6 @@ export class GameScene extends Phaser.Scene {
     makeLevelArt(this);
     makeLevelArt2(this);
     paintWater(this);
-    paintSunflowers(this);
     paintHorizonArt(this);
     paintMoonArt(this);
     this.makeAnimations();

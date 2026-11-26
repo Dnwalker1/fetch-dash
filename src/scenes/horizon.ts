@@ -226,7 +226,8 @@ export class HorizonRun {
     if (far) {
       const src = sc.textures.get(far.key).getSourceImage() as HTMLImageElement;
       const scale = far.src ? (far.scale ?? 1) * 0.55 : artScale(sc, far.key, 0.55);
-      const h = src.height * scale;
+      // (painted strips have clear rows on top: skip them, as the side-on view does, so the strip's edge doesn't show)
+      const h = (src.height - (far.src ? 4 : 0)) * scale;
       const tile = add(
         sc.add
           .tileSprite(0, HORIZON.horizonY + 6 - h, GAME_WIDTH, h, far.key)
@@ -235,6 +236,7 @@ export class HorizonRun {
           .setDepth(DEPTH_BACK + 0.01),
       );
       tile.tilePositionX = 300;
+      if (far.src) tile.tilePositionY = 2;
       if (far.tint !== undefined) tile.setTint(far.tint);
     }
     // the land: lighter and hazier toward the horizon
