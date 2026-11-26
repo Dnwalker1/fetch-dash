@@ -20,7 +20,8 @@ import { BACK_POSES, backLookFor, extraLookFor, petFrameUrls, petLookFor, queueP
 import { BRAKE, CLIMB, CLIMB_TALL, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN, SPECIES, SWIM } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress, type SwimObstacle } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, openTitle, refreshPetFrames, type CardHost } from '../ui/cards';
-import { loadHero } from '../hero/store';
+import { loadHero, slothWanted } from '../hero/store';
+import { SLOTH, headTop, paintedWithSloth, queueSloth } from '../art/rider';
 import { addDebugOverlay } from '../ui/debug';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 
@@ -288,6 +289,10 @@ export class GameScene extends Phaser.Scene {
   private petBody!: Body;
   private petSprite!: Phaser.GameObjects.Sprite;
   private petMarks: Phaser.GameObjects.Sprite[] = [];
+  /** the sloth riding on the pet's head, if the player brought it along (see syncSloth) */
+  private sloth?: Phaser.GameObjects.Image;
+  /** the standing pet's height in its picture's pixels, which sizes the sloth */
+  private slothBaseH = 0;
   private look!: PetLook;
   /** the pet from behind, while it runs into the screen (if it's painted that way) */
   private backLook?: BackLook;
@@ -572,6 +577,7 @@ export class GameScene extends Phaser.Scene {
     this.petShadow = this.add.image(PET.homeX, gy, 'shadow').setDepth(1.9);
     this.petSprite = this.add.sprite(PET.homeX, gy, `${petKey(this.choice)}-run-0`).setOrigin(0.5, 1).setDepth(2);
     this.petMarks = [];
+    this.sloth = undefined;
     this.petDim = false;
     this.applyPet();
 
@@ -3045,6 +3051,7 @@ export class GameScene extends Phaser.Scene {
     // one sprite per marking layer, kept in step with the pet (see syncMarks)
     this.petMarks.forEach((m) => m.destroy());
     this.petMarks = this.look.marks.map((k, i) => this.add.sprite(this.petSprite.x, this.petSprite.y, k.run, 0).setOrigin(this.look.originX, 1).setDepth(2.01 + i * 0.001));
+    this.setupSloth();
     this.syncMarks();
   }
 
@@ -3084,6 +3091,7 @@ export class GameScene extends Phaser.Scene {
     const side = queuePetArt(this, this.choice);
     const poses = queuePoses(this, this.choice, posesFor(this.level));
     if (this.choice.species === 'cat') queueArt(this, ['toss-yarn']);
+    if (this.wantsSloth()) queueSloth(this);
     if (!side && !poses && this.load.list.size === 0) return;
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (!this.sys.isActive() || !this.petSprite?.active) return;
@@ -3123,6 +3131,53 @@ export class GameScene extends Phaser.Scene {
       const tint = k.tint ?? 0xffffff;
       m.setTint(this.petDim ? dim(tint) : tint);
     });
+    this.syncSloth();
+  }
+
+  /** The player ticked "Bring the sloth along", and the pet isn't Chewy (who is painted with him). */
+  private wantsSloth(): boolean {
+    return slothWanted() && !paintedWithSloth(this.choice);
+  }
+
+  private setupSloth(): void {
+    this.sloth?.destroy();
+    this.sloth = undefined;
+    if (!this.wantsSloth() || !this.textures.exists(SLOTH.side)) return;
+    const stand = headTop(this, this.look.idle, this.look.stand ?? '__BASE', false);
+    if (!stand) return;
+    this.slothBaseH = stand.h;
+    this.sloth = this.add.image(0, 0, SLOTH.side).setDepth(2.05);
+  }
+
+  /** The sloth stays on top of the pet's head, whatever picture the pet shows. */
+  private syncSloth(): void {
+    const s = this.sloth;
+    if (!s) return;
+    const sp = this.petSprite;
+    const back = sp.texture.key.includes('-back-');
+    const o = sp.visible ? headTop(this, sp.texture.key, sp.frame.name, back) : undefined;
+    if (!o) {
+      s.setVisible(false);
+      return;
+    }
+    const useBack = back && this.textures.exists(SLOTH.back);
+    const seat = useBack ? SLOTH.seat.back : SLOTH.seat.side;
+    s.setTexture(useBack ? SLOTH.back : SLOTH.side);
+    let dx = (o.x - sp.originX * sp.frame.realWidth) * sp.scaleX;
+    const dy = (o.y + SLOTH.sink * this.slothBaseH - sp.originY * sp.frame.realHeight) * sp.scaleY;
+    if (sp.flipX) dx = -dx;
+    const c = Math.cos(sp.rotation);
+    const n = Math.sin(sp.rotation);
+    const size = SLOTH.size[this.choice.species === 'cat' ? 'cat' : 'dog'];
+    s.setOrigin(sp.flipX ? 1 - seat.x : seat.x, seat.y)
+      .setPosition(sp.x + dx * c - dy * n, sp.y + dx * n + dy * c)
+      .setRotation(sp.rotation)
+      .setFlipX(sp.flipX)
+      .setScale((size * this.slothBaseH * Math.abs(sp.scaleX)) / s.height)
+      .setDepth(sp.depth + 0.05)
+      .setAlpha(sp.alpha)
+      .setTint(this.petDim ? dim(0xffffff) : 0xffffff)
+      .setVisible(true);
   }
 
   private drawBackground(): void {
@@ -3355,6 +3410,7 @@ function queueLevel(scene: Phaser.Scene, l: LevelDef, pet: PetChoice): void {
   for (const layer of t.layers) if (layer.src && !scene.textures.exists(layer.key)) scene.load.image(layer.key, layer.src);
   // the pet's painted sprites, if it has them (and from behind, for the runs into the screen)
   queuePetArt(scene, pet);
+  if (slothWanted() && !paintedWithSloth(pet)) queueSloth(scene);
   queuePoses(scene, pet, posesFor(l));
   // the painted props and critters this level uses (anything without a file is painted in code)
   // (the tunnels have stones in them; the runs into the screen and the water have their own things)

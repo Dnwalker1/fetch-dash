@@ -278,7 +278,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
          <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
        </label>
        <label class="sloth"><input type="checkbox"${slothWanted() ? ' checked' : ''} />
-         <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head</small></span></label>
+         <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head, in the game and in the portrait</small></span></label>
        <p class="small allow">${allowanceLine(name)}</p>`
     : `<div class="drop used">
          <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
@@ -459,7 +459,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     keepName();
     host.play(host.progress().current);
   });
-  r.querySelector<HTMLInputElement>('.sloth input')?.addEventListener('change', (e) => setSlothWanted((e.target as HTMLInputElement).checked));
+  r.querySelector<HTMLInputElement>('.sloth input')?.addEventListener('change', (e) => {
+    setSlothWanted((e.target as HTMLInputElement).checked);
+    host.setChoice(host.choice()); // the sloth hops on (or off) the pet in the game too
+  });
   r.querySelector('.go')?.addEventListener('click', () => {
     keepName();
     // This pet's free portraits are used (or 3 pets have theirs): explain where to go next
