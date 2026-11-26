@@ -212,6 +212,8 @@ const TREE_ORIGIN: Record<string, [number, number]> = {
 };
 /** Trees spawn this much farther right, so the ground can level off under them off screen. */
 const TREE_LEAD = 320;
+/** Clear trail between the last treats and the ball at the end of a level. */
+const FINISH_CLEAR_PX = 320;
 /** The stretch of ground under a tree that's made level, from its anchor. */
 const TREE_FLAT: [number, number] = [-70, 170];
 
@@ -1228,7 +1230,7 @@ export class GameScene extends Phaser.Scene {
 
     // No new obstacles in the final stretch, so the finish stays clear
     this.nextSpawnIn -= dx;
-    if (this.nextSpawnIn <= 0 && remainingPx > GAME_WIDTH + 200) this.spawnNext();
+    if (this.nextSpawnIn <= 0 && remainingPx > this.finishClearPx()) this.spawnNext();
 
     if (this.sliding) {
       this.slideLeftPx -= dx;
@@ -1488,11 +1490,16 @@ export class GameScene extends Phaser.Scene {
       this.spawnWater(x, Math.min(Phaser.Math.Between(sw.lengthM[0], sw.lengthM[1]) * SCORE.pixelsPerMeter, remainingPx - SWIM.clearEndPx));
       return;
     }
-    if (this.distancePx >= this.nextDigAt && remainingPx > CLIMB.clearEndPx + TUNNEL.lengthPx) {
+    // (climbs and tunnels stretch with the run's speed, so the room they need at the end does too)
+    const k = Math.max(1, this.baseSpeed / 300);
+    const lead = x + 900 * k - (PET.homeX + this.petW / 2);
+    if (this.distancePx >= this.nextDigAt && remainingPx > Math.max(CLIMB.clearEndPx + TUNNEL.lengthPx, lead + TUNNEL.lengthPx * k + FINISH_CLEAR_PX)) {
       this.spawnDigSpot(x);
       return;
     }
-    if (this.distancePx >= this.nextClimbAt && remainingPx > CLIMB.clearEndPx) {
+    const steps = this.level.climb?.tall ? CLIMB_TALL : CLIMB.steps;
+    const climbSpan = (steps[steps.length - 1].dx + steps[steps.length - 1].w) * k;
+    if (this.distancePx >= this.nextClimbAt && remainingPx > Math.max(CLIMB.clearEndPx, x - (PET.homeX + this.petW / 2) + climbSpan + CLIMB.flatRamp + FINISH_CLEAR_PX)) {
       // A climbing section instead of the next obstacle
       const span = this.spawnClimb(x);
       const c = this.level.climb!;
@@ -1657,6 +1664,20 @@ export class GameScene extends Phaser.Scene {
     // (and the next obstacle waits until after that jump comes down)
     if (high) this.lastObstacleEnd = Math.max(this.lastObstacleEnd, this.distancePx + mid - (speed * v) / g);
     if (high) this.hint('high-treats', this.say('Jump for the high treats!', 'Hold Space to jump higher for the high treats!'));
+  }
+
+  /**
+   * How far from the ball the last obstacle may be placed: far enough that it
+   * (a tree sits farther out than the rest) and the treats after it are all
+   * behind the pet, with a clear stretch, before the ball comes into reach.
+   */
+  private finishClearPx(): number {
+    const g = this.physics.world.gravity.y;
+    const lift = this.level.gravity ? 1.2 * Math.sqrt(this.level.gravity) : 1;
+    const v = -PET.jumpVelocity * lift;
+    const treatTail = Math.max(150, this.speed) * ((2 * v) / g) + 60 + 70;
+    const farthest = GAME_WIDTH + 60 + TREE_LEAD - (PET.homeX + this.petW / 2);
+    return farthest + Math.max(treatTail, 220 + 3 * 45) + FINISH_CLEAR_PX;
   }
 
   /** A treat counts as caught a little outside its picture, so a near miss still gets it. */
