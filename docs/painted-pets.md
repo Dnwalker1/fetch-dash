@@ -51,3 +51,26 @@ count, `coat` ('tint' or 'fixed'), any `markings`, the `dark` variant id, and
 `fit` and `originX`. `fit` sets the size next to the drawn pets. `originX` sets
 where the hit box sits across the picture. Long dogs sit back so the nose
 doesn't reach far past it.
+
+## Extra poses
+
+Beyond run, jump and slide, each layer (and Chewy's sheet, and the cat) can
+have these, named `<layer>-<pose>.webp` (Chewy: `<pose>.webp`). They load per
+level (see `posesFor` in `GameScene.ts`) and each is used only once every
+layer of it has loaded; otherwise the game falls back to the run, jump and
+slide pictures.
+
+| Pose | Cell | Frames | Used for |
+| --- | --- | --- | --- |
+| `back-run`, `back-lean-left`, `back-lean-right` | 189 x 112 | 8 | runs into the screen |
+| `back-jump` | single | 1 | runs into the screen, in the air |
+| `ready` | 189 x 150 | 4 (tail wag) | waiting to start, standing still |
+| `catch` | 189 x 150 | 4 | the finish: 0-1 trot with the ball, 2-3 brake and stand |
+| `swim` | 189 x 112 | 6 | paddling (water line 38 px above the bottom) |
+| `dive` | single | 1 | diving under (same water line) |
+
+Card pictures (512 x 512, fully painted, not tinted) are `card-<coat>.webp`,
+plus `-<group>-<option>` for a shape that isn't the breed's first (for
+example `card-blue-merle-ears-prick.webp`). Chewy's is `card.webp` and the
+cat's `card-<palette>.webp`. The hero card and the photo box show them when
+the player has no portrait.

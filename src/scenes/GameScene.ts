@@ -16,7 +16,7 @@ import { WATER_CAP_W, WATER_SURFACE, paintHorizonArt, paintMoonArt, paintNightLi
 import { HorizonRun } from './horizon';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
-import { backLookFor, petFrameUrls, petLookFor, queueBackArt, queuePetArt, type BackLook, type PetLook } from '../art/petLook';
+import { BACK_POSES, backLookFor, extraLookFor, petFrameUrls, petLookFor, queuePetArt, queuePoses, type BackLook, type ExtraLook, type PetLook, type Pose } from '../art/petLook';
 import { BRAKE, CLIMB, CLIMB_TALL, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN, SPECIES, SWIM } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress, type SwimObstacle } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, openTitle, refreshPetFrames, type CardHost } from '../ui/cards';
@@ -60,6 +60,10 @@ interface Water {
   /** the lake reaching back behind the pet, to the far shore */
   back: Phaser.GameObjects.TileSprite;
   backEnds: Img[];
+  /** how far (game px) the strip runs under each shore piece, where the piece fades out */
+  fade: number;
+  /** the water's whole width between the shore pieces (the strips only cover what's on screen) */
+  span: number;
   spawned: boolean;
 }
 
@@ -67,6 +71,19 @@ interface Water {
 const BACK_WATER_H = 40;
 /** The shore pieces fade into the water strip over this many game px, so no seam shows where they meet. */
 const CAP_FADE = 18;
+/** The painted blend cap (water-cap-blend) fades over its last 48 game px. */
+const CAP_BLEND_FADE = 48;
+/**
+ * A water strip is never wider than the screen plus this much at each side:
+ * a tile sprite is drawn on a canvas its own size, and a long lake's would
+ * pass the phone's largest texture (it then doesn't draw at all).
+ */
+const STRIP_MARGIN = 64;
+/** The painted far-water band: its height, and how far above the surface its top is. */
+const FAR_WATER_H = 56;
+const FAR_WATER_UP = 48;
+/** In the swim and dive pictures the water line is this many picture px above the bottom edge. */
+const SWIM_ART_LINE = 38;
 
 /** A neighbor on the sidewalk holding out a treat: stop next to them to get it. */
 interface Greet {
@@ -189,8 +206,8 @@ const TREE_LEAD = 320;
 /** The stretch of ground under a tree that's made level, from its anchor. */
 const TREE_FLAT: [number, number] = [-70, 170];
 
-/** The fences cross the trail at an angle, which leaves clear corners at the top: a smaller hit area. */
-const FENCE: ObstacleDef = { lift: 34, slide: false, hit: { width: 0.55, height: 0.6 }, ground: true };
+/** The fences: a hit area a little narrower than the picture (it fills only the lower part of its frame, hence the height). */
+const FENCE: ObstacleDef = { lift: 34, slide: false, hit: { width: 0.8, height: 0.6 }, ground: true };
 const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
   fence: FENCE,
   'fence-rail': FENCE,
@@ -236,9 +253,11 @@ const OBSTACLES: Record<ObstacleKind, ObstacleDef> = {
  * above the water's surface. Floating logs and crates reuse the trail's
  * pictures. Hop over the floating things; dive under the footbridge.
  */
-const SWIMMERS: Record<SwimObstacle, { key: string; lift: number; dive: boolean }> = {
-  'float-log': { key: 'log', lift: 6, dive: false },
-  'float-crate': { key: 'crate', lift: 10, dive: false },
+const SWIMMERS: Record<SwimObstacle, { key: string; lift: number; dive: boolean; fallback?: { key: string; lift: number } }> = {
+  // painted half under the water (with a ripple ring), so they're drawn over the water strip;
+  // if that picture didn't load, the trail's log and crate sit behind the strip instead
+  'float-log': { key: 'log-float', lift: 6, dive: false, fallback: { key: 'log', lift: 6 } },
+  'float-crate': { key: 'crate-float', lift: 6, dive: false, fallback: { key: 'crate', lift: 10 } },
   lily: { key: 'lily', lift: 2, dive: false },
   footbridge: { key: 'footbridge', lift: 30, dive: true },
 };
@@ -261,6 +280,10 @@ export class GameScene extends Phaser.Scene {
   private look!: PetLook;
   /** the pet from behind, while it runs into the screen (if it's painted that way) */
   private backLook?: BackLook;
+  /** standing, the catch, swimming and the dive, where they're painted */
+  private extra: ExtraLook = { marks: new Map() };
+  /** the bubbles over a diving pet */
+  private diveBubbles?: Phaser.GameObjects.Sprite;
   private petDim = false;
   private petShadow!: Img;
   private choice!: PetChoice;
@@ -451,6 +474,7 @@ export class GameScene extends Phaser.Scene {
     this.calmUntil = 0;
     this.lastObstacleEnd = -Infinity;
     this.backLook = undefined;
+    this.diveBubbles = undefined;
     this.sliding = false;
     this.distraction = undefined;
     this.returning = false;
@@ -956,7 +980,8 @@ export class GameScene extends Phaser.Scene {
     this.distractionTimer?.remove();
     this.alertText.setVisible(false);
     this.swipeArrow.setVisible(false);
-    this.petSprite.anims.pause();
+    // (after the catch, the pet finishes its stop and stands)
+    if (!finished) this.petSprite.anims.pause();
     if (!won) {
       this.petDim = true;
       this.petSprite.setTint(dim(this.look.tint ?? 0xffffff));
@@ -1018,7 +1043,8 @@ export class GameScene extends Phaser.Scene {
     if (this.horizon) return;
     const sp = this.petSprite;
     sp.anims.stop();
-    sp.setTexture(this.look.idle, this.look.stand).setAngle(0);
+    if (this.extra.ready) sp.setTexture(this.extra.ready, 0).setAngle(0);
+    else sp.setTexture(this.look.idle, this.look.stand).setAngle(0);
     const floor = this.onLedge?.top ?? this.shadowFloor();
     const y = floor - this.pet.height / 2;
     if (this.pet.y < y - 1) this.tweens.add({ targets: this.pet, y, duration: 260, ease: 'Quad.easeIn', onComplete: () => this.dust(5) });
@@ -1081,6 +1107,8 @@ export class GameScene extends Phaser.Scene {
   private holdBall(): void {
     const b = this.ball;
     if (!b?.active) return;
+    // (the painted catch has the ball in its mouth already)
+    b.setVisible(!(this.grounded && !this.level.ball && this.extra.catch));
     const sp = this.petSprite;
     const w = sp.displayWidth;
     const left = sp.x - w * sp.originX;
@@ -1295,8 +1323,16 @@ export class GameScene extends Phaser.Scene {
     const lean = onGround && !this.onLedge ? Phaser.Math.RadToDeg(Math.atan(slope)) * (sp.flipX ? -1 : 1) : 0;
     sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : lean); // looking up at the bird or den
     // bobbing along in the water, or under it on a dive
-    if (this.swimming && onGround) sp.y += this.sliding ? SWIM.diveSink : Math.sin(this.time.now / 170) * 1.6;
-    if (onGround && !this.wasOnGround) this.dust(5); // landing puff
+    if (this.swimming && onGround) {
+      const painted = this.sliding ? this.extra.dive : this.extra.swim;
+      // (the painted swim and dive pictures have their water line on the surface, at every size)
+      if (painted) sp.y = SURFACE_Y + SWIM_ART_LINE * sp.scaleY + (this.sliding ? 0 : Math.sin(this.time.now / 170) * 1.2);
+      else sp.y += this.sliding ? SWIM.diveSink : Math.sin(this.time.now / 170) * 1.6;
+    }
+    if (onGround && !this.wasOnGround) {
+      this.dust(5); // landing puff (drops, in the water)
+      if (this.swimming) this.splashBurst();
+    }
     this.wasOnGround = onGround;
     // (at the finish, it stands once it has almost stopped)
     const stopped = !this.chasing && !this.returning && (this.speed < BRAKE.standSpeed || (this.state === 'finish' && this.brakeFactor < 0.2));
@@ -1308,13 +1344,24 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const look = this.look;
+    const extra = this.extra;
+    // the painted catch: trotting with the ball, then braking to a proud stand
+    // (its ball is the tennis ball, so not on the Moon)
+    const catchArt = this.state === 'finish' && !this.level.ball ? extra.catch : undefined;
     if (this.sliding || !onGround) this.standing = false;
     if (this.sliding) {
       sp.anims.stop();
-      sp.setTexture(look.slide);
+      sp.setTexture(this.swimming && extra.dive ? extra.dive : look.slide);
     } else if (!onGround) {
       sp.anims.stop();
       sp.setTexture(look.jump);
+    } else if (catchArt) {
+      this.playPose(this.brakeFactor > 0.2 ? `${catchArt}-trot` : `${catchArt}-stop`);
+    } else if (this.swimming && extra.swim) {
+      this.playPose(extra.swim);
+    } else if (stopped && extra.ready) {
+      // standing still, wagging
+      this.playPose(extra.ready);
     } else if (stopped) {
       // Standing still: hold the run's most standing-like frame
       if (!this.standing) {
@@ -1327,9 +1374,18 @@ export class GameScene extends Phaser.Scene {
         this.standing = false;
         sp.anims.resume();
       }
-      if (!sp.anims.isPlaying) sp.play(look.anim);
-      sp.anims.timeScale = this.speed / this.level.speed.start;
+      this.playPose(look.anim, this.speed / this.level.speed.start);
     }
+  }
+
+  /** Plays a pose's animation unless it's already on (a finished one-off, like the catch's stop, stays on its last frame). */
+  private playPose(key: string, timeScale = 1): void {
+    const sp = this.petSprite;
+    const a = sp.anims;
+    const cur = a.currentAnim;
+    if (cur?.key !== key || (!a.isPlaying && !a.isPaused && sp.texture.key !== cur.frames[0].textureKey)) sp.play(key);
+    else if (a.isPaused) a.resume();
+    a.timeScale = timeScale;
   }
 
   /** Where the pet's shadow falls: the highest ledge under it, or the ground. */
@@ -1570,7 +1626,8 @@ export class GameScene extends Phaser.Scene {
       // a dive: a splash going down and bubbles coming up
       if (this.swimming && this.grounded) {
         this.splash(10);
-        this.bubbles(7);
+        this.splashBurst();
+        if (!this.anims.exists('bubbles')) this.bubbles(7);
       }
       this.setPetHeight(Math.round(PET.slideHeight * SIZE_SCALE[this.choice.size]));
     }
@@ -1989,10 +2046,14 @@ export class GameScene extends Phaser.Scene {
     this.flats.push({ from: from - CLIMB.flatRamp, to: to + CLIMB.flatRamp });
     const top = SURFACE_Y - WATER_SURFACE;
     const inset = WATER_CAP_W * 1.1;
-    const cap = this.softCap();
+    // the painted blend cap fades over the strip; otherwise the plain cap gets a short fade here
+    const blend = this.textures.exists('water-cap-blend');
+    const cap = blend ? 'water-cap-blend' : this.softCap();
+    const fade = blend ? CAP_BLEND_FADE : CAP_FADE;
     // (the strip runs a little under each shore piece, where it fades out)
+    const span = len - inset * 2 + fade * 2;
     const strip = this.add
-      .tileSprite(0, top, len - inset * 2 + CAP_FADE * 2, GAME_HEIGHT - top, 'water')
+      .tileSprite(0, top, Math.min(span, GAME_WIDTH + STRIP_MARGIN * 2), GAME_HEIGHT - top, 'water')
       .setOrigin(0, 0)
       .setTileScale(artScale(this, 'water'))
       .setDepth(2.6);
@@ -2003,20 +2064,29 @@ export class GameScene extends Phaser.Scene {
     // the shore. Drawn squashed (it's farther away), behind the pet and the
     // things floating in it; its shore pieces turned over, so the far bank
     // curves away from the camera.
-    const backTop = GROUND_Y - BACK_WATER_H;
-    // (down past the front water's wavy top edge, so nothing behind shows between the waves)
-    const backH = top - backTop + 12;
-    const back = this.add
-      .tileSprite(0, backTop, strip.width, backH, 'water')
-      .setOrigin(0, 0)
-      .setTileScale(artScale(this, 'water'), artScale(this, 'water') * 0.5)
-      .setDepth(0.93);
-    const backEnds = [0, 1].map((i) => this.art(this.add.image(0, backTop, cap).setOrigin(i ? 0 : 1, 0).setFlip(i === 1, true).setDepth(0.93)));
-    backEnds.forEach((e) => e.setScale(e.scaleX, (backH / e.height) * 1.0001));
+    let back: Phaser.GameObjects.TileSprite;
+    let backEnds: Img[];
+    if (this.textures.exists('water-far') && this.textures.exists('water-far-cap')) {
+      // the painted far water, out to a soft far shore (it fades into the bank at each end)
+      const farTop = SURFACE_Y - FAR_WATER_UP;
+      back = this.add.tileSprite(0, farTop, strip.width, FAR_WATER_H, 'water-far').setOrigin(0, 0).setTileScale(artScale(this, 'water-far')).setDepth(0.93);
+      backEnds = [0, 1].map((i) => this.art(this.add.image(0, farTop, 'water-far-cap').setOrigin(i ? 0 : 1, 0).setFlipX(i === 1).setDepth(0.93)));
+    } else {
+      const backTop = GROUND_Y - BACK_WATER_H;
+      // (down past the front water's wavy top edge, so nothing behind shows between the waves)
+      const backH = top - backTop + 12;
+      back = this.add
+        .tileSprite(0, backTop, strip.width, backH, 'water')
+        .setOrigin(0, 0)
+        .setTileScale(artScale(this, 'water'), artScale(this, 'water') * 0.5)
+        .setDepth(0.93);
+      backEnds = [0, 1].map((i) => this.art(this.add.image(0, backTop, cap).setOrigin(i ? 0 : 1, 0).setFlip(i === 1, true).setDepth(0.93)));
+      backEnds.forEach((e) => e.setScale(e.scaleX, (backH / e.height) * 1.0001));
+    }
     if (this.level.theme.storm) {
       for (const o of [strip, back, ...ends, ...backEnds]) o.setTint(0xc8bca0);
     }
-    this.waters.push({ from, to, strip, ends, back, backEnds, spawned: false });
+    this.waters.push({ from, to, strip, ends, back, backEnds, fade, span, spawned: false });
     this.placeWater();
     const sw = this.level.swim!;
     this.nextSwimAt = to + Phaser.Math.Between(sw.gapM[0], sw.gapM[1]) * SCORE.pixelsPerMeter - GAME_WIDTH;
@@ -2029,12 +2099,15 @@ export class GameScene extends Phaser.Scene {
     const drift = (this.time.now / 1000) * 14;
     for (const w of this.waters) {
       const x0 = w.from + inset - this.distancePx;
+      // the strips cover the part of the water on screen, their pattern fixed to the water
+      const start = x0 - w.fade;
+      const x = Phaser.Math.Clamp(-STRIP_MARGIN, start, start + w.span - w.strip.width);
       for (const strip of [w.strip, w.back]) {
-        strip.x = x0 - CAP_FADE;
-        strip.tilePositionX = (drift * (strip === w.back ? 0.6 : 1)) / strip.tileScaleX;
+        strip.x = x;
+        strip.tilePositionX = (x - start + drift * (strip === w.back ? 0.6 : 1)) / strip.tileScaleX;
       }
       // the curved ends meet the strip at each bank (and fade into it)
-      const x1 = x0 + w.strip.width - CAP_FADE * 2;
+      const x1 = x0 + w.span - w.fade * 2;
       w.ends[0].x = x0;
       w.ends[1].x = x1;
       w.backEnds[0].x = x0;
@@ -2085,6 +2158,7 @@ export class GameScene extends Phaser.Scene {
       this.swimming = inWater;
       if (inWater) {
         this.splash(14);
+        this.splashBurst();
         sfx.slide();
         this.hint('swim', this.say('Swimming! Tap to hop over, swipe down to dive under', 'Swimming! Space hops over, \u2193 dives under'));
       } else {
@@ -2095,6 +2169,7 @@ export class GameScene extends Phaser.Scene {
     const want = this.swimming ? SPECIES[this.choice.species].swimSpeed : 1;
     this.waterFactor += (want - this.waterFactor) * Math.min(1, dt * 3);
     if (Math.abs(want - this.waterFactor) < 0.002) this.waterFactor = want;
+    this.updateDiveBubbles();
     // a ripple now and then behind the paddling pet, bubbles while it dives
     if (this.swimming && this.grounded && Math.random() < dt * 6) {
       if (this.sliding) this.bubbles(2);
@@ -2120,6 +2195,28 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** The painted splash where the pet meets the water (on going in, a dive and landing a hop); it drifts off with the water. */
+  private splashBurst(): void {
+    if (!this.anims.exists('splash-burst')) return;
+    const s = this.art(this.add.sprite(this.pet.x + 6, SURFACE_Y, 'splash-burst', 0)).setOrigin(0.5, 0.83).setDepth(2.65);
+    s.play('splash-burst');
+    s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
+    this.tweens.add({ targets: s, x: s.x - this.speed * 0.33, duration: 333 });
+  }
+
+  /** The painted bubbles over the diving pet, while it's under. */
+  private updateDiveBubbles(): void {
+    const diving = this.swimming && this.sliding && this.grounded && this.state === 'playing';
+    if (diving && !this.diveBubbles && this.anims.exists('bubbles')) {
+      this.diveBubbles = this.art(this.add.sprite(0, SURFACE_Y, 'bubbles', 0)).setOrigin(0.5, 0.06).setDepth(2.62);
+      this.diveBubbles.play('bubbles');
+    } else if (!diving && this.diveBubbles) {
+      this.diveBubbles.destroy();
+      this.diveBubbles = undefined;
+    }
+    this.diveBubbles?.setX(this.pet.x + 10);
+  }
+
   /** Bubbles rising from the diving pet to the surface. */
   private bubbles(count: number): void {
     for (let i = 0; i < count; i++) {
@@ -2142,19 +2239,27 @@ export class GameScene extends Phaser.Scene {
     const kinds = this.level.swim!.obstacles;
     const kind = Phaser.Utils.Array.GetRandom(kinds);
     const def = SWIMMERS[kind];
-    const y = SURFACE_Y - def.lift + (def.dive ? this.overheadDrop() : 0);
-    if (this.textures.exists(def.key)) {
+    // (a floating thing painted half under the water goes over the water strip)
+    const painted = !!def.fallback && this.textures.exists(def.key);
+    const { key, lift } = painted || !def.fallback ? def : def.fallback;
+    const y = SURFACE_Y - lift + (def.dive ? this.overheadDrop() : 0);
+    if (this.textures.exists(key)) {
       if (kind === 'footbridge') {
+        const pile = ['footbridge-post', 'wood-post', 'umbrella-pole'].find((k) => this.textures.exists(k))!;
         for (const dx of [-72, 72]) {
-          const post = this.add.image(x + dx, GAME_HEIGHT, this.textures.exists('wood-post') ? 'wood-post' : 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(7, GAME_HEIGHT - y).setDepth(1.95);
+          const post = this.add.image(x + dx, GAME_HEIGHT, pile).setOrigin(0.5, 1).setDisplaySize(7, GAME_HEIGHT - y).setDepth(1.95);
           this.addDecor(post);
+          // a ring where the post goes into the water
+          if (this.textures.exists('post-ripple')) this.addDecor(this.art(this.add.image(x + dx, SURFACE_Y, 'post-ripple')).setDepth(2.62));
         }
+        // the shade under the deck
+        if (this.textures.exists('footbridge-gap')) this.addDecor(this.art(this.add.image(x, y + 6, 'footbridge-gap')).setOrigin(0.5, 0).setDepth(1.94));
       }
-      this.addObstacle(x, y, def.key, def.dive);
+      this.addObstacle(x, y, key, def.dive);
       const o = this.obstacles.getLast(true) as Img | null;
-      // floating things sit low in the water, behind its surface
+      // floating things sit low in the water, behind its surface (or over it, painted half under)
       if (o) {
-        o.setDepth(1.95);
+        o.setDepth(painted ? 2.65 : 1.95);
         if (!def.dive) {
           // landing on top of it is fine (see hits)
           o.setData('float', true);
@@ -2826,6 +2931,7 @@ export class GameScene extends Phaser.Scene {
   /** Sizes the physics box and sprite to the chosen pet and starts its run animation. */
   private applyPet(): void {
     this.look = this.petLook();
+    this.extra = extraLookFor(this, this.choice, this.look);
     const scale = SIZE_SCALE[this.choice.size];
     this.petW = Math.round(PET.width * scale);
     this.petH = Math.round(PET.height * scale);
@@ -2846,11 +2952,22 @@ export class GameScene extends Phaser.Scene {
    */
   private standStill(): void {
     const sp = this.petSprite;
+    this.standing = false;
+    this.tweens.killTweensOf(sp);
+    sp.setScale(this.look.scale * SIZE_SCALE[this.choice.size]);
+    // the painted standing pose, wagging its tail
+    if (this.extra.ready) {
+      if (this.state === 'ready') {
+        sp.play(this.extra.ready);
+      } else {
+        sp.anims.stop();
+        sp.setTexture(this.extra.ready, 0);
+      }
+      return;
+    }
     sp.anims.stop();
     sp.setTexture(this.look.idle, this.look.stand);
-    this.standing = false;
     if (this.state !== 'ready') return;
-    this.tweens.killTweensOf(sp);
     const sy = sp.scaleY;
     this.tweens.add({ targets: sp, scaleY: sy * 1.025, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
@@ -2863,8 +2980,8 @@ export class GameScene extends Phaser.Scene {
   /** Fetches the chosen pet's painted sprites if they aren't here yet, then switches to them. */
   private loadLook(): void {
     const side = queuePetArt(this, this.choice);
-    const back = this.level.horizon ? queueBackArt(this, this.choice) : false;
-    if (!side && !back) return;
+    const poses = queuePoses(this, this.choice, posesFor(this.level));
+    if (!side && !poses) return;
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (!this.sys.isActive() || !this.petSprite?.active) return;
       this.applyPet();
@@ -2888,6 +3005,7 @@ export class GameScene extends Phaser.Scene {
       else if (back && bk && base === back.anim) m.setTexture(bk.run, sp.frame.name);
       else if (base === this.look.jump) m.setTexture(k.jump);
       else if (base === this.look.slide) m.setTexture(k.slide);
+      else if (this.extra.marks.has(base)) m.setTexture(this.extra.marks.get(base)![i], sp.frame.name);
       else m.setTexture(k.run, sp.frame.name);
       // (the depth too: a run into the screen draws the pet over its own backdrop)
       m.setPosition(sp.x, sp.y)
@@ -3113,7 +3231,17 @@ export class GameScene extends Phaser.Scene {
     flap('parrot-flap', ['parrot-0', 'parrot-1'], 10);
     flap('balloon-flap', ['balloon-0', 'balloon-1'], 2);
     flap('ufo-flap', ['ufo-0', 'ufo-1'], 5);
+    // the painted splash (once) and dive bubbles (a loop)
+    for (const [key, rate, repeat] of [['splash-burst', 12, 0], ['bubbles', 8, -1]] as const) {
+      if (this.anims.exists(key) || !this.textures.exists(key) || this.textures.get(key).frameTotal < 3) continue;
+      this.anims.create({ key, frames: this.anims.generateFrameNumbers(key), frameRate: rate, repeat });
+    }
   }
+}
+
+/** The pet's extra poses a level uses: from behind on the runs into the screen, swimming and diving in the water. */
+function posesFor(l: LevelDef): Pose[] {
+  return [...(l.horizon ? BACK_POSES : []), 'ready', 'catch', ...(l.swim ? (['swim', 'dive'] as Pose[]) : [])];
 }
 
 /** The painted pictures a level needs (each fetched only once): sky, scenery, the pet, props and critters. */
@@ -3123,11 +3251,14 @@ function queueLevel(scene: Phaser.Scene, l: LevelDef, pet: PetChoice): void {
   for (const layer of t.layers) if (layer.src && !scene.textures.exists(layer.key)) scene.load.image(layer.key, layer.src);
   // the pet's painted sprites, if it has them (and from behind, for the runs into the screen)
   queuePetArt(scene, pet);
-  if (l.horizon) queueBackArt(scene, pet);
+  queuePoses(scene, pet, posesFor(l));
   // the painted props and critters this level uses (anything without a file is painted in code)
   // (the tunnels have stones in them; the runs into the screen and the water have their own things)
   const kinds = [...(Object.keys(l.obstacles) as ObstacleKind[]), ...(l.dig ? (['rock'] as ObstacleKind[]) : []), ...(l.horizon?.obstacles ?? [])];
-  const swimKeys = (l.swim?.obstacles ?? []).map((k) => SWIMMERS[k].key).concat(l.swim ? ['water', 'water-cap'] : [], l.swim?.obstacles.includes('footbridge') ? ['wood-post'] : []);
+  const swimKeys = (l.swim?.obstacles ?? []).flatMap((k) => [SWIMMERS[k].key, SWIMMERS[k].fallback?.key ?? SWIMMERS[k].key]).concat(
+    l.swim ? ['water', 'water-cap', 'water-cap-blend', 'water-far', 'water-far-cap', 'splash-burst', 'bubbles'] : [],
+    l.swim?.obstacles.includes('footbridge') ? ['wood-post', 'footbridge-post', 'footbridge-gap', 'post-ripple'] : [],
+  );
   const extras = [
     ...(l.horizon ? ['hz-bush', 'hz-flowers', 'hz-tree', 'hz-sunflower', 'hz-post'] : []),
     ...(l.theme.weather === 'fireflies' ? ['firefly'] : []),

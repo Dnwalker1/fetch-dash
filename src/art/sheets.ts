@@ -73,8 +73,12 @@ export interface PaintedSheet {
    * hit box and look like it touches things that don't count as a bump.
    */
   originX: number;
-  /** painted from behind too, for the runs into the screen: back-run, back-jump, back-lean-left and back-lean-right.webp */
-  back?: boolean;
+  /**
+   * painted in the extra poses too: from behind for the runs into the screen
+   * (back-run, back-jump, back-lean-left, back-lean-right), standing (ready),
+   * catching the ball (catch), swimming (swim, dive), and its card picture (card)
+   */
+  poses?: boolean;
 }
 
 export const SHEETS: PaintedSheet[] = [
@@ -91,7 +95,7 @@ export const SHEETS: PaintedSheet[] = [
     res: 2,
     fit: 1.15,
     originX: 0.66,
-    back: true,
+    poses: true,
   },
 ];
 

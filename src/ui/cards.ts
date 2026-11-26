@@ -1,6 +1,7 @@
 import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
+import { cardArtUrl } from '../art/petLook';
 import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
@@ -154,6 +155,16 @@ export function refreshPetFrames(host: CardHost): void {
 
 /** Cycles the pet's run frames in an <img>, like a tiny flipbook. */
 function startRunner(r: HTMLElement, host: CardHost): void {
+  // a painted card picture that doesn't load gives way to the running pet
+  r.querySelectorAll<HTMLImageElement>('img.card-art').forEach((img) => {
+    img.onerror = () => {
+      img.onerror = null;
+      const t = document.createElement('template');
+      t.innerHTML = img.dataset.fallback ?? '';
+      (img.closest('.card-pic') ?? img).replaceWith(t.content);
+      startRunner(r, host);
+    };
+  });
   const imgs = Array.from(r.querySelectorAll<HTMLImageElement>('.runner img, img.flip'));
   if (!imgs.length) return;
   const frames = host.petFrames(host.choice());
@@ -251,8 +262,15 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   // The example portrait is Chewy (with the sloth). For any other pet, the
   // photo box shows that pet running instead, so it never looks like the
   // wrong breed.
+  // (its painted card picture, or the running pet if it has none)
   const chewy = c.species === 'dog' && !breed && (!look || look.id === 'chewy');
-  const example = chewy ? `<img src="./hero-example.webp" alt="" /><span class="tag">Example</span>` : '<img class="flip pet" alt="" />';
+  const card = chewy ? undefined : cardArtUrl(c);
+  const flip = '<img class="flip pet" alt="" />';
+  const example = chewy
+    ? `<img src="./hero-example.webp" alt="" /><span class="tag">Example</span>`
+    : card
+      ? `<img class="pet card-art" src="${card}" alt="" data-fallback="${esc(flip)}" />`
+      : flip;
   const photoBox = allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
          ${hasPhoto ? `<img src="${photoUrl}" alt="" />` : example}
@@ -630,10 +648,12 @@ function portraitBlock(host: CardHost, hero: Hero | null, ribbon?: string): stri
       ${hero.source === 'demo' ? '<span class="tag">Preview art</span>' : ''}
     </div>`;
   }
-  // No portrait yet: show the in-game pet big on a sunburst instead
+  // No portrait yet: show the pet's painted card picture (or the in-game pet) big on a sunburst instead
+  const runner = '<div class="runner big"><img alt="" /></div>';
+  const card = cardArtUrl(host.choice());
   return `<div class="portrait empty">
       <div class="burst"></div>
-      <div class="runner big"><img alt="" /></div>
+      ${card ? `<div class="card-pic"><img class="card-art" src="${card}" alt="" data-fallback="${esc(runner)}" /></div>` : runner}
       <div class="plate">${esc(displayName(hero, host.choice().species).toUpperCase())}</div>
       ${ribbon ? `<div class="ribbon">${ribbon}</div>` : ''}
     </div>`;

@@ -22,7 +22,15 @@ const PROPS = [
   'water', 'water-cap', 'lily', 'footbridge',
   'hz-bush', 'hz-flowers', 'hz-tree', 'hz-sunflower', 'hz-post', 'firefly',
   'moon-rock', 'crater', 'moon-flag', 'space-arch', 'space-pole', 'moon-ball', 'helmet',
+  // playtest fixes (Elon, 26 November): the lake's far side, the dock, floating things, splashes
+  'water-far', 'water-far-cap', 'water-cap-blend', 'footbridge-post', 'footbridge-gap', 'post-ripple',
+  'log-float', 'crate-float', 'ripple-ring', 'splash-burst', 'bubbles',
 ];
+/** Props painted as a strip of frames (2x frame size), loaded as spritesheets. */
+const STRIPS: Record<string, { frameWidth: number; frameHeight: number }> = {
+  'splash-burst': { frameWidth: 128, frameHeight: 96 },
+  bubbles: { frameWidth: 64, frameHeight: 96 },
+};
 /** Two-frame critters: -0 is wings up (or the arm up), -1 is down. */
 const FLAPPERS = ['balloon', 'bird', 'butterfly', 'cardinal', 'crow', 'duck', 'gull', 'hawk', 'owl', 'parrot', 'person', 'pigeon', 'ufo'];
 const CRITTERS = [
@@ -64,7 +72,10 @@ export function queueArt(scene: Phaser.Scene, keys: Iterable<string>): void {
   scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
   scene.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
   for (const key of new Set(keys)) {
-    if (artFromFile(key) && !scene.textures.exists(key)) scene.load.image(key, `art/${FILES.get(key)}/${key}.webp`);
+    if (!artFromFile(key) || scene.textures.exists(key)) continue;
+    const url = `art/${FILES.get(key)}/${key}.webp`;
+    if (STRIPS[key]) scene.load.spritesheet(key, url, STRIPS[key]);
+    else scene.load.image(key, url);
   }
 }
 
