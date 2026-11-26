@@ -16,7 +16,7 @@ import { WATER_CAP_W, WATER_SURFACE, paintHorizonArt, paintMoonArt, paintNightLi
 import { HorizonRun } from './horizon';
 import * as sfx from '../audio/sfx';
 import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice } from '../art/pets';
-import { petFrameUrls, petLookFor, queuePetArt, type PetLook } from '../art/petLook';
+import { backLookFor, petFrameUrls, petLookFor, queueBackArt, queuePetArt, type BackLook, type PetLook } from '../art/petLook';
 import { BRAKE, CLIMB, CLIMB_TALL, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN, SPECIES, SWIM } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress, type SwimObstacle } from '../levels';
 import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, openTitle, refreshPetFrames, type CardHost } from '../ui/cards';
@@ -24,7 +24,8 @@ import { loadHero } from '../hero/store';
 import { addDebugOverlay } from '../ui/debug';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 
-type State = 'ready' | 'playing' | 'over';
+/** 'finish': the ball is caught and the pet trots to a stop before the end card. */
+type State = 'ready' | 'playing' | 'finish' | 'over';
 type Rect = Phaser.GameObjects.Rectangle;
 type Img = Phaser.GameObjects.Image;
 type Body = Phaser.Physics.Arcade.Body;
@@ -56,8 +57,16 @@ interface Water {
   to: number;
   strip: Phaser.GameObjects.TileSprite;
   ends: Img[];
+  /** the lake reaching back behind the pet, to the far shore */
+  back: Phaser.GameObjects.TileSprite;
+  backEnds: Img[];
   spawned: boolean;
 }
+
+/** How far back (px above the trail line) the lake reaches behind the swimming pet. */
+const BACK_WATER_H = 40;
+/** The shore pieces fade into the water strip over this many game px, so no seam shows where they meet. */
+const CAP_FADE = 18;
 
 /** A neighbor on the sidewalk holding out a treat: stop next to them to get it. */
 interface Greet {
@@ -94,7 +103,13 @@ const DEN_SCALE = 1.1;
 /** How much the painted scenery fades toward the trail, so things on the trail stand out. */
 const TRAIL_HAZE = 0.28;
 /** A jump pressed this soon before landing happens on landing. */
-const JUMP_BUFFER_MS = 150;
+const JUMP_BUFFER_MS = 200;
+/** After a jump comes down, this long (s) to react before the next thing on the trail. */
+const LAND_REACT_S = 0.45;
+/** At the finish the pet slows from a run to a stop over this long (s). */
+const FINISH_STOP_S = 0.8;
+/** No distraction for this long (ms) after a run into the screen or a tunnel ends. */
+const CALM_AFTER_MS = 2500;
 /** A jump still works this soon after running off the top of a hill. */
 const COYOTE_MS = 110;
 
@@ -244,6 +259,8 @@ export class GameScene extends Phaser.Scene {
   private petSprite!: Phaser.GameObjects.Sprite;
   private petMarks: Phaser.GameObjects.Sprite[] = [];
   private look!: PetLook;
+  /** the pet from behind, while it runs into the screen (if it's painted that way) */
+  private backLook?: BackLook;
   private petDim = false;
   private petShadow!: Img;
   private choice!: PetChoice;
@@ -283,7 +300,13 @@ export class GameScene extends Phaser.Scene {
   private best = 0;
   private nextSpawnIn = 0;
   private ballSpawned = false;
-
+  private ball?: Img;
+  private finishAt = 0;
+  /** no distractions before this time (just back from a run into the screen or a tunnel) */
+  private calmUntil = 0;
+  /** where the last obstacle on the trail ends (trail px), so the next one isn't where a jump comes down */
+  private lastObstacleEnd = -Infinity;
+  private loading?: { ui: Phaser.GameObjects.Container; onProgress: (p: number) => void; slow: Phaser.Time.TimerEvent };
   private sliding = false;
   private slideLeftPx = 0;
 
@@ -354,25 +377,60 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     const data = this.scene.settings.data as { level?: number } | undefined;
     const l = levelById(data?.level ?? loadProgress().current);
+    queueLevel(this, l, loadPet());
+    // A sign while the pictures come, so a slow connection doesn't look like
+    // a blank screen. (A file that doesn't come gives up after a while, see
+    // loader.timeout in main.ts, and the level is drawn without it.)
+    if (this.load.list.size > 0) this.showLoading(l);
+  }
+
+  /** The level's name and a progress bar over its sky colors, while its pictures load. */
+  private showLoading(l: LevelDef): void {
+    this.cameras.main.setZoom(RENDER_SCALE).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
     const t = l.theme;
-    if (t.skyImage && !this.textures.exists(`sky-${l.art}`)) this.load.image(`sky-${l.art}`, t.skyImage);
-    for (const layer of t.layers) if (layer.src && !this.textures.exists(layer.key)) this.load.image(layer.key, layer.src);
-    // the pet's painted sprites, if it has them
-    queuePetArt(this, loadPet());
-    // the painted props and critters this level uses (anything without a file is painted in code)
-    // (the tunnels have stones in them; the runs into the screen and the water have their own things)
-    const kinds = [...(Object.keys(l.obstacles) as ObstacleKind[]), ...(l.dig ? (['rock'] as ObstacleKind[]) : []), ...(l.horizon?.obstacles ?? [])];
-    const swimKeys = (l.swim?.obstacles ?? []).map((k) => SWIMMERS[k].key).concat(l.swim ? ['water', 'water-cap'] : [], l.swim?.obstacles.includes('footbridge') ? ['wood-post'] : []);
-    const extras = [
-      ...(l.horizon ? ['hz-bush', 'hz-flowers', 'hz-tree', 'hz-sunflower', 'hz-post'] : []),
-      ...(l.theme.weather === 'fireflies' ? ['firefly'] : []),
-      ...(l.gravity ? ['helmet'] : []),
-      ...(l.ball ? [l.ball] : []),
-    ];
-    queueArt(this, [...propKeys(kinds), ...swimKeys, ...extras, ...critterKeys(l)]);
+    const dark = luma(t.skyTop) < 120;
+    const color = dark ? '#fff8e8' : '#1d2b1f';
+    const font = { fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color, resolution: RENDER_SCALE };
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(t.skyTop, t.skyTop, t.skyBottom, t.skyBottom, 1);
+    bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    bg.fillStyle(t.grass, 1).fillRect(0, GROUND_Y, GAME_WIDTH, GAME_HEIGHT - GROUND_Y);
+    bg.fillStyle(t.dirt, 1).fillRect(0, GROUND_Y, GAME_WIDTH, 14);
+    const title = this.add.text(GAME_WIDTH / 2, 190, `Level ${l.id}  \u00b7  ${l.name}`, { ...font, fontSize: '34px' }).setOrigin(0.5);
+    const sub = this.add.text(GAME_WIDTH / 2, 240, 'Getting the trail ready\u2026', { ...font, fontSize: '20px', fontStyle: 'normal' }).setOrigin(0.5);
+    const W = 320;
+    const x0 = GAME_WIDTH / 2 - W / 2;
+    const track = this.add.rectangle(x0, 290, W, 14, 0xffffff, 0.75).setOrigin(0, 0.5);
+    const bar = this.add.rectangle(x0, 290, 0, 14, 0x3f7d3a).setOrigin(0, 0.5);
+    const paw = this.add.text(x0, 290, '\u{1F43E}', { fontSize: '22px', resolution: RENDER_SCALE }).setOrigin(0.5);
+    const onProgress = (p: number) => {
+      bar.width = W * p;
+      paw.x = x0 + W * p;
+    };
+    this.load.on(Phaser.Loader.Events.PROGRESS, onProgress);
+    const slow = this.time.delayedCall(4000, () => sub.setText('Still loading\u2026 the connection is slow'));
+    this.loading = { ui: this.add.container(0, 0, [bg, title, sub, track, bar, paw]).setDepth(100), onProgress, slow };
+  }
+
+  private hideLoading(): void {
+    const l = this.loading;
+    if (!l) return;
+    this.loading = undefined;
+    this.load.off(Phaser.Loader.Events.PROGRESS, l.onProgress);
+    l.slow.remove();
+    l.ui.destroy();
+  }
+
+  /** Fetches the next level's pictures in the background (on the end card), so it starts straight away. */
+  private prefetch(id: number): void {
+    const next = LEVELS.find((l) => l.id === id);
+    if (!next || !this.sys.isActive()) return;
+    queueLevel(this, next, this.choice);
+    if (this.load.list.size > 0) this.load.start();
   }
 
   create(data?: { level?: number; auto?: boolean }): void {
+    this.hideLoading();
     // The canvas is RENDER_SCALE times the world's size; zoom in so the world fills it
     this.cameras.main.setZoom(RENDER_SCALE).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
     this.popPool = [];
@@ -389,6 +447,10 @@ export class GameScene extends Phaser.Scene {
     this.bonus = 0;
     this.nextSpawnIn = 600;
     this.ballSpawned = false;
+    this.ball = undefined;
+    this.calmUntil = 0;
+    this.lastObstacleEnd = -Infinity;
+    this.backLook = undefined;
     this.sliding = false;
     this.distraction = undefined;
     this.returning = false;
@@ -476,7 +538,12 @@ export class GameScene extends Phaser.Scene {
     this.obstacles = this.physics.add.group({ allowGravity: false, immovable: true });
     this.treats = this.physics.add.group({ allowGravity: false });
     this.decor = this.physics.add.group({ allowGravity: false });
-    this.physics.add.overlap(this.pet, this.obstacles, () => this.bump());
+    this.physics.add.overlap(
+      this.pet,
+      this.obstacles,
+      () => this.bump(),
+      (_p, o) => this.hits(o as Img),
+    );
     this.physics.add.overlap(this.pet, this.treats, (_p, t) => this.collectTreat(t as Img));
 
     // HUD
@@ -725,7 +792,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (this.time.now - this.startedAt < 300) return; // the tap that pressed Start
-    if (this.state === 'over') return;
+    if (this.state === 'over' || this.state === 'finish') return;
     if (!this.tutorialMove('tap')) return;
     if (this.horizon) {
       this.horizon.jump();
@@ -824,7 +891,7 @@ export class GameScene extends Phaser.Scene {
   /** "Tap to run" with the level name, plus a small Map button (opens the trail map). */
   private showReady(): void {
     this.centerText.setFontSize(30);
-    this.centerText.setText(`Level ${this.level.id}  ·  ${this.level.name}\n\nTap to run!`);
+    this.centerText.setText(`Level ${this.level.id}  ·  ${this.level.name}\n\n${this.say('Tap to run!', 'Press Space to run!')}`);
     if (this.mapBtn) return;
     const btn = this.add.container(GAME_WIDTH - 70, 70).setDepth(20);
     const bg = this.add
@@ -854,6 +921,11 @@ export class GameScene extends Phaser.Scene {
     this.mapBtn?.destroy();
     this.mapBtn = undefined;
     this.pauseBtn?.setVisible(true);
+    // off the spot and into a run
+    this.tweens.killTweensOf(this.petSprite);
+    this.petSprite.setScale(this.look.scale * SIZE_SCALE[this.choice.size]);
+    this.standing = false;
+    this.petSprite.play(this.look.anim);
     if (this.level.id === 1 && !tutorialDone()) {
       // First run: the game stops at a fence, a branch and a squirrel to show each move
       this.tut = { step: 0, since: 0 };
@@ -865,7 +937,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private endRun(reason: string, won = false): void {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' && this.state !== 'finish') return;
+    // caught the ball and already trotted to a stop (the cheer was at the catch)
+    const finished = this.state === 'finish';
     this.state = 'over';
     this.braking = false;
     this.holdTimer?.remove();
@@ -886,16 +960,15 @@ export class GameScene extends Phaser.Scene {
     if (!won) {
       this.petDim = true;
       this.petSprite.setTint(dim(this.look.tint ?? 0xffffff));
+      this.dropToGround();
     }
     if (won) {
-      sfx.cheer();
-      this.petSound(3);
-      this.confetti();
+      if (!finished) this.cheer();
     } else if (reason.startsWith('Ran off')) {
       this.petSound(2);
     } else {
       sfx.bonk();
-      this.cameras.main.shake(250, 0.012);
+      this.shake(250, 8);
     }
 
     const score = this.score();
@@ -918,9 +991,11 @@ export class GameScene extends Phaser.Scene {
     }
     saveProgress(this.progress);
     this.updateHud();
+    // the next level's pictures, while the card is up
+    if (won) this.prefetch(id + 1);
 
     // Give the crash or the cheer a moment before the card slides in
-    this.time.delayedCall(won ? 1100 : 650, () => {
+    this.time.delayedCall(won ? (finished ? 450 : 1100) : 650, () => {
       openEnd(this.cardHost(), {
         level: id,
         won,
@@ -938,6 +1013,99 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** On a loss in mid-air the pet drops to the ground (or the ledge under it) instead of hanging there behind the card. */
+  private dropToGround(): void {
+    if (this.horizon) return;
+    const sp = this.petSprite;
+    sp.anims.stop();
+    sp.setTexture(this.look.idle, this.look.stand).setAngle(0);
+    const floor = this.onLedge?.top ?? this.shadowFloor();
+    const y = floor - this.pet.height / 2;
+    if (this.pet.y < y - 1) this.tweens.add({ targets: this.pet, y, duration: 260, ease: 'Quad.easeIn', onComplete: () => this.dust(5) });
+  }
+
+  private cheer(): void {
+    sfx.cheer();
+    this.petSound(3);
+    this.confetti();
+  }
+
+  /**
+   * Reached the ball: the pet grabs it on the run (or in the air and lands),
+   * slows to a stop with it, and stands there. Then the end card comes up.
+   */
+  private startFinish(): void {
+    this.state = 'finish';
+    this.finishAt = this.time.now;
+    this.braking = false;
+    this.holdTimer?.remove();
+    this.pauseBtn?.setVisible(false);
+    this.scheduleTimer?.remove();
+    this.distractionTimer?.remove();
+    this.distraction = undefined;
+    this.returning = false;
+    this.pendingMove = undefined;
+    this.alertText.setVisible(false);
+    this.swipeArrow.setVisible(false);
+    this.tweens.killTweensOf(this);
+    this.speedFactor = 1;
+    this.tweens.killTweensOf(this.petSprite);
+    this.petSprite.setAlpha(1);
+    this.stopSlide();
+    // the ball comes off the trail and into the pet's mouth
+    let ball = this.ball;
+    if (!ball?.active) ball = this.ball = this.art(this.add.image(0, 0, this.level.ball ?? 'ball'));
+    if (ball.body) {
+      this.decor.remove(ball);
+      this.physics.world.disable(ball);
+    }
+    ball.setScale(ball.scaleX * 0.85);
+    this.holdBall();
+    this.toast('Got it!', '#1f6f2a');
+    this.cheer();
+  }
+
+  /** Slowing down with the ball, then standing still: the run ends there. */
+  private updateFinish(dt: number): void {
+    this.brakeFactor = Math.max(0, this.brakeFactor - dt / FINISH_STOP_S);
+    const dx = this.speed * dt;
+    this.distancePx += dx;
+    this.scrollWorld(dx);
+    this.updatePetPosition();
+    this.holdBall();
+    this.updateHud();
+    if (this.brakeFactor <= 0 && this.grounded && this.time.now - this.finishAt > FINISH_STOP_S * 1000 + 250) this.endRun('You caught the ball!', true);
+  }
+
+  /** The caught ball sits in the pet's mouth, at the front of its head. */
+  private holdBall(): void {
+    const b = this.ball;
+    if (!b?.active) return;
+    const sp = this.petSprite;
+    const w = sp.displayWidth;
+    const left = sp.x - w * sp.originX;
+    b.setPosition(left + w * 0.92, sp.y - sp.displayHeight * (this.grounded ? 0.42 : 0.5)).setDepth(sp.depth + 0.1);
+  }
+
+  /** Moves everything on the trail along by dx (the scenery at its own pace). */
+  private scrollWorld(dx: number): void {
+    this.moveLedges(dx);
+    this.moveDens(dx);
+    // Scroll the background layers; farther layers move slower. A layer's
+    // factor is its share of the trail's speed on screen; tilePosition counts
+    // texture pixels, so it's divided by the tile scale.
+    for (const l of this.layers) l.tile.tilePositionX += (dx * l.factor) / l.tile.tileScaleX;
+    // Keep moving things in step with the current speed
+    for (const g of [this.obstacles, this.treats, this.decor]) {
+      g.children.each((c) => {
+        const r = c as Img;
+        (r.body as Body).setVelocityX(-this.speed);
+        if (r.x < -140) r.destroy();
+        return true;
+      });
+    }
+  }
+
   // ---------- Main loop ----------
 
   update(_time: number, deltaMs: number): void {
@@ -953,6 +1121,10 @@ export class GameScene extends Phaser.Scene {
     this.syncMarks();
     this.followPet();
     this.drawGround();
+    if (this.state === 'finish' && !this.paused) {
+      this.updateFinish(deltaMs / 1000);
+      return;
+    }
     if (this.state !== 'playing' || this.paused) return;
     const dt = deltaMs / 1000;
 
@@ -967,32 +1139,16 @@ export class GameScene extends Phaser.Scene {
     if (!this.braking) this.baseSpeed = Math.min(sp.max, this.baseSpeed + sp.gainPerSecond * dt);
     const dx = this.speed * dt;
     this.distancePx += dx;
-    this.moveLedges(dx);
-    this.moveDens(dx);
     this.updateGreet(dx);
     this.updateDig(dx);
     this.updateWater(dt);
     this.updateHorizon(dt);
     if (this.tut) this.checkTutorial();
-
-    // Scroll the background layers; farther layers move slower. A layer's
-    // factor is its share of the trail's speed on screen; tilePosition counts
-    // texture pixels, so it's divided by the tile scale.
-    for (const l of this.layers) l.tile.tilePositionX += (dx * l.factor) / l.tile.tileScaleX;
-
-    // Keep moving things in step with the current speed
-    for (const g of [this.obstacles, this.treats, this.decor]) {
-      g.children.each((c) => {
-        const r = c as Img;
-        (r.body as Body).setVelocityX(-this.speed);
-        if (r.x < -140) r.destroy();
-        return true;
-      });
-    }
+    this.scrollWorld(dx);
 
     const remainingPx = this.level.goalMeters * SCORE.pixelsPerMeter - this.distancePx;
     if (remainingPx <= 0) {
-      this.endRun('You caught the ball!', true);
+      this.startFinish();
       return;
     }
     if (!this.ballSpawned && remainingPx <= GAME_WIDTH - PET.homeX) this.spawnBall(remainingPx);
@@ -1130,7 +1286,7 @@ export class GameScene extends Phaser.Scene {
     const air = Math.max(0, gy - (this.pet.y + this.pet.height / 2));
     const s = SIZE_SCALE[this.choice.size] * Math.max(0.35, 1 - air / 220);
     this.petShadow.setPosition(this.pet.x, gy + 2).setScale(s, s).setAlpha(Math.max(0.3, 1 - air / 260));
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' && this.state !== 'finish') return;
     const d = this.distraction;
     sp.setFlipX(d?.kind === 'chase' && d.active); // turned around, after the critter
     const onGround = this.grounded;
@@ -1138,11 +1294,12 @@ export class GameScene extends Phaser.Scene {
     const slope = (this.groundAt(this.pet.x + 12) - this.groundAt(this.pet.x - 12)) / 24;
     const lean = onGround && !this.onLedge ? Phaser.Math.RadToDeg(Math.atan(slope)) * (sp.flipX ? -1 : 1) : 0;
     sp.setAngle(d?.kind === 'gawk' && d.active ? -12 : lean); // looking up at the bird or den
-    // bobbing along in the water
-    if (this.swimming && onGround) sp.y += Math.sin(this.time.now / 170) * 1.6;
+    // bobbing along in the water, or under it on a dive
+    if (this.swimming && onGround) sp.y += this.sliding ? SWIM.diveSink : Math.sin(this.time.now / 170) * 1.6;
     if (onGround && !this.wasOnGround) this.dust(5); // landing puff
     this.wasOnGround = onGround;
-    const stopped = this.speed < BRAKE.standSpeed && !this.chasing && !this.returning;
+    // (at the finish, it stands once it has almost stopped)
+    const stopped = !this.chasing && !this.returning && (this.speed < BRAKE.standSpeed || (this.state === 'finish' && this.brakeFactor < 0.2));
     if (onGround && !this.distraction && !stopped) {
       this.dustTimer += this.game.loop.delta;
       if (this.dustTimer > 260) {
@@ -1159,11 +1316,11 @@ export class GameScene extends Phaser.Scene {
       sp.anims.stop();
       sp.setTexture(look.jump);
     } else if (stopped) {
-      // Standing still: hold the first frame of the run
+      // Standing still: hold the run's most standing-like frame
       if (!this.standing) {
         this.standing = true;
         sp.play(look.anim);
-        sp.anims.pause(sp.anims.currentAnim?.frames[0]);
+        sp.anims.pause(sp.anims.currentAnim?.frames[look.stand ?? 0]);
       }
     } else {
       if (this.standing) {
@@ -1242,6 +1399,14 @@ export class GameScene extends Phaser.Scene {
       this.nextSpawnIn = span + SPAWN.minGap * (this.baseSpeed / this.level.speed.start);
       return;
     }
+    // Never where a jump over the last one comes down: room to land, and a moment to react
+    const g = this.level.gravity;
+    const air = (2 * -PET.jumpVelocity * (g ? 1.2 * Math.sqrt(g) : 1)) / this.physics.world.gravity.y;
+    const wait = this.lastObstacleEnd + this.baseSpeed * (air + LAND_REACT_S) - (wx - 50);
+    if (wait > 0 && !this.tut) {
+      this.nextSpawnIn = wait;
+      return;
+    }
     const kind = this.pickObstacle();
     const d = OBSTACLES[kind].decor;
     if (d && 'tree' in d) {
@@ -1270,14 +1435,22 @@ export class GameScene extends Phaser.Scene {
     const gy = this.groundAt(x);
     const o = OBSTACLES[kind];
     const d = o.decor;
+    // Things to slide under hang lower over a smaller pet, so it still has to duck
+    const drop = o.slide ? this.overheadDrop() : 0;
+    const lift = o.lift - drop;
     if (d && 'tree' in d) {
       // A tree beside the trail with its low limb reaching over the path
       const [ox, oy] = TREE_ORIGIN[d.tree] ?? [0.29, 0.65];
-      if (this.textures.exists(d.tree)) this.addDecor(this.art(this.add.image(x, gy - o.lift, d.tree).setOrigin(ox, oy).setDepth(0.95)));
+      if (this.textures.exists(d.tree)) {
+        const tree = this.art(this.add.image(x, gy - lift, d.tree).setOrigin(ox, oy).setDepth(0.95));
+        // (lowered, its trunk is cut off at the ground)
+        if (drop > 0) tree.setCrop(0, 0, tree.width, tree.height - drop / tree.scaleY);
+        this.addDecor(tree);
+      }
     } else if (d) {
       // An awning, a stone arch, a clothesline or a banner held up on poles
       for (const dx of d.poles) {
-        const pole = this.add.image(x + dx, gy, d.pole ?? 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(d.width, d.height).setDepth(0.95);
+        const pole = this.add.image(x + dx, gy, d.pole ?? 'umbrella-pole').setOrigin(0.5, 1).setDisplaySize(d.width, d.height - drop).setDepth(0.95);
         if (d.tint !== 0xffffff) pole.setTint(d.tint);
         this.addDecor(pole);
       }
@@ -1287,9 +1460,15 @@ export class GameScene extends Phaser.Scene {
       const w = artBox(this, kind).w / resOf(this, kind);
       this.addDecor(this.add.image(x, gy, 'shadow').setDisplaySize(w * 1.15, 9).setDepth(0.97));
     }
-    this.addObstacle(x, gy - o.lift, kind);
-    if (o.slide) this.hint(`slide-${kind}`, 'Swipe down to slide under!');
-    else this.hint(`jump-${kind}`, kind === 'puddle' ? 'Tap to jump the puddle!' : kind === 'creek' ? 'Jump the creek!' : kind === 'pond' ? 'Jump the pond!' : 'Tap to jump!');
+    this.addObstacle(x, gy - lift, kind);
+    this.lastObstacleEnd = Math.max(this.lastObstacleEnd, this.distancePx + x + artBox(this, kind).w / resOf(this, kind) / 2);
+    if (o.slide) this.hint(`slide-${kind}`, this.say('Swipe down to slide under, or jump over!', 'Press \u2193 to slide under, or jump over!'));
+    else this.hint(`jump-${kind}`, kind === 'puddle' ? this.say('Tap to jump the puddle!', 'Press Space to jump the puddle!') : kind === 'creek' ? 'Jump the creek!' : kind === 'pond' ? 'Jump the pond!' : this.say('Tap to jump!', 'Press Space to jump!'));
+  }
+
+  /** How much lower overhead things hang for a pet shorter than the usual (a small one). */
+  private overheadDrop(): number {
+    return Math.max(0, (PET.height - this.petH) * 0.8);
   }
 
   private addDecor(img: Img): void {
@@ -1302,6 +1481,8 @@ export class GameScene extends Phaser.Scene {
     const r = this.art(this.add.image(x, y, key).setDepth(1));
     this.obstacles.add(r);
     const k: ObstacleDef | undefined = (OBSTACLES as Record<string, ObstacleDef | undefined>)[key] ?? (slide !== undefined ? { lift: 0, slide } : undefined);
+    // a full jump clears things to slide under (see hits)
+    r.setData('over', !!k?.slide);
     const spin: Phaser.GameObjects.Image[] = [r];
     if (k?.flat) {
       // lies flat, so it tilts with the hill under it
@@ -1358,7 +1539,8 @@ export class GameScene extends Phaser.Scene {
   private spawnBall(remainingPx: number): void {
     this.ballSpawned = true;
     const x = PET.homeX + this.petW / 2 + remainingPx;
-    this.addDecor(this.art(this.add.image(x, this.groundAt(x) - 14, this.level.ball ?? 'ball').setDepth(1)));
+    this.ball = this.art(this.add.image(x, this.groundAt(x) - 14, this.level.ball ?? 'ball').setDepth(1));
+    this.addDecor(this.ball);
     this.toast('There’s the ball!', '#1f6f2a');
   }
 
@@ -1385,6 +1567,11 @@ export class GameScene extends Phaser.Scene {
     if (!this.sliding) {
       this.sliding = true;
       sfx.slide();
+      // a dive: a splash going down and bubbles coming up
+      if (this.swimming && this.grounded) {
+        this.splash(10);
+        this.bubbles(7);
+      }
       this.setPetHeight(Math.round(PET.slideHeight * SIZE_SCALE[this.choice.size]));
     }
     this.slideLeftPx = PET.slideDistance;
@@ -1428,7 +1615,7 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.scheduleTimer = this.time.delayedCall(delayMs, () => {
       if (this.state !== 'playing') return;
-      if (!this.distraction && (this.obstacleAhead() || this.greet || this.ledges.length || this.braking || this.digSpot || this.tunnel || this.waters.length || this.horizon || this.horizonAt < Infinity)) {
+      if (!this.distraction && (this.time.now < this.calmUntil || this.obstacleAhead() || this.greet || this.ledges.length || this.braking || this.digSpot || this.tunnel || this.waters.length || this.horizon || this.horizonAt < Infinity)) {
         // Wait until the pet has cleared what's coming, so a distraction
         // never lands right on top of a fence or branch.
         this.scheduleDistraction(DISTRACTION.retryMs);
@@ -1480,9 +1667,9 @@ export class GameScene extends Phaser.Scene {
 
     this.warn('chase', '!', DISTRACTION.chaseWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
-      this.toast(`${c.label}! Swipe up!`, '#d6402b');
+      this.toast(`${c.label}! ${this.say('Swipe up!', 'Press \u2191!')}`, '#d6402b');
       this.petSound(2);
-      this.hint('chase', 'Your pet turned around! Swipe up to call it back.');
+      this.hint('chase', this.say('Your pet turned around! Swipe up to call it back.', 'Your pet turned around! Press \u2191 to call it back.'));
     });
   }
 
@@ -1544,7 +1731,7 @@ export class GameScene extends Phaser.Scene {
     this.warn('gawk', '?', DISTRACTION.gawkWarnMs, () => {
       this.setSpeedFactor(DISTRACTION.gawkSpeedFactor, 500);
       const msg = flyer?.msg ?? { den: 'Something in that hole! Swipe up!', butterfly: 'Butterfly! Swipe up!', person: 'Someone waving! Swipe up!' }[what as string] ?? 'Look! Swipe up!';
-      this.toast(msg, '#d6402b');
+      this.toast(this.say(msg, msg.replace('Swipe up!', 'Press \u2191!')), '#d6402b');
       this.petSound(1);
       // Eventually the pet loses interest by itself, but you lose the time
       this.distractionTimer = this.time.delayedCall(DISTRACTION.gawkMaxMs, () => this.clearDistraction());
@@ -1802,19 +1989,34 @@ export class GameScene extends Phaser.Scene {
     this.flats.push({ from: from - CLIMB.flatRamp, to: to + CLIMB.flatRamp });
     const top = SURFACE_Y - WATER_SURFACE;
     const inset = WATER_CAP_W * 1.1;
+    const cap = this.softCap();
+    // (the strip runs a little under each shore piece, where it fades out)
     const strip = this.add
-      .tileSprite(0, top, len - inset * 2, GAME_HEIGHT - top, 'water')
+      .tileSprite(0, top, len - inset * 2 + CAP_FADE * 2, GAME_HEIGHT - top, 'water')
       .setOrigin(0, 0)
       .setTileScale(artScale(this, 'water'))
       .setDepth(2.6);
-    const ends = [0, 1].map((i) => this.art(this.add.image(0, top, 'water-cap').setOrigin(i ? 0 : 1, 0).setFlipX(i === 1).setDepth(2.6)));
+    const ends = [0, 1].map((i) => this.art(this.add.image(0, top, cap).setOrigin(i ? 0 : 1, 0).setFlipX(i === 1).setDepth(2.6)));
     // stretch the ends down to the bottom of the screen
     ends.forEach((e) => e.setScale(e.scaleX, ((GAME_HEIGHT - top) / e.height) * 1.0001));
+    // The lake behind the pet, so it swims out in the water instead of along
+    // the shore. Drawn squashed (it's farther away), behind the pet and the
+    // things floating in it; its shore pieces turned over, so the far bank
+    // curves away from the camera.
+    const backTop = GROUND_Y - BACK_WATER_H;
+    // (down past the front water's wavy top edge, so nothing behind shows between the waves)
+    const backH = top - backTop + 12;
+    const back = this.add
+      .tileSprite(0, backTop, strip.width, backH, 'water')
+      .setOrigin(0, 0)
+      .setTileScale(artScale(this, 'water'), artScale(this, 'water') * 0.5)
+      .setDepth(0.93);
+    const backEnds = [0, 1].map((i) => this.art(this.add.image(0, backTop, cap).setOrigin(i ? 0 : 1, 0).setFlip(i === 1, true).setDepth(0.93)));
+    backEnds.forEach((e) => e.setScale(e.scaleX, (backH / e.height) * 1.0001));
     if (this.level.theme.storm) {
-      strip.setTint(0xc8bca0);
-      ends.forEach((e) => e.setTint(0xc8bca0));
+      for (const o of [strip, back, ...ends, ...backEnds]) o.setTint(0xc8bca0);
     }
-    this.waters.push({ from, to, strip, ends, spawned: false });
+    this.waters.push({ from, to, strip, ends, back, backEnds, spawned: false });
     this.placeWater();
     const sw = this.level.swim!;
     this.nextSwimAt = to + Phaser.Math.Between(sw.gapM[0], sw.gapM[1]) * SCORE.pixelsPerMeter - GAME_WIDTH;
@@ -1827,12 +2029,43 @@ export class GameScene extends Phaser.Scene {
     const drift = (this.time.now / 1000) * 14;
     for (const w of this.waters) {
       const x0 = w.from + inset - this.distancePx;
-      w.strip.x = x0;
-      w.strip.tilePositionX = drift / w.strip.tileScaleX;
-      // the curved ends meet the strip at each bank
-      w.ends[0].x = x0 + 1;
-      w.ends[1].x = x0 + w.strip.width - 1;
+      for (const strip of [w.strip, w.back]) {
+        strip.x = x0 - CAP_FADE;
+        strip.tilePositionX = (drift * (strip === w.back ? 0.6 : 1)) / strip.tileScaleX;
+      }
+      // the curved ends meet the strip at each bank (and fade into it)
+      const x1 = x0 + w.strip.width - CAP_FADE * 2;
+      w.ends[0].x = x0;
+      w.ends[1].x = x1;
+      w.backEnds[0].x = x0;
+      w.backEnds[1].x = x1;
     }
+  }
+
+  /**
+   * The shore piece with its water side fading out, so it blends into the
+   * water strip under it instead of meeting it in a straight seam.
+   */
+  private softCap(): string {
+    const key = 'water-cap-soft';
+    if (this.textures.exists(key)) return key;
+    const src = this.textures.get('water-cap').getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+    const res = resOf(this, 'water-cap');
+    const cv = document.createElement('canvas');
+    cv.width = src.width;
+    cv.height = src.height;
+    const g = cv.getContext('2d')!;
+    g.drawImage(src, 0, 0);
+    const fade = CAP_FADE * res;
+    const grad = g.createLinearGradient(cv.width - fade, 0, cv.width, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,1)');
+    g.globalCompositeOperation = 'destination-out';
+    g.fillStyle = grad;
+    g.fillRect(cv.width - fade, 0, fade, cv.height);
+    const tex = this.textures.addCanvas(key, cv);
+    if (tex) (tex.customData as { res?: number }).res = res;
+    return key;
   }
 
   private updateWater(dt: number): void {
@@ -1841,7 +2074,8 @@ export class GameScene extends Phaser.Scene {
     this.waters = this.waters.filter((w) => {
       if (w.to - this.distancePx > -200) return true;
       w.strip.destroy();
-      w.ends.forEach((e) => e.destroy());
+      w.back.destroy();
+      [...w.ends, ...w.backEnds].forEach((e) => e.destroy());
       return false;
     });
     // Swimming once the pet is past the top of the bank
@@ -1852,8 +2086,7 @@ export class GameScene extends Phaser.Scene {
       if (inWater) {
         this.splash(14);
         sfx.slide();
-        const touch = this.sys.game.device.input.touch;
-        this.hint('swim', touch ? 'Swimming! Tap to hop over, swipe down to dive under' : 'Swimming! Tap to hop over, \u2193 to dive under');
+        this.hint('swim', this.say('Swimming! Tap to hop over, swipe down to dive under', 'Swimming! Space hops over, \u2193 dives under'));
       } else {
         this.splash(6);
       }
@@ -1862,8 +2095,11 @@ export class GameScene extends Phaser.Scene {
     const want = this.swimming ? SPECIES[this.choice.species].swimSpeed : 1;
     this.waterFactor += (want - this.waterFactor) * Math.min(1, dt * 3);
     if (Math.abs(want - this.waterFactor) < 0.002) this.waterFactor = want;
-    // a ripple now and then behind the paddling pet
-    if (this.swimming && this.grounded && Math.random() < dt * 6) this.splash(1);
+    // a ripple now and then behind the paddling pet, bubbles while it dives
+    if (this.swimming && this.grounded && Math.random() < dt * 6) {
+      if (this.sliding) this.bubbles(2);
+      else this.splash(1);
+    }
   }
 
   /** Drops of water kicked up around the pet. */
@@ -1884,12 +2120,29 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Bubbles rising from the diving pet to the surface. */
+  private bubbles(count: number): void {
+    for (let i = 0; i < count; i++) {
+      const b = this.add.circle(this.pet.x + Phaser.Math.Between(-20, 24), SURFACE_Y + Phaser.Math.Between(10, 34), Phaser.Math.FloatBetween(1.5, 3.5), 0xffffff, 0).setStrokeStyle(1.2, 0xffffff, 0.85).setDepth(2.65);
+      this.tweens.add({
+        targets: b,
+        y: SURFACE_Y - 2,
+        x: b.x - Phaser.Math.Between(20, 60),
+        alpha: 0,
+        delay: i * 60,
+        duration: Phaser.Math.Between(420, 700),
+        ease: 'Sine.easeOut',
+        onComplete: () => b.destroy(),
+      });
+    }
+  }
+
   /** Something in the water: a floating log, crate or lily pad to hop, or a footbridge to dive under. */
   private spawnInWater(x: number): void {
     const kinds = this.level.swim!.obstacles;
     const kind = Phaser.Utils.Array.GetRandom(kinds);
     const def = SWIMMERS[kind];
-    const y = SURFACE_Y - def.lift;
+    const y = SURFACE_Y - def.lift + (def.dive ? this.overheadDrop() : 0);
     if (this.textures.exists(def.key)) {
       if (kind === 'footbridge') {
         for (const dx of [-72, 72]) {
@@ -1902,10 +2155,14 @@ export class GameScene extends Phaser.Scene {
       // floating things sit low in the water, behind its surface
       if (o) {
         o.setDepth(1.95);
-        if (!def.dive) this.tweens.add({ targets: o, angle: { from: -3, to: 3 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        if (!def.dive) {
+          // landing on top of it is fine (see hits)
+          o.setData('float', true);
+          this.tweens.add({ targets: o, angle: { from: -3, to: 3 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        }
       }
       if (def.dive) this.hint('dive', this.sys.game.device.input.touch ? 'Swipe down to dive under the bridge!' : 'Press \u2193 to dive under the bridge!');
-      else this.hint('hop', 'Tap to hop over it!');
+      else this.hint('hop', this.say('Tap to hop over it!', 'Press Space to hop over it!'));
     }
     // treats bobbing on the water, in a line or over the thing in an arc
     const arc = !def.dive && Math.random() < 0.5;
@@ -1940,6 +2197,7 @@ export class GameScene extends Phaser.Scene {
     const cat = this.choice.species === 'cat';
     const tune = SPECIES[this.choice.species];
     this.stopSlide();
+    this.backLook = backLookFor(this, this.choice, this.look);
     this.horizon = new HorizonRun(
       {
         scene: this,
@@ -1949,6 +2207,7 @@ export class GameScene extends Phaser.Scene {
         petScale: this.look.scale * SIZE_SCALE[this.choice.size],
         jumpTexture: this.look.jump,
         runAnim: this.look.anim,
+        back: this.backLook,
         treatKey: cat ? 'fish' : 'bone',
         tune: { laneMs: tune.laneMs, jump: tune.horizonJump },
         onTreatSpawned: (n) => (this.treatsSpawned += n),
@@ -1987,8 +2246,10 @@ export class GameScene extends Phaser.Scene {
     this.nextHorizonAt = this.distancePx + Phaser.Math.Between(hz.gapM[0], hz.gapM[1]) * SCORE.pixelsPerMeter;
     this.nextSpawnIn = 500;
     this.cameras.main.flash(250, 255, 255, 255);
+    this.backLook = undefined;
     this.applyPet();
     this.updatePetSprite();
+    this.calmUntil = this.time.now + CALM_AFTER_MS;
     this.toast('Back on the trail!', this.darkSky ? '#fff8e8' : '#1d2b1f');
   }
 
@@ -2132,6 +2393,7 @@ export class GameScene extends Phaser.Scene {
       this.setHudDark(this.skyIsDark);
       cam.fadeIn(220, 40, 26, 14);
       this.dust(10);
+      this.calmUntil = this.time.now + CALM_AFTER_MS;
       this.toast('Back on the trail!', this.darkSky ? '#fff8e8' : '#1d2b1f');
     });
   }
@@ -2155,7 +2417,7 @@ export class GameScene extends Phaser.Scene {
       const key = paintRoots(this);
       const h = (this.textures.get(key).getSourceImage() as HTMLCanvasElement).height / resOf(this, key);
       this.addObstacle(x, TUNNEL_CEILING - 6 + h / 2, key);
-      this.hint('roots', 'Swipe down to slide under the roots!');
+      this.hint('roots', this.say('Swipe down to slide under the roots!', 'Press \u2193 to slide under the roots!'));
     }
     // a line of bones, low or in a little arc
     const arc = Math.random() < 0.5;
@@ -2385,6 +2647,52 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- Bumps, paws and pause ----------
 
+  /**
+   * Whether touching an obstacle is a bump. A full jump clears the things to
+   * slide under (the pet's feet above their lowest edge), and coming down on
+   * top of something floating in the water is fine. Once cleared, a thing
+   * stays cleared for that pass.
+   */
+  private hits(o: Img): boolean {
+    if (o.getData('safe')) return false;
+    const ob = o.body as Body;
+    const pb = this.petBody;
+    const over = o.getData('over') && !this.grounded && pb.bottom < ob.bottom - 2;
+    const onTop = o.getData('float') && pb.velocity.y >= 0 && this.prevBottom <= ob.top + 14;
+    if (over || onTop) {
+      o.setData('safe', true);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Shakes the view without showing past the edge of the world: zoomed in
+   * just enough while it shakes. `px` is the most it moves, in game px.
+   */
+  private shake(ms: number, px: number): void {
+    const cam = this.cameras.main;
+    const home = () => cam.setZoom(RENDER_SCALE).centerOn(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    cam.setZoom(RENDER_SCALE * (1 + (px + 1) / (GAME_HEIGHT / 2)));
+    const k = { t: 0 };
+    this.tweens.add({
+      targets: k,
+      t: 1,
+      duration: ms,
+      onUpdate: () => {
+        const m = px * (1 - k.t);
+        cam.centerOn(GAME_WIDTH / 2 + Phaser.Math.FloatBetween(-m, m), GAME_HEIGHT / 2 + Phaser.Math.FloatBetween(-m, m));
+      },
+      onComplete: home,
+      onStop: home,
+    });
+  }
+
+  /** The words for a phone (touch) or a computer (keys). */
+  private say(touch: string, keys: string): string {
+    return this.sys.game.device.input.touch ? touch : keys;
+  }
+
   /** Hit an obstacle: stumble while paws are left, otherwise the run ends. */
   private bump(): void {
     if (this.state !== 'playing' || this.paused || this.time.now < this.safeUntil) return;
@@ -2396,7 +2704,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.safeUntil = this.time.now + STUMBLE_SAFE_MS;
     sfx.bonk();
-    this.cameras.main.shake(150, 0.006);
+    this.shake(150, 4);
     this.tweens.add({ targets: this.petSprite, alpha: 0.3, duration: 120, yoyo: true, repeat: 5, onComplete: () => this.petSprite.setAlpha(1) });
     const lost = this.pawIcons[this.paws];
     if (lost) this.tweens.add({ targets: lost, scale: { from: 1.6, to: 1 }, duration: 300 });
@@ -2428,7 +2736,7 @@ export class GameScene extends Phaser.Scene {
     g.fillPath();
     g.strokePath();
     const label = this.add
-      .text(0, 32, this.sys.game.device.input.touch ? 'Swipe up' : 'Swipe up / \u2191', {
+      .text(0, 32, this.say('Swipe up', 'Press \u2191'), {
         fontFamily: 'Arial, sans-serif',
         fontSize: '15px',
         fontStyle: 'bold',
@@ -2524,11 +2832,27 @@ export class GameScene extends Phaser.Scene {
     this.setPetHeight(this.petH);
     this.petSprite.setOrigin(this.look.originX, 1).setScale(this.look.scale * scale).clearTint();
     if (this.look.tint !== undefined) this.petSprite.setTint(this.look.tint);
-    this.petSprite.play(this.look.anim);
+    if (this.state === 'playing') this.petSprite.play(this.look.anim);
+    else this.standStill();
     // one sprite per marking layer, kept in step with the pet (see syncMarks)
     this.petMarks.forEach((m) => m.destroy());
     this.petMarks = this.look.marks.map((k, i) => this.add.sprite(this.petSprite.x, this.petSprite.y, k.run, 0).setOrigin(this.look.originX, 1).setDepth(2.01 + i * 0.001));
     this.syncMarks();
+  }
+
+  /**
+   * Waiting at the start: the pet stands (no running in place while the
+   * trail stands still), breathing a little.
+   */
+  private standStill(): void {
+    const sp = this.petSprite;
+    sp.anims.stop();
+    sp.setTexture(this.look.idle, this.look.stand);
+    this.standing = false;
+    if (this.state !== 'ready') return;
+    this.tweens.killTweensOf(sp);
+    const sy = sp.scaleY;
+    this.tweens.add({ targets: sp, scaleY: sy * 1.025, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
   }
 
   /** How the pet is drawn now: its painted sheet once that's loaded, otherwise the code-drawn pet. */
@@ -2538,7 +2862,9 @@ export class GameScene extends Phaser.Scene {
 
   /** Fetches the chosen pet's painted sprites if they aren't here yet, then switches to them. */
   private loadLook(): void {
-    if (!queuePetArt(this, this.choice)) return;
+    const side = queuePetArt(this, this.choice);
+    const back = this.level.horizon ? queueBackArt(this, this.choice) : false;
+    if (!side && !back) return;
     this.load.once(Phaser.Loader.Events.COMPLETE, () => {
       if (!this.sys.isActive() || !this.petSprite?.active) return;
       this.applyPet();
@@ -2552,12 +2878,26 @@ export class GameScene extends Phaser.Scene {
   private syncMarks(): void {
     const sp = this.petSprite;
     const base = sp.texture.key;
+    const back = this.horizon ? this.backLook : undefined;
     this.petMarks.forEach((m, i) => {
       const k = this.look.marks[i];
-      if (base === this.look.jump) m.setTexture(k.jump);
+      const bk = back?.marks[i];
+      if (back && bk && base === back.jump) m.setTexture(bk.jump);
+      else if (back && bk && base === back.leanLeft) m.setTexture(bk.leanLeft, sp.frame.name);
+      else if (back && bk && base === back.leanRight) m.setTexture(bk.leanRight, sp.frame.name);
+      else if (back && bk && base === back.anim) m.setTexture(bk.run, sp.frame.name);
+      else if (base === this.look.jump) m.setTexture(k.jump);
       else if (base === this.look.slide) m.setTexture(k.slide);
       else m.setTexture(k.run, sp.frame.name);
-      m.setPosition(sp.x, sp.y).setScale(sp.scaleX, sp.scaleY).setAngle(sp.angle).setFlipX(sp.flipX).setAlpha(sp.alpha * (k.alpha ?? 1)).setVisible(sp.visible);
+      // (the depth too: a run into the screen draws the pet over its own backdrop)
+      m.setPosition(sp.x, sp.y)
+        .setOrigin(sp.originX, sp.originY)
+        .setScale(sp.scaleX, sp.scaleY)
+        .setAngle(sp.angle)
+        .setFlipX(sp.flipX)
+        .setDepth(sp.depth + 0.001 * (i + 1))
+        .setAlpha(sp.alpha * (k.alpha ?? 1))
+        .setVisible(sp.visible);
       const tint = k.tint ?? 0xffffff;
       m.setTint(this.petDim ? dim(tint) : tint);
     });
@@ -2774,6 +3114,32 @@ export class GameScene extends Phaser.Scene {
     flap('balloon-flap', ['balloon-0', 'balloon-1'], 2);
     flap('ufo-flap', ['ufo-0', 'ufo-1'], 5);
   }
+}
+
+/** The painted pictures a level needs (each fetched only once): sky, scenery, the pet, props and critters. */
+function queueLevel(scene: Phaser.Scene, l: LevelDef, pet: PetChoice): void {
+  const t = l.theme;
+  if (t.skyImage && !scene.textures.exists(`sky-${l.art}`)) scene.load.image(`sky-${l.art}`, t.skyImage);
+  for (const layer of t.layers) if (layer.src && !scene.textures.exists(layer.key)) scene.load.image(layer.key, layer.src);
+  // the pet's painted sprites, if it has them (and from behind, for the runs into the screen)
+  queuePetArt(scene, pet);
+  if (l.horizon) queueBackArt(scene, pet);
+  // the painted props and critters this level uses (anything without a file is painted in code)
+  // (the tunnels have stones in them; the runs into the screen and the water have their own things)
+  const kinds = [...(Object.keys(l.obstacles) as ObstacleKind[]), ...(l.dig ? (['rock'] as ObstacleKind[]) : []), ...(l.horizon?.obstacles ?? [])];
+  const swimKeys = (l.swim?.obstacles ?? []).map((k) => SWIMMERS[k].key).concat(l.swim ? ['water', 'water-cap'] : [], l.swim?.obstacles.includes('footbridge') ? ['wood-post'] : []);
+  const extras = [
+    ...(l.horizon ? ['hz-bush', 'hz-flowers', 'hz-tree', 'hz-sunflower', 'hz-post'] : []),
+    ...(l.theme.weather === 'fireflies' ? ['firefly'] : []),
+    ...(l.gravity ? ['helmet'] : []),
+    ...(l.ball ? [l.ball] : []),
+  ];
+  queueArt(scene, [...propKeys(kinds), ...swimKeys, ...extras, ...critterKeys(l)]);
+}
+
+/** How light a color is (0 to 255). */
+function luma(color: number): number {
+  return ((color >> 16) & 255) * 0.3 + ((color >> 8) & 255) * 0.59 + (color & 255) * 0.11;
 }
 
 /** A pet color dimmed for the game-over moment. */

@@ -187,7 +187,7 @@ export const CLIMB_TALL = [
 export const SWIM = {
   sink: 30, // how far below the bank the pet's feet are while it swims (px)
   bankPx: 90, // the sloping bank at each end of the water
-  diveSink: 26, // how much deeper a diving pet goes
+  diveSink: 24, // how much deeper a diving pet goes (under the surface, with bubbles)
   diveMs: 650, // how long a dive lasts
   clearEndPx: 1400, // no water this close to the finish
   gap: [380, 640] as [number, number], // between things in the water
@@ -219,10 +219,10 @@ export const HORIZON = {
  * round: see the closed-testing plan).
  */
 export const SPECIES = {
-  dog: { swimSpeed: 0.85, swimHop: 0.8, laneMs: 170, horizonJump: 1 },
+  dog: { swimSpeed: 0.85, swimHop: 0.7, laneMs: 170, horizonJump: 1 },
   // Cats swim grudgingly (slower) but spring higher out of the water, and
   // they're quicker side to side
-  cat: { swimSpeed: 0.72, swimHop: 0.92, laneMs: 120, horizonJump: 1.2 },
+  cat: { swimSpeed: 0.72, swimHop: 0.82, laneMs: 120, horizonJump: 1.2 },
 };
 
 /** The dark levels: how far the pet's light reaches. */

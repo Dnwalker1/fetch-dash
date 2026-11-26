@@ -248,10 +248,14 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
             ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>`;
   }
 
+  // The example portrait is Chewy (with the sloth). For any other pet, the
+  // photo box shows that pet running instead, so it never looks like the
+  // wrong breed.
+  const chewy = c.species === 'dog' && !breed && (!look || look.id === 'chewy');
+  const example = chewy ? `<img src="./hero-example.webp" alt="" /><span class="tag">Example</span>` : '<img class="flip pet" alt="" />';
   const photoBox = allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
-         <img src="${hasPhoto ? photoUrl : './hero-example.webp'}" alt="" />
-         ${hasPhoto ? '' : '<span class="tag">Example</span>'}
+         ${hasPhoto ? `<img src="${photoUrl}" alt="" />` : example}
          <input type="file" accept="image/*" />
          <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
        </label>

@@ -73,6 +73,8 @@ export interface PaintedSheet {
    * hit box and look like it touches things that don't count as a bump.
    */
   originX: number;
+  /** painted from behind too, for the runs into the screen: back-run, back-jump, back-lean-left and back-lean-right.webp */
+  back?: boolean;
 }
 
 export const SHEETS: PaintedSheet[] = [
@@ -89,6 +91,7 @@ export const SHEETS: PaintedSheet[] = [
     res: 2,
     fit: 1.15,
     originX: 0.66,
+    back: true,
   },
 ];
 

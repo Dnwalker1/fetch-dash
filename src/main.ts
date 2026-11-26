@@ -15,6 +15,10 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
   render: { antialias: true, powerPreference: 'high-performance' },
+  // A picture that hasn't come in this long (ms) is given up on, and the game
+  // draws that thing in code instead (or leaves it out), rather than waiting
+  // on a blank screen.
+  loader: { timeout: 10000 },
   physics: {
     default: 'arcade',
     // Step physics with each frame's real time (not a fixed 60 Hz), so on
