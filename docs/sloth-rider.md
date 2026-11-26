@@ -17,7 +17,7 @@ It puts the sloth's "seat" on that point, a little way into the head, and
 tilts him with the pet. So one sloth fits all six breeds and the cat, in
 every pose. Elon does not paint the sloth once per breed.
 
-He is sized from the pet's standing height: 36% of it for dogs, 42% for the
+He is sized from the pet's standing height: 44% of it for dogs, 50% for the
 cat. The numbers are in `SLOTH` in `src/art/rider.ts`.
 
 Chewy is painted with the sloth already on, so he never gets a second one.

@@ -852,9 +852,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     if (this.chasing) {
-      // A pet running the wrong way doesn't listen yet, but remember the jump
-      // so it happens the moment the pet is called back.
-      this.pendingMove = { kind: 'jump', at: this.clock() };
+      // The pet has turned around and is running the wrong way: a tap (or
+      // Space) calls it back too, like swiping up. (Only an early call-back,
+      // before it gives in, earns the focus bonus.)
+      this.callBack();
       return;
     }
     const now = this.clock();
@@ -1236,7 +1237,7 @@ export class GameScene extends Phaser.Scene {
 
     // No new obstacles in the final stretch, so the finish stays clear
     this.nextSpawnIn -= dx;
-    if (this.nextSpawnIn <= 0 && remainingPx > this.finishClearPx()) this.spawnNext();
+    if (this.nextSpawnIn <= 0 && remainingPx > this.finishClearPx() && this.distraction?.kind !== 'chase') this.spawnNext();
 
     if (this.sliding) {
       this.slideLeftPx -= dx;
@@ -1779,7 +1780,9 @@ export class GameScene extends Phaser.Scene {
     this.scheduleTimer?.remove();
     this.scheduleTimer = this.time.delayedCall(delayMs, () => {
       if (this.state !== 'playing') return;
-      if (!this.distraction && (this.time.now < this.calmUntil || this.obstacleAhead() || this.greet || this.ledges.length || this.braking || this.digSpot || this.tunnel || this.waters.length || this.horizon || this.horizonAt < Infinity)) {
+      // (a chase needs the trail clear for longer: the pet runs back toward what's coming)
+      const chase = Math.random() < DISTRACTION.chaseChance;
+      if (!this.distraction && (this.time.now < this.calmUntil || this.obstacleAhead(chase) || this.greet || this.ledges.length || this.braking || this.digSpot || this.tunnel || this.waters.length || this.horizon || this.horizonAt < Infinity)) {
         // Wait until the pet has cleared what's coming, so a distraction
         // never lands right on top of a fence or branch.
         this.scheduleDistraction(DISTRACTION.retryMs);
@@ -1789,7 +1792,7 @@ export class GameScene extends Phaser.Scene {
         const gawk = this.pickGawk();
         // A neighbor with a treat is a chance, not a problem: stop to get it
         if (gawk === 'person') this.startGreet();
-        else if (Math.random() < DISTRACTION.chaseChance) this.startChase();
+        else if (chase) this.startChase();
         else this.startGawk(gawk);
       }
       this.scheduleDistraction(Phaser.Math.Between(DISTRACTION.minEveryMs, DISTRACTION.maxEveryMs));
@@ -1803,8 +1806,10 @@ export class GameScene extends Phaser.Scene {
     return Phaser.Utils.Array.GetRandom(options.length ? options : ['bird']);
   }
 
-  private obstacleAhead(): boolean {
-    const reach = this.pet.x + this.speed * (DISTRACTION.clearAheadMs / 1000);
+  private obstacleAhead(chase = false): boolean {
+    // A chase: the warning, then the pet running back until it's lost, at the slowed speed
+    const chaseS = DISTRACTION.chaseWarnMs / 1000 + (DISTRACTION.chaseSpeedFactor * (PET.homeX - DISTRACTION.loseX)) / DISTRACTION.chaseDriftSpeed;
+    const reach = this.pet.x + this.speed * (chase ? chaseS : DISTRACTION.clearAheadMs / 1000) + (chase ? 200 : 0);
     let found = false;
     this.obstacles.children.each((c) => {
       const o = c as Img;
@@ -1833,7 +1838,7 @@ export class GameScene extends Phaser.Scene {
       this.setSpeedFactor(DISTRACTION.chaseSpeedFactor, 300);
       this.toast(`${c.label}! ${this.say('Swipe up!', 'Press \u2191!')}`, '#d6402b');
       this.petSound(2);
-      this.hint('chase', this.say('Your pet turned around! Swipe up to call it back.', 'Your pet turned around! Press \u2191 to call it back.'));
+      this.hint('chase', this.say('Your pet turned around! Tap or swipe up to call it back.', 'Your pet turned around! Press \u2191 or Space to call it back.'));
     });
   }
 

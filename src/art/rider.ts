@@ -18,7 +18,7 @@ export const SLOTH = {
   /** where in the sloth picture the top of the pet's head goes (share of width, height) */
   seat: { side: { x: 0.6, y: 0.6 }, back: { x: 0.5, y: 0.72 } },
   /** the sloth's height as a share of the pet's height (the standing pet) */
-  size: { dog: 0.36, cat: 0.42 },
+  size: { dog: 0.44, cat: 0.5 },
   /** how far down into the head's outline it sits (share of the pet's height): ears are thin */
   sink: 0.07,
 };
