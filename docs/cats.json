@@ -1,0 +1,228 @@
+{
+ "version": 1,
+ "id": "cat",
+ "species": "cat",
+ "cell": {
+  "run": {
+   "frameWidth": 189,
+   "frameHeight": 112,
+   "frames": 8,
+   "frameRate": 16,
+   "repeat": -1,
+   "order": [
+    "extend",
+    "reach",
+    "front-land",
+    "front-contact",
+    "stride",
+    "gather",
+    "gather-cross",
+    "push"
+   ]
+  },
+  "jump": {
+   "width": 176,
+   "height": 150
+  },
+  "slide": {
+   "width": 198,
+   "height": 79
+  },
+  "back-run": {
+   "frameWidth": 189,
+   "frameHeight": 112,
+   "frames": 8,
+   "frameRate": 16,
+   "repeat": -1,
+   "order": [
+    "both-down",
+    "left-lift",
+    "left-peak",
+    "left-down",
+    "both-down",
+    "right-lift",
+    "right-peak",
+    "right-down"
+   ]
+  },
+  "back-lean-left": {
+   "frameWidth": 189,
+   "frameHeight": 112,
+   "frames": 8,
+   "frameRate": 16,
+   "repeat": -1,
+   "note": "back-run turned 10 degrees about the paws, top toward screen left"
+  },
+  "back-lean-right": {
+   "frameWidth": 189,
+   "frameHeight": 112,
+   "frames": 8,
+   "frameRate": 16,
+   "repeat": -1,
+   "note": "back-run turned 10 degrees about the paws, top toward screen right"
+  },
+  "back-jump": {
+   "width": 176,
+   "height": 150
+  }
+ },
+ "render": {
+  "res": 2,
+  "fit": 1.15,
+  "scale": 0.575,
+  "originX": 0.66,
+  "originY": 1,
+  "sizeScale": {
+   "small": 0.8,
+   "medium": 1,
+   "large": 1.2
+  },
+  "tintMode": "Phaser setTint (multiply)"
+ },
+ "files": {
+  "path": "public/art/pets/cat/<layer>-<state>.webp",
+  "key": "pet-cat-<layer>-<state>",
+  "runAnimKey": "pet-cat-coat-run, or pet-cat-coat-black-run for the black palette"
+ },
+ "layers": {
+  "coat": "neutral light coat, tinted with PALETTES[palette].fur",
+  "coat-black": "painted black coat, never tinted; replaces coat when the fur is dark (luma < 90, same rule as sheets.ts isDarkCoat): only 'black'",
+  "mark-light": "muzzle, chest and belly, tinted with PALETTES[palette].light (empty in back states)",
+  "mark-dark": "tail, darkening toward the tip, tinted with PALETTES[palette].dark",
+  "detail": "never tinted: green eyes with slit pupils, pink nose, pink inner ears, white whiskers (side), white whiskers and pink paw pads on lifted feet (back)"
+ },
+ "stackOrder": [
+  "coat or coat-black",
+  "mark-light",
+  "mark-dark",
+  "detail"
+ ],
+ "palettes": {
+  "brown": [
+   {
+    "layer": "coat",
+    "tint": "#B07040"
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#E8C39A"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#7A4A26"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ],
+  "golden": [
+   {
+    "layer": "coat",
+    "tint": "#D9A441"
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#F6DFA8"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#A8762A"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ],
+  "black": [
+   {
+    "layer": "coat-black",
+    "tint": null
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#C58B54"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#1F1A18"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ],
+  "white": [
+   {
+    "layer": "coat",
+    "tint": "#F2ECE2"
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#FFFFFF"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#C9BFAE"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ],
+  "grey": [
+   {
+    "layer": "coat",
+    "tint": "#9A9EA6"
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#D9DCE0"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#6B6F77"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ],
+  "ginger": [
+   {
+    "layer": "coat",
+    "tint": "#D9782F"
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#F6C99A"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#A4541C"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ],
+  "cream": [
+   {
+    "layer": "coat",
+    "tint": "#E9D2A8"
+   },
+   {
+    "layer": "mark-light",
+    "tint": "#FFF6E4"
+   },
+   {
+    "layer": "mark-dark",
+    "tint": "#BFA477"
+   },
+   {
+    "layer": "detail",
+    "tint": null
+   }
+  ]
+ }
+}
