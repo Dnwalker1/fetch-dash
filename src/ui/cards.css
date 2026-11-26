@@ -249,7 +249,9 @@
   color: var(--navy);
   text-align: center;
   font: italic 900 clamp(18px, 5vh, 34px) 'Arial Black', Impact, Arial, sans-serif;
-  padding: 0.15em 0;
+  padding: 0.15em 0.2em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
   transform: skewY(-2deg);
 }
 #ui .ribbon {

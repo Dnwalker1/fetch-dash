@@ -306,7 +306,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
         <div class="col left">${photoBox}</div>
         <div class="col right">
           <label class="field">Name
-            <input class="name" maxlength="14" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" />
+            <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" />
           </label>
           ${petRow}
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
@@ -657,7 +657,7 @@ function portraitBlock(host: CardHost, hero: Hero | null, ribbon?: string): stri
   return `<div class="portrait empty">
       <div class="burst"></div>
       ${card ? `<div class="card-pic"><img class="card-art" src="${card}" alt="" data-fallback="${esc(runner)}" /></div>` : runner}
-      <div class="plate">${esc(displayName(hero, host.choice().species).toUpperCase())}</div>
+      ${plate(displayName(hero, host.choice().species))}
       ${ribbon ? `<div class="ribbon">${ribbon}</div>` : ''}
     </div>`;
 }
@@ -890,6 +890,18 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
     big.addEventListener('click', () => big.remove());
     card.appendChild(big);
   });
+}
+
+/**
+ * The name plate under the pet's picture. Names wrap between words, and a
+ * long word (up to the 18-letter limit) gets smaller letters so it stays on
+ * the plate.
+ */
+function plate(name: string): string {
+  const longest = Math.max(1, ...name.split(/\s+/).map((w) => w.length));
+  const k = Math.min(1, 11 / longest);
+  const size = k < 1 ? ` style="font-size: calc(clamp(18px, 5vh, 34px) * ${k.toFixed(2)})"` : '';
+  return `<div class="plate"${size}>${esc(name.toUpperCase())}</div>`;
 }
 
 export function openEnd(host: CardHost, res: RunResult): void {
