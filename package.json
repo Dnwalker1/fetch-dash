@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "build:app": "tsc --noEmit && vite build --mode app"
+    "build:app": "tsc --noEmit && vite build --mode app",
+    "test:wix": "node --import ./wix-backend/test/register.mjs --test wix-backend/test/*.test.mjs"
   },
   "dependencies": {
     "phaser": "3.90.0"

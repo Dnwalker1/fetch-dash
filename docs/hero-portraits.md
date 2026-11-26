@@ -104,7 +104,9 @@ backstop for that.
    after 4 it says "Still painting…"). A dropped connection mid-wait just
    tries again.
 4. Copies `previewUrl` onto the device as a JPEG data URL, because the
-   server deletes unordered designs after 7 days. Shows it on the "Meet your
+   server deletes unordered designs after 7 days. Once the game has seen the
+   result, the server permanently deletes the photo and the 4K print file
+   (see `docs/data-retention.md`). Shows it on the "Meet your
    hero" card and the end card.
 5. "Report picture" on the end card calls `POST /report` (Google Play's
    AI-content rule), only for live portraits.
