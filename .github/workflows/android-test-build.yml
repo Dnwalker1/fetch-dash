@@ -10,6 +10,12 @@
 # emulator, opens it, and keeps a screenshot and the phone's log as run
 # artifacts, so a crash on launch shows up here with its error. To check an
 # APK that's already built, give its link as "apk_url": the build is skipped.
+#
+# For Google Play, tick "play_build": the same job builds a signed Android App
+# Bundle (.aab) with the "production" profile instead (real ads, the Expo
+# "production" environment variables, version code raised by one on EAS).
+# Upload that .aab to the closed testing track in Play Console. The emulator
+# check is skipped for it, because an .aab can't be installed directly.
 name: Android test build
 
 on:
@@ -27,12 +33,16 @@ on:
         description: Only test this already-built APK (skips the build)
         type: string
         default: ''
+      play_build:
+        description: Build the Google Play bundle (.aab, production profile, real ads) instead of a test APK
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-test-build-${{ github.ref }}
+  group: android-test-build-${{ github.ref }}-${{ inputs.play_build && 'play' || 'test' }}
   cancel-in-progress: false
 
 jobs:
@@ -74,31 +84,56 @@ jobs:
       - name: Install app dependencies
         run: npm ci
 
-      - name: Build the APK on EAS
+      - name: Check the Expo environment variables
+        # Only names are printed. Hero portraits need both; without them the
+        # build quietly falls back to the on-device stand-in picture.
+        env:
+          ENV_NAME: ${{ inputs.play_build && 'production' || 'preview' }}
+        run: |
+          if ! out=$(eas env:list "$ENV_NAME" --format short 2>/dev/null); then
+            echo "::warning::Couldn't list the Expo \"$ENV_NAME\" environment variables; building anyway."
+            exit 0
+          fi
+          names=$(echo "$out" | cut -d= -f1 | tr -d ' ')
+          echo "Expo \"$ENV_NAME\" environment has: $(echo $names)"
+          missing=""
+          for n in VITE_DYP_API_BASE VITE_DYP_APP_KEY; do
+            echo "$names" | grep -q "$n" || missing="$missing $n"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing in the Expo \"$ENV_NAME\" environment:$missing. Add them on expo.dev (Project > Environment variables) for $ENV_NAME, then run this again."
+            exit 1
+          fi
+
+      - name: Build on EAS
         id: eas
         env:
           WAIT: ${{ inputs.wait }}
+          PROFILE: ${{ inputs.play_build && 'production' || 'preview' }}
         run: |
           if [ "$WAIT" = "true" ]; then wait_flag=--wait; else wait_flag=--no-wait; fi
-          eas build --profile preview --platform android --non-interactive --json $wait_flag > build.json
+          eas build --profile "$PROFILE" --platform android --non-interactive --json $wait_flag > build.json
           id=$(jq -r '.[0].id' build.json)
           status=$(jq -r '.[0].status' build.json)
-          apk=$(jq -r '.[0].artifacts.buildUrl // empty' build.json)
+          file=$(jq -r '.[0].artifacts.buildUrl // empty' build.json)
+          code=$(jq -r '.[0].appBuildVersion // empty' build.json)
           page="https://expo.dev/accounts/goodwookies-team/projects/fetch-dash/builds/$id"
+          if [ "$PROFILE" = "production" ]; then kind="AAB for Google Play"; else kind="APK"; fi
           {
-            echo "## Android test build"
+            if [ "$PROFILE" = "production" ]; then echo "## Google Play build (.aab)"; else echo "## Android test build"; fi
             echo ""
             echo "- Branch: \`${GITHUB_REF_NAME}\` at \`${GITHUB_SHA::7}\`"
-            echo "- EAS build: [$id]($page) ($status)"
-            if [ -n "$apk" ]; then
-              echo "- APK: [download]($apk)"
+            echo "- EAS build: [$id]($page) ($status, profile $PROFILE)"
+            [ -n "$code" ] && echo "- Version code: $code"
+            if [ -n "$file" ]; then
+              echo "- $kind: [download]($file)"
             else
-              echo "- APK: not ready yet. The build page has it, and a QR code, when the build finishes."
+              echo "- $kind: not ready yet. The build page has it when the build finishes."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           echo "EAS build page: $page"
-          [ -n "$apk" ] && echo "APK: $apk"
-          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+          [ -n "$file" ] && echo "$kind: $file"
+          if [ "$PROFILE" = "preview" ]; then echo "apk=$file" >> "$GITHUB_OUTPUT"; fi
           if [ "$WAIT" = "true" ] && [ "$status" != "FINISHED" ]; then
             echo "::error::EAS build ended as $status. See $page"
             exit 1
@@ -107,7 +142,7 @@ jobs:
   smoke:
     # Opens the APK on an emulator: does it start, or crash on launch?
     needs: build
-    if: ${{ always() && inputs.smoke_test && (inputs.apk_url != '' || needs.build.outputs.apk != '') }}
+    if: ${{ always() && inputs.smoke_test && !inputs.play_build && (inputs.apk_url != '' || needs.build.outputs.apk != '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
