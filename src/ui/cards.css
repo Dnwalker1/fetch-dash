@@ -105,6 +105,8 @@
 }
 #ui .sloth input { width: 1.2em; height: 1.2em; margin: 0.05em 0 0; accent-color: var(--green); flex: none; }
 #ui .sloth small { display: block; font-weight: normal; font-size: 0.8em; color: var(--slate); }
+#ui .sloth[hidden] { display: none; }
+#ui .nameack { margin: 0 0 0.55em; }
 #ui .drop .pick {
   position: absolute;
   left: 50%;

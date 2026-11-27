@@ -238,6 +238,34 @@ export function setSlothWanted(on: boolean): void {
   }
 }
 
+/**
+ * Pet names the server said also belong to a brand or character (like Chewy),
+ * and whether the player has ticked "it's my pet's name, for personal use
+ * only" for each. Kept so the box isn't asked again for the same pet.
+ */
+const NAME_ACK_KEY = 'fetch-dash-name-ack';
+function readNameAcks(): Record<string, boolean> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(NAME_ACK_KEY) ?? 'null');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+/** undefined: the server hasn't asked about this name. false: asked, not ticked. */
+export function nameAck(name: string): boolean | undefined {
+  return readNameAcks()[petKey(name)];
+}
+export function setNameAck(name: string, ticked: boolean): void {
+  const k = petKey(name);
+  if (!k) return;
+  try {
+    localStorage.setItem(NAME_ACK_KEY, JSON.stringify({ ...readNameAcks(), [k]: ticked }));
+  } catch {
+    // fine
+  }
+}
+
 
 export function displayName(h: Hero | null, species: 'dog' | 'cat'): string {
   const n = h?.name.trim();

@@ -50,6 +50,7 @@ const MESSAGES: Record<string, string> = {
   limit_tries: "You've reached today's limit of tries. Try again later.",
   studio_busy: 'The studio is busy right now. Try again in a minute.',
   text_rejected: "That name can't be used on a portrait. Try a different name.",
+  name_ack_needed: "That name also belongs to a brand or character. If it's your pet's name, tick the box under the name and try again.",
   text_checker_down: 'The name checker is taking a break. Try again in a minute.',
   bad_photo: "That photo couldn't be read. Try a JPG or PNG.",
   bad_photo_type: "That photo couldn't be read. Try a JPG or PNG.",
@@ -196,6 +197,9 @@ export interface LiveResult {
 export interface HeroOptions {
   /** Bring the Goodwookie sloth along, riding on the pet's head. */
   sloth?: boolean;
+  /** The player ticked "it's my pet's name, for personal use only" for a
+   * name that also belongs to a brand or character. */
+  nameAck?: boolean;
 }
 
 /** The server's free-portrait count for this phone. */
@@ -287,7 +291,7 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
     const d = await call(`/designs?${idQuery()}`, {
       method: 'POST',
       // `pet` is the name the free portraits are counted under (3 per pet).
-      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true, ageBand }),
+      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true, ageBand, nameAck: opts.nameAck === true }),
     });
     takeServerAge(d);
     if (d.ok) designId = String(d.designId);

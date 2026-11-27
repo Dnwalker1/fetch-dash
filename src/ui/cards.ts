@@ -20,11 +20,13 @@ import {
   displayName,
   loadHero,
   markPetUsedUp,
+  nameAck,
   petCounts,
   petKey,
   rememberPet,
   saveHero,
   savedPet,
+  setNameAck,
   setServerPets,
   setSlothWanted,
   slothWanted,
@@ -343,6 +345,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
           <label class="field">Name
             <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" enterkeyhint="done" />
           </label>
+          ${!ageOff && allow.totalLeft > 0 ? nameAckBox(name) : ''}
           ${petRow}
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
           <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
@@ -508,7 +511,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     keepName();
     host.play(host.progress().current);
   });
-  r.querySelector<HTMLInputElement>('.sloth input')?.addEventListener('change', (e) => {
+  r.querySelector<HTMLInputElement>('.sloth:not(.nameack) input')?.addEventListener('change', (e) => {
     setSlothWanted((e.target as HTMLInputElement).checked);
     host.setChoice(host.choice()); // the sloth hops on (or off) the pet in the game too
   });
@@ -522,16 +525,29 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   // The portrait letters the name, so it needs one before it can be made
   const go = r.querySelector<HTMLButtonElement>('.go');
   const allowLine = r.querySelector('.allow');
+  const ackBox = r.querySelector<HTMLLabelElement>('.nameack');
+  const ackInput = ackBox?.querySelector('input');
   const nameNeeded = () => {
     // Each name is its own pet, so the count follows the name as it's typed
     if (allowLine) allowLine.innerHTML = allowanceLine(nameInput.value.trim());
     const k = petKey(nameInput.value);
     r.querySelectorAll<HTMLButtonElement>('.pets [data-pet]').forEach((c) => c.classList.toggle('on', Boolean(c.dataset.pet) && petKey(c.dataset.pet!) === k));
+    // The personal-use box shows only for a name the server asked about
+    const ack = nameAck(nameInput.value.trim());
+    if (ackBox && ackInput) {
+      ackBox.hidden = ack === undefined;
+      ackInput.checked = ack === true;
+    }
     if (!go) return;
     const empty = !nameInput.value.trim();
-    go.disabled = empty;
-    go.textContent = empty ? 'Type a name first' : '✨ Make my hero';
+    const unticked = ack === false;
+    go.disabled = empty || unticked;
+    go.textContent = empty ? 'Type a name first' : unticked ? 'Tick the box first' : '✨ Make my hero';
   };
+  ackInput?.addEventListener('change', () => {
+    setNameAck(nameInput.value.trim(), ackInput.checked);
+    nameNeeded();
+  });
   nameInput.addEventListener('input', nameNeeded);
   // The keyboard's Go/Done key closes the keyboard, so the whole card shows again
   nameInput.addEventListener('keydown', (e) => {
@@ -542,6 +558,13 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   });
   nameNeeded();
   if (!opts.canGoBack && !name) nameInput.focus({ preventScroll: true });
+}
+
+/** Shown once the server says the name also belongs to a brand or character. */
+function nameAckBox(name: string): string {
+  const ack = nameAck(name);
+  return `<label class="sloth nameack"${ack === undefined ? ' hidden' : ''}><input type="checkbox"${ack ? ' checked' : ''} />
+      <span>It's my pet's name <small>This name may also belong to a brand or character. My portrait is for personal use only.</small></span></label>`;
 }
 
 async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<void> {
@@ -562,7 +585,7 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     let hero: Hero;
     if (LIVE) {
       const photo = await preparePhoto(photoFile);
-      const res = await generateLive(photo, name || shown, setStep, { sloth: slothWanted() });
+      const res = await generateLive(photo, name || shown, setStep, { sloth: slothWanted(), nameAck: nameAck(name || shown) === true });
       setStep('Saving your hero…');
       // Kept on the device: the server's copy is deleted after SERVER_PORTRAIT_DAYS.
       hero = { name, portrait: await keepOnDevice(res.url), source: 'live', designId: res.designId };
@@ -589,6 +612,8 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     // The server says no more free portraits: the pop-up says why and where to go next
     const limit: LimitReason | undefined = code === 'limit_pet' ? 'pet' : code === 'limit_pets' ? 'pets' : code === 'limit_game' ? 'total' : undefined;
     if (limit === 'pet') markPetUsedUp(name || shown);
+    // The name also belongs to a brand or character: the box under the name asks the player
+    if (code === 'name_ack_needed') setNameAck(name || shown, false);
     if (limit) {
       // Pick up the server's count, so the card shows the same thing
       const a = await fetchAllowance();
