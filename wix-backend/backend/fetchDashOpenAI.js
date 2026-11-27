@@ -180,34 +180,4 @@ export async function callOpenAIAsGemini(kind, apiKey, body) {
   return answer(200, { candidates: [{ content: { parts: [{ text }] } }] });
 }
 
-/**
- * A one-off test from the Code panel, before the game uses OpenAI for real:
- * paints one small picture from a public image URL (for example a pet photo
- * already in the Media Manager) and reports what came back. Costs one image.
- *   testOpenAIPortrait('https://static.wixstatic.com/media/...')
- */
-export async function testOpenAIPortrait(photoUrl) {
-  const key = await designKeyFor('game_test');
-  const resp = await globalThis.fetch(photoUrl);
-  if (!resp.ok) return { ok: false, step: 'loading the photo', status: resp.status };
-  const data = Buffer.from(await resp.arrayBuffer()).toString('base64');
-  const mimeType = resp.headers.get('content-type') || 'image/jpeg';
-  const check = await callOpenAIAsGemini('check', key, { contents: [{ parts: [
-    { text: 'How many animals are in this photo? Reply as JSON: {"animals": <number>}' },
-    { inlineData: { mimeType, data } }
-  ] }] });
-  const checkJson = await check.json();
-  const art = await callOpenAIAsGemini('image', key, { contents: [{ parts: [
-    { inlineData: { mimeType, data } },
-    { text: 'Paint this pet as a bright cartoon hero, running after a ball.' }
-  ] }] });
-  const artJson = await art.json();
-  const img = artJson?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-  return {
-    checkOk: check.ok,
-    checkAnswer: checkJson?.candidates?.[0]?.content?.parts?.[0]?.text || checkJson?.error?.message,
-    imageOk: art.ok && !!img,
-    imageBytes: img ? Buffer.from(img.data, 'base64').length : 0,
-    imageError: artJson?.error?.message || (img ? '' : 'no picture came back')
-  };
-}
+// The Code panel tests are in backend/fetchDashOpenAITest.js.
