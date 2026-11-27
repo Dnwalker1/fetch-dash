@@ -56,6 +56,37 @@ EAS runs `eas-build-post-install`, which builds and packs the game before
 bundling. On expo.dev the GitHub link uses `mobile` as the base directory, so
 builds can also start from GitHub.
 
+## iPhone builds and TestFlight
+
+The `testflight` profile in `eas.json` is the App Store build with Google's
+test ads (it extends `production` and sets `EXPO_PUBLIC_REAL_ADS=0`), so
+TestFlight testers can tap ads safely. The `production` profile is for the
+App Store release itself.
+
+**First time only** (from a computer, because Apple asks to sign in):
+
+```bash
+cd mobile
+npm ci
+npx eas-cli@latest build --platform ios --profile testflight --auto-submit
+```
+
+Answer yes to signing in to Apple, reuse the existing distribution
+certificate (Design Your Pet's, same Apple team), let EAS make a new
+provisioning profile, say no to push notifications, and let EAS make an App
+Store Connect API key for submissions. EAS keeps all of these, so later
+builds need no Apple sign-in.
+
+**After that**, from GitHub: Actions tab, "iOS TestFlight build", "Run
+workflow" (`.github/workflows/ios-testflight-build.yml`). It needs the app's
+Apple ID (App Store Connect > App Information > Apple ID) in `eas.json` as
+`submit.testflight.ios.ascAppId`. Each build number goes up by itself.
+
+When Apple finishes processing a build (10 to 30 minutes), it shows under
+TestFlight in App Store Connect. Internal testers (people on the App Store
+Connect team) can install it right away from the TestFlight app; external
+testers need Apple's beta review once per version.
+
 ## Icon and splash
 
 - `assets/icon.png`: the 1024 px app icon (iOS, and the Android fallback).
@@ -92,6 +123,15 @@ inside the WebView, so the game's page never loads ad code.
   (EEA, UK, some US states). It's set up in AdMob under Privacy & messaging.
   Where Google says players must be able to change their choice, the map card
   shows a "Privacy choices" button.
+- **iPhone tracking question (ATT):** Apple's "Allow Fetch Dash to track
+  your activity?" is asked once, only of players whose age answer is 18+,
+  at the title screen after Google's consent form (`askTracking()` in
+  `ads.ts`). Players under 18, or who haven't answered, are never asked. Do
+  not turn on AdMob's "IDFA explainer" message in Privacy & messaging: it
+  would show Apple's question to every player, children included.
+  `app.json` carries the question's wording and Google's SKAdNetwork IDs
+  (Google plus its 49 third-party buyers, from Google's list of
+  27 Nov 2026).
 - **Test ads:** every build except the `production` profile shows Google's
   test ads (`EXPO_PUBLIC_REAL_ADS=1` is set only there in `eas.json`), so
   testers can tap them safely. Never tap real ads in your own app.
@@ -106,5 +146,6 @@ inside the WebView, so the game's page never loads ad code.
 
 - "Save picture" on the end card is a browser download, which a WebView
   ignores. It needs a small bridge to the phone's share sheet.
-- No purchases yet. iOS ads still need the App Tracking Transparency prompt
-  and Fetch Dash's iOS App ID before an App Store build.
+- No purchases yet. iOS store ads still need Fetch Dash's own iOS App ID and
+  "Between runs" unit from AdMob before an App Store release (TestFlight
+  builds use test ads, so they don't need them).

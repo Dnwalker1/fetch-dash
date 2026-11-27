@@ -18,6 +18,7 @@ import mobileAds, {
   MaxAdContentRating,
   TestIds,
 } from 'react-native-google-mobile-ads';
+import { PermissionStatus, getTrackingPermissionsAsync, requestTrackingPermissionsAsync } from 'expo-tracking-transparency';
 
 /** How often the between-runs ad may show. */
 export const AD_RULES = {
@@ -72,6 +73,9 @@ const call = (fn: string, ...args: unknown[]) =>
 
 class Ads {
   private started = false;
+  /** Settles when the consent step at launch is over (answered, skipped or failed). */
+  private consentDone: Promise<void> | undefined;
+  private trackingAsked = false;
   private canRequest = false;
   private status: AdStatus = { privacy: false };
   private statusListeners = new Set<(s: AdStatus) => void>();
@@ -90,9 +94,15 @@ class Ads {
   private lastShown = 0;
 
   /** Consent first, then the SDK, then the first ad loads. Called once, at launch. */
-  async start(): Promise<void> {
-    if (this.started) return;
-    this.started = true;
+  start(): Promise<void> {
+    if (!this.started) {
+      this.started = true;
+      this.consentDone = this.startOnce();
+    }
+    return this.consentDone ?? Promise.resolve();
+  }
+
+  private async startOnce(): Promise<void> {
     try {
       // Shows Google's consent form only where it's required (EEA, UK, some US states)
       // and only until it has been answered. AdMob sets the form up (Privacy & messaging).
@@ -135,6 +145,7 @@ class Ads {
     if (msg.type === 'hello') {
       this.setAge(msg.age);
       reply(call('status', this.status));
+      void this.askTracking();
     } else if (msg.type === 'break') {
       this.setAge(msg.age);
       void this.adBreak(msg.id, reply, msg.at);
@@ -241,6 +252,28 @@ class Ads {
       await ad.show();
     } catch {
       finish();
+    }
+  }
+
+  /**
+   * iPhone only: Apple's "Allow Fetch Dash to track your activity?" question
+   * (App Tracking Transparency). Asked once, and only of players who told the
+   * game they're 18 or over; everyone else is never asked, so their ads never
+   * use the phone's advertising ID. It comes at the title screen (the game's
+   * "hello" on page load), never during a run, and after Google's consent form
+   * so the two never overlap. A player who says 18+ later is asked on the next
+   * launch. "Ask App Not to Track" changes nothing in the game.
+   */
+  private async askTracking(): Promise<void> {
+    if (Platform.OS !== 'ios' || this.trackingAsked || this.age !== '18+') return;
+    this.trackingAsked = true;
+    await this.start();
+    if (!this.canRequest) return; // no ads at all for this player, so nothing to ask
+    try {
+      const { status, canAskAgain } = await getTrackingPermissionsAsync();
+      if (status === PermissionStatus.UNDETERMINED && canAskAgain) await requestTrackingPermissionsAsync();
+    } catch {
+      // Not available (older iOS): ads go on without the advertising ID
     }
   }
 
