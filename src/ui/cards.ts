@@ -1,12 +1,15 @@
 import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
+import { cardArtUrl } from '../art/petLook';
 import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, playStyle, type PlayStyle, type Progress } from '../levels';
-import { HERO_STEPS, HeroError, LIVE, fetchAllowance, generateLive, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
+import { HERO_STEPS, HeroError, LIVE, SERVER_PORTRAIT_DAYS, fetchAllowance, gameCode, generateLive, isOnDevice, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
+import { ageLine, loadAgeBand, portraitsAllowed, saveAgeBand } from '../hero/age';
+import { openAgeGate } from './ageGate';
 import {
   MAX_PETS,
   PORTRAITS_PER_PET,
@@ -17,17 +20,20 @@ import {
   displayName,
   loadHero,
   markPetUsedUp,
+  nameAck,
   petCounts,
   petKey,
   rememberPet,
   saveHero,
   savedPet,
+  setNameAck,
   setServerPets,
   setSlothWanted,
   slothWanted,
   type Hero,
   type LimitReason,
 } from '../hero/store';
+import { adBreak, addPrivacyButton } from '../ads';
 
 /**
  * The cards shown over the game: make your hero (start), meet your hero
@@ -124,8 +130,31 @@ export function closeCards(): void {
   }
 }
 
+/**
+ * Keeps the field being typed in on screen. On a phone held sideways the
+ * keyboard leaves only a strip of the screen (the app shrinks the game to
+ * that strip), so the card scrolls the field into the middle of what's left.
+ */
+let focusKeeper = false;
+function keepFocusInView(): void {
+  if (focusKeeper) return;
+  focusKeeper = true;
+  const typing = () => {
+    const el = document.activeElement;
+    return el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'file' && el.closest('#ui') ? el : null;
+  };
+  const reveal = () => requestAnimationFrame(() => typing()?.scrollIntoView({ block: 'center', inline: 'nearest' }));
+  window.addEventListener('resize', reveal);
+  window.visualViewport?.addEventListener('resize', reveal);
+  // Again once the keyboard has had time to open
+  document.addEventListener('focusin', () => {
+    if (typing()) window.setTimeout(reveal, 350);
+  });
+}
+
 function show(html: string, onEnter?: () => void): HTMLDivElement {
   closeCards();
+  keepFocusInView();
   const r = ui();
   r.innerHTML = html;
   r.classList.add('open');
@@ -154,6 +183,16 @@ export function refreshPetFrames(host: CardHost): void {
 
 /** Cycles the pet's run frames in an <img>, like a tiny flipbook. */
 function startRunner(r: HTMLElement, host: CardHost): void {
+  // a painted card picture that doesn't load gives way to the running pet
+  r.querySelectorAll<HTMLImageElement>('img.card-art').forEach((img) => {
+    img.onerror = () => {
+      img.onerror = null;
+      const t = document.createElement('template');
+      t.innerHTML = img.dataset.fallback ?? '';
+      (img.closest('.card-pic') ?? img).replaceWith(t.content);
+      startRunner(r, host);
+    };
+  });
   const imgs = Array.from(r.querySelectorAll<HTMLImageElement>('.runner img, img.flip'));
   if (!imgs.length) return;
   const frames = host.petFrames(host.choice());
@@ -194,6 +233,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   const name = hero?.name ?? '';
   const allow = allowanceFor(name);
   const pets = petCounts();
+  // The live portraits are for players 18 and over for now (hero/age.ts).
+  // Asked once, when the player first goes to choose a photo.
+  const band = LIVE ? loadAgeBand() : '18+';
+  const ageOff = band !== undefined && !portraitsAllowed(band);
 
   const chips = (Object.keys(PALETTES) as string[])
     .map(
@@ -248,15 +291,31 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
             ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>`;
   }
 
-  const photoBox = allow.totalLeft > 0
+  // The example portrait is Chewy (with the sloth). For any other pet, the
+  // photo box shows that pet running instead, so it never looks like the
+  // wrong breed.
+  // (its painted card picture, or the running pet if it has none)
+  const chewy = c.species === 'dog' && !breed && (!look || look.id === 'chewy');
+  const card = chewy ? undefined : cardArtUrl(c);
+  const flip = '<img class="flip pet" alt="" />';
+  const example = chewy
+    ? `<img src="./hero-example.webp" alt="" /><span class="tag">Example</span>`
+    : card
+      ? `<img class="pet card-art" src="${card}" alt="" data-fallback="${esc(flip)}" />`
+      : flip;
+  const photoBox = ageOff
+    ? `<div class="drop used">
+         <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
+       </div>
+       <p class="small">${ageLine(band!)}</p>`
+    : allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
-         <img src="${hasPhoto ? photoUrl : './hero-example.webp'}" alt="" />
-         ${hasPhoto ? '' : '<span class="tag">Example</span>'}
+         ${hasPhoto ? `<img src="${photoUrl}" alt="" />` : example}
          <input type="file" accept="image/*" />
          <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
        </label>
        <label class="sloth"><input type="checkbox"${slothWanted() ? ' checked' : ''} />
-         <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head</small></span></label>
+         <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head, in the game and in the portrait</small></span></label>
        <p class="small allow">${allowanceLine(name)}</p>`
     : `<div class="drop used">
          <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
@@ -284,8 +343,9 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
         <div class="col left">${photoBox}</div>
         <div class="col right">
           <label class="field">Name
-            <input class="name" maxlength="14" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" />
+            <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" enterkeyhint="done" />
           </label>
+          ${!ageOff && allow.totalLeft > 0 ? nameAckBox(name) : ''}
           ${petRow}
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
           <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
@@ -297,9 +357,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       ${lastError ? `<p class="error">${esc(lastError)}</p>` : ''}
       <div class="actions">
         ${opts.canGoBack ? '<button class="btn ghost back">Back</button>' : '<button class="btn ghost skip">Skip, just play</button>'}
-        ${allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
+        ${!ageOff && allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
       </div>
       <p class="fine">Use a photo of just your pet${LIVE ? '' : '. This preview makes a stand-in portrait on your device; the real one comes from Design Your Pet'}.</p>
+      ${LIVE ? `<p class="fine privacy">To have everything deleted from our server, email info@goodwookie.com with your game code <span class="code">${esc(gameCode())}</span>.</p>` : ''}
     </div>`,
   );
   lastError = '';
@@ -408,6 +469,19 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       openSetup(host, opts);
     }),
   );
+  // No age answer yet: the age screen comes first, then the photo picker
+  if (LIVE && band === undefined) {
+    r.querySelector('label.drop')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      keepName();
+      openAgeGate((b) => {
+        saveAgeBand(b);
+        openSetup(host, opts);
+        // Still inside the tap on Continue, so the picker is allowed to open
+        if (portraitsAllowed(b)) document.querySelector<HTMLInputElement>('#ui .card.setup input[type=file]')?.click();
+      });
+    });
+  }
   r.querySelector<HTMLInputElement>('input[type=file]')?.addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
@@ -437,7 +511,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     keepName();
     host.play(host.progress().current);
   });
-  r.querySelector<HTMLInputElement>('.sloth input')?.addEventListener('change', (e) => setSlothWanted((e.target as HTMLInputElement).checked));
+  r.querySelector<HTMLInputElement>('.sloth:not(.nameack) input')?.addEventListener('change', (e) => {
+    setSlothWanted((e.target as HTMLInputElement).checked);
+    host.setChoice(host.choice()); // the sloth hops on (or off) the pet in the game too
+  });
   r.querySelector('.go')?.addEventListener('click', () => {
     keepName();
     // This pet's free portraits are used (or 3 pets have theirs): explain where to go next
@@ -448,19 +525,46 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   // The portrait letters the name, so it needs one before it can be made
   const go = r.querySelector<HTMLButtonElement>('.go');
   const allowLine = r.querySelector('.allow');
+  const ackBox = r.querySelector<HTMLLabelElement>('.nameack');
+  const ackInput = ackBox?.querySelector('input');
   const nameNeeded = () => {
     // Each name is its own pet, so the count follows the name as it's typed
     if (allowLine) allowLine.innerHTML = allowanceLine(nameInput.value.trim());
     const k = petKey(nameInput.value);
     r.querySelectorAll<HTMLButtonElement>('.pets [data-pet]').forEach((c) => c.classList.toggle('on', Boolean(c.dataset.pet) && petKey(c.dataset.pet!) === k));
+    // The personal-use box shows only for a name the server asked about
+    const ack = nameAck(nameInput.value.trim());
+    if (ackBox && ackInput) {
+      ackBox.hidden = ack === undefined;
+      ackInput.checked = ack === true;
+    }
     if (!go) return;
     const empty = !nameInput.value.trim();
-    go.disabled = empty;
-    go.textContent = empty ? 'Type a name first' : '✨ Make my hero';
+    const unticked = ack === false;
+    go.disabled = empty || unticked;
+    go.textContent = empty ? 'Type a name first' : unticked ? 'Tick the box first' : '✨ Make my hero';
   };
+  ackInput?.addEventListener('change', () => {
+    setNameAck(nameInput.value.trim(), ackInput.checked);
+    nameNeeded();
+  });
   nameInput.addEventListener('input', nameNeeded);
+  // The keyboard's Go/Done key closes the keyboard, so the whole card shows again
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      nameInput.blur();
+    }
+  });
   nameNeeded();
   if (!opts.canGoBack && !name) nameInput.focus({ preventScroll: true });
+}
+
+/** Shown once the server says the name also belongs to a brand or character. */
+function nameAckBox(name: string): string {
+  const ack = nameAck(name);
+  return `<label class="sloth nameack"${ack === undefined ? ' hidden' : ''}><input type="checkbox"${ack ? ' checked' : ''} />
+      <span>It's my pet's name <small>This name may also belong to a brand or character. My portrait is for personal use only.</small></span></label>`;
 }
 
 async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<void> {
@@ -481,9 +585,9 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     let hero: Hero;
     if (LIVE) {
       const photo = await preparePhoto(photoFile);
-      const res = await generateLive(photo, name || shown, setStep, { sloth: slothWanted() });
+      const res = await generateLive(photo, name || shown, setStep, { sloth: slothWanted(), nameAck: nameAck(name || shown) === true });
       setStep('Saving your hero…');
-      // Kept on the device: the server's copy is deleted after 7 days.
+      // Kept on the device: the server's copy is deleted after SERVER_PORTRAIT_DAYS.
       hero = { name, portrait: await keepOnDevice(res.url), source: 'live', designId: res.designId };
       // The server's count already has this one in it
       if (res.allowance?.pets) setServerPets(res.allowance.pets, res.allowance.portraitsUsed);
@@ -497,15 +601,19 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
       hero = { name, portrait: await makeDemoPortrait(img, name || shown), source: 'demo' };
       countPortrait(name || shown);
     }
-    saveHero(hero);
+    const saved = saveHero(hero);
     rememberPet(hero, host.choice());
     photoFile = undefined;
-    openHome(host, { reveal: true });
+    // A live portrait that couldn't be kept on the phone is lost once the
+    // server deletes its copy, so the player is told to save it now.
+    openHome(host, { reveal: true, notSaved: hero.source === 'live' && (!saved || !isOnDevice(hero.portrait)) });
   } catch (err) {
     const code = err instanceof HeroError ? err.code : 'failed';
     // The server says no more free portraits: the pop-up says why and where to go next
     const limit: LimitReason | undefined = code === 'limit_pet' ? 'pet' : code === 'limit_pets' ? 'pets' : code === 'limit_game' ? 'total' : undefined;
     if (limit === 'pet') markPetUsedUp(name || shown);
+    // The name also belongs to a brand or character: the box under the name asks the player
+    if (code === 'name_ack_needed') setNameAck(name || shown, false);
     if (limit) {
       // Pick up the server's count, so the card shows the same thing
       const a = await fetchAllowance();
@@ -626,11 +734,13 @@ function portraitBlock(host: CardHost, hero: Hero | null, ribbon?: string): stri
       ${hero.source === 'demo' ? '<span class="tag">Preview art</span>' : ''}
     </div>`;
   }
-  // No portrait yet: show the in-game pet big on a sunburst instead
+  // No portrait yet: show the pet's painted card picture (or the in-game pet) big on a sunburst instead
+  const runner = '<div class="runner big"><img alt="" /></div>';
+  const card = cardArtUrl(host.choice());
   return `<div class="portrait empty">
       <div class="burst"></div>
-      <div class="runner big"><img alt="" /></div>
-      <div class="plate">${esc(displayName(hero, host.choice().species).toUpperCase())}</div>
+      ${card ? `<div class="card-pic"><img class="card-art" src="${card}" alt="" data-fallback="${esc(runner)}" /></div>` : runner}
+      ${plate(displayName(hero, host.choice().species))}
       ${ribbon ? `<div class="ribbon">${ribbon}</div>` : ''}
     </div>`;
 }
@@ -722,7 +832,7 @@ export function openTitle(onPlay: () => void): void {
   r.querySelector('.go')?.addEventListener('click', () => onPlay());
 }
 
-export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void {
+export function openHome(host: CardHost, opts: { reveal?: boolean; notSaved?: boolean } = {}): void {
   const hero = loadHero();
   const p = host.progress();
   const name = displayName(hero, host.choice().species);
@@ -766,6 +876,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
         <div class="who">
           <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(cap(name))}</h1>
           <p class="lead">${opts.reveal ? 'Your hero is ready. Pick a trail on the map.' : 'Pick a trail on the map.'}</p>
+          ${opts.notSaved ? `<p class="error">We couldn't save this portrait on your phone. Use Save picture after your next run: our copy is deleted after ${SERVER_PORTRAIT_DAYS} days.</p>` : ''}
         </div>
         <img class="headlogo" src="./art/logo.webp" alt="Fetch Dash" />
         <div class="headbtns">
@@ -844,6 +955,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   };
   pick(p.current);
   startRunner(r, host);
+  addPrivacyButton(r.querySelector('.headbtns'));
   r.querySelectorAll<HTMLButtonElement>('.stop').forEach((b) => b.addEventListener('click', () => pick(Number(b.dataset.level))));
   r.querySelectorAll<HTMLButtonElement>('.bstop').forEach((b) => b.addEventListener('click', () => pickBonus(Number(b.dataset.after))));
   r.querySelector('.play')?.addEventListener('click', go);
@@ -865,6 +977,18 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   });
 }
 
+/**
+ * The name plate under the pet's picture. Names wrap between words, and a
+ * long word (up to the 18-letter limit) gets smaller letters so it stays on
+ * the plate.
+ */
+function plate(name: string): string {
+  const longest = Math.max(1, ...name.split(/\s+/).map((w) => w.length));
+  const k = Math.min(1, 11 / longest);
+  const size = k < 1 ? ` style="font-size: calc(clamp(18px, 5vh, 34px) * ${k.toFixed(2)})"` : '';
+  return `<div class="plate"${size}>${esc(name.toUpperCase())}</div>`;
+}
+
 export function openEnd(host: CardHost, res: RunResult): void {
   const hero = loadHero();
   const level = levelById(res.level);
@@ -878,7 +1002,8 @@ export function openEnd(host: CardHost, res: RunResult): void {
   const primaryLevel = res.won && next ? next.id : res.level;
   // After the levels in BONUS_AFTER the bonus round comes next (it can be skipped)
   const bonus = res.won && BONUS_AFTER.includes(res.level) && host.playBonus ? () => host.playBonus!(res.level) : undefined;
-  const go = () => (bonus ? bonus() : host.play(primaryLevel));
+  // Leaving this card is a natural break, where the phone app may show an ad (ads.ts)
+  const go = () => adBreak(() => (bonus ? bonus() : host.play(primaryLevel)));
 
   const r = show(
     `<div class="card end${res.won ? ' won' : ''}">
@@ -919,11 +1044,13 @@ export function openEnd(host: CardHost, res: RunResult): void {
   );
   startRunner(r, host);
   r.querySelector('.again')?.addEventListener('click', go);
-  r.querySelector('.skip')?.addEventListener('click', () => (next ? host.play(primaryLevel) : openHome(host)));
-  r.querySelector('.levels-btn')?.addEventListener('click', () => {
-    host.progress().current = primaryLevel;
-    openHome(host);
-  });
+  r.querySelector('.skip')?.addEventListener('click', () => adBreak(() => (next ? host.play(primaryLevel) : openHome(host))));
+  r.querySelector('.levels-btn')?.addEventListener('click', () =>
+    adBreak(() => {
+      host.progress().current = primaryLevel;
+      openHome(host);
+    }),
+  );
   r.querySelector('.make')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
   r.querySelector('.savepic')?.addEventListener('click', () => void savePicture(hero!, name, level.name, res));
   r.querySelector('.report')?.addEventListener('click', async (e) => {
@@ -953,7 +1080,7 @@ export function openBonusEnd(host: CardHost, res: BonusResult): void {
     [`Streak bonus (${res.streaks} × ${BONUS.streak.bonus})`, res.streaks * BONUS.streak.bonus],
   ];
   const primary = next ? `Level ${next.id}: ${next.name} ▶` : 'Trail map ▶';
-  const go = () => (next ? host.play(next.id) : openHome(host));
+  const go = () => adBreak(() => (next ? host.play(next.id) : openHome(host)));
   const r = show(
     `<div class="card end won bonusend">
       <div class="cols">
@@ -982,11 +1109,13 @@ export function openBonusEnd(host: CardHost, res: BonusResult): void {
   );
   startRunner(r, host);
   r.querySelector('.again')?.addEventListener('click', go);
-  r.querySelector('.toss')?.addEventListener('click', () => host.playBonus?.(res.after ?? 0));
-  r.querySelector('.levels-btn')?.addEventListener('click', () => {
-    if (next) host.progress().current = next.id;
-    openHome(host);
-  });
+  r.querySelector('.toss')?.addEventListener('click', () => adBreak(() => host.playBonus?.(res.after ?? 0)));
+  r.querySelector('.levels-btn')?.addEventListener('click', () =>
+    adBreak(() => {
+      if (next) host.progress().current = next.id;
+      openHome(host);
+    }),
+  );
 }
 
 /** Portrait plus a strip with the result, saved as a picture to share. */

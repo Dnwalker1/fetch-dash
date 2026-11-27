@@ -4,6 +4,7 @@ import { artScale, resOf } from '../art/paint';
 import * as sfx from '../audio/sfx';
 import { GAME_HEIGHT, GAME_WIDTH, HORIZON } from '../config';
 import type { LevelDef, ObstacleKind } from '../levels';
+import type { BackLook } from '../art/petLook';
 
 /**
  * A run into the screen: the trail turns and heads for a vanishing point on
@@ -32,7 +33,13 @@ const NEAR_SCALE = 1.3;
 const LANES = [-1, 0, 1];
 /** Obstacles are this tall (px at full size, at the pet's distance) as far as jumping over them goes. */
 const CLEAR_H = 0.75;
-
+/**
+ * A jump is drawn this much as high as it really is (and treats in an arc
+ * too). Going straight up the screen reads as running off toward the
+ * horizon, so the pet rises less and grows a little instead.
+ */
+const RISE = 0.7;
+const AIR_GROW = 0.1;
 export interface HorizonHost {
   scene: Phaser.Scene;
   level: LevelDef;
@@ -42,6 +49,8 @@ export interface HorizonHost {
   petScale: number;
   jumpTexture: string;
   runAnim: string;
+  /** the pet seen from behind, if it's painted that way and loaded (else the side-on pet runs in) */
+  back?: BackLook;
   treatKey: string;
   /** Cats are quicker side to side and jump higher. */
   tune: { laneMs: number; jump: number };
@@ -79,6 +88,9 @@ export class HorizonRun {
   private things: Thing[] = [];
   private back: Phaser.GameObjects.GameObject[] = [];
   private road!: Phaser.GameObjects.Graphics;
+  /** rings on the ground under what's coming in the pet's lane */
+  private cue!: Phaser.GameObjects.Graphics;
+  private speed = 300;
   private lane = 0;
   private laneF = 0;
   private laneFrom = 0;
@@ -139,6 +151,7 @@ export class HorizonRun {
 
   update(dt: number, speed: number): void {
     this.clock += dt * 1000;
+    this.speed = speed;
     const dz = speed * dt;
     this.traveled += dz;
     // the lane change eases across
@@ -226,7 +239,8 @@ export class HorizonRun {
     if (far) {
       const src = sc.textures.get(far.key).getSourceImage() as HTMLImageElement;
       const scale = far.src ? (far.scale ?? 1) * 0.55 : artScale(sc, far.key, 0.55);
-      const h = src.height * scale;
+      // (painted strips have clear rows on top: skip them, as the side-on view does, so the strip's edge doesn't show)
+      const h = (src.height - (far.src ? 4 : 0)) * scale;
       const tile = add(
         sc.add
           .tileSprite(0, HORIZON.horizonY + 6 - h, GAME_WIDTH, h, far.key)
@@ -235,6 +249,7 @@ export class HorizonRun {
           .setDepth(DEPTH_BACK + 0.01),
       );
       tile.tilePositionX = 300;
+      if (far.src) tile.tilePositionY = 2;
       if (far.tint !== undefined) tile.setTint(far.tint);
     }
     // the land: lighter and hazier toward the horizon
@@ -246,6 +261,7 @@ export class HorizonRun {
     g.fillGradientStyle(t.haze, t.haze, t.grass, t.grass, 1, 1, 0, 0);
     g.fillRect(0, HORIZON.horizonY, GAME_WIDTH, 60);
     this.road = add(sc.add.graphics().setDepth(DEPTH_BACK + 0.03));
+    this.cue = add(sc.add.graphics().setDepth(DEPTH_BACK + 0.04));
     this.drawRoad();
   }
 
@@ -297,25 +313,66 @@ export class HorizonRun {
       const s = depthAt(t.z);
       const x = this.xAt(t.lane, t.z);
       const y = this.yAt(t.z);
-      t.img.setPosition(x, y - t.lift * s * NEAR_SCALE).setScale(t.base * s * NEAR_SCALE).setDepth(this.depthOf(t.z));
+      t.img.setPosition(x, y - t.lift * RISE * s * NEAR_SCALE).setScale(t.base * s * NEAR_SCALE).setDepth(this.depthOf(t.z));
       // fade in from the haze
       t.img.setAlpha(Phaser.Math.Clamp((HORIZON.spawnZ - t.z) / 400, 0, 1));
       const sw = (t.shadow?.getData('w') as number | undefined) ?? 1;
       if (t.shadow) t.shadow.setPosition(x, y).setScale(sw * s * NEAR_SCALE, artScale(this.host.scene, 'shadow') * s * NEAR_SCALE).setDepth(this.depthOf(t.z) - 0.001).setAlpha(t.img.alpha * 0.8);
     }
     const sp = this.host.petSprite;
+    const back = this.host.back;
     const x = this.xAt(this.laneF, 0);
     const y = this.yAt(0);
     const h = this.height;
-    sp.setPosition(x, y - h * NEAR_SCALE).setScale(this.host.petScale * NEAR_SCALE).setAngle(0).setFlipX(false).setDepth(this.depthOf(0));
+    const up = h / (HORIZON.jumpHeight * this.host.tune.jump);
+    sp.setPosition(x, y - h * RISE * NEAR_SCALE)
+      .setScale(this.host.petScale * NEAR_SCALE * (1 + AIR_GROW * up))
+      .setAngle(0)
+      .setFlipX(false)
+      .setDepth(this.depthOf(0));
     if (h > 0) {
       sp.anims.stop();
-      sp.setTexture(this.host.jumpTexture);
-    } else if (!sp.anims.isPlaying || sp.anims.currentAnim?.key !== this.host.runAnim) {
-      sp.play(this.host.runAnim);
+      sp.setTexture(back?.jump ?? this.host.jumpTexture);
+    } else {
+      // from behind, the pet leans into a lane change
+      const turning = this.clock - this.laneAt < this.host.tune.laneMs + 80;
+      const anim = !back ? this.host.runAnim : turning ? (this.lane < this.laneFrom ? back.leanLeft : back.leanRight) : back.anim;
+      if (!sp.anims.isPlaying || sp.anims.currentAnim?.key !== anim) {
+        // carry on from the same step of the stride
+        const at = sp.anims.isPlaying ? (sp.anims.currentFrame?.index ?? 1) - 1 : 0;
+        sp.play({ key: anim, startFrame: at });
+      }
     }
-    const ss = NEAR_SCALE * Math.max(0.4, 1 - h / 260);
-    this.host.petShadow.setPosition(x, y + 2).setScale(ss, ss).setAlpha(Math.max(0.3, 1 - h / 300)).setDepth(this.depthOf(0) - 0.002);
+    // the shadow stays on the ground in the lane, dark enough to judge the jump by
+    const ss = NEAR_SCALE * Math.max(0.45, 1 - h / 300);
+    this.host.petShadow
+      .setPosition(x, y + 2)
+      .setScale(ss * (back ? 0.6 : 1), ss)
+      .setAlpha(Math.max(0.6, 1 - h / 400))
+      .setDepth(this.depthOf(0) - 0.002);
+    this.drawCues();
+  }
+
+  /**
+   * A ring on the ground under each obstacle coming in the pet's lane. It
+   * turns gold when it's time to jump (the pet would be at the top of its
+   * jump as it passes over).
+   */
+  private drawCues(): void {
+    const g = this.cue;
+    g.clear();
+    const air = HORIZON.jumpMs / 1000;
+    const [soon, late] = [this.speed * air * 0.32, this.speed * air * 0.68];
+    for (const t of this.things) {
+      if (t.kind !== 'obstacle' || !t.img.active || t.img.getData('hit')) continue;
+      if (Math.abs(t.lane - this.lane) > 0.45 || t.z < -10 || t.z > 1100) continue;
+      const s = depthAt(t.z);
+      const now = t.z >= soon && t.z <= late;
+      const w = HORIZON.laneGap * 0.78 * s * NEAR_SCALE;
+      const fade = Phaser.Math.Clamp((1100 - t.z) / 400, 0, 1);
+      g.lineStyle(Math.max(2, 5 * s * NEAR_SCALE), now ? 0xffd24a : 0xffffff, (now ? 0.95 : 0.45) * fade);
+      g.strokeEllipse(this.xAt(t.lane, t.z), this.yAt(t.z) + 2 * s, w, w * 0.28);
+    }
   }
 
   // ---------- Things on the trail ----------

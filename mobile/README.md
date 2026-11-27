@@ -72,8 +72,39 @@ builds can also start from GitHub.
 The web game's favicons, home-screen icons and `site.webmanifest` live in
 `public/` and are left out of the app bundle.
 
+## Ads (Google AdMob)
+
+Ads run natively through `react-native-google-mobile-ads` (`ads.ts`), never
+inside the WebView, so the game's page never loads ad code.
+
+- **Where:** one full-screen (interstitial) ad when the player taps on from
+  the end-of-run or bonus card (next level, run again, map, toss again). The
+  game calls `adBreak()` (`src/ads.ts`) and waits for the app to say the ad
+  closed before the next run starts, so an ad never covers a run. On the web
+  every break carries straight on.
+- **How often:** `AD_RULES` in `ads.ts`: none in the first 2 breaks each time
+  the app opens, then at most one every 3 minutes. No banners.
+- **Content:** a standard 13+ app (not Families), ads rated PG at most. If the
+  player's age answer (`hero/age.ts`) is under 18, ads are non-personalised
+  and tagged as under the age of consent; under 13 also tags them as
+  child-directed with a G rating.
+- **Consent:** Google's UMP form shows on first launch where the law needs it
+  (EEA, UK, some US states). It's set up in AdMob under Privacy & messaging.
+  Where Google says players must be able to change their choice, the map card
+  shows a "Privacy choices" button.
+- **Test ads:** every build except the `production` profile shows Google's
+  test ads (`EXPO_PUBLIC_REAL_ADS=1` is set only there in `eas.json`), so
+  testers can tap them safely. Never tap real ads in your own app.
+- **IDs:** the AdMob App IDs are in `app.json` (the plugin entry): Fetch
+  Dash's own for Android (`~3604702384`), Google's test one for iOS until an
+  iOS app is added in AdMob. The "Between runs" ad unit IDs are
+  `BETWEEN_RUNS_UNIT` in `ads.ts`; a platform with an empty one shows no ads
+  in store builds. Test builds use the real App ID with Google's test ad
+  unit, which is how Google says to test.
+
 ## Not done yet
 
 - "Save picture" on the end card is a browser download, which a WebView
   ignores. It needs a small bridge to the phone's share sheet.
-- No ads, purchases or store listing yet.
+- No purchases yet. iOS ads still need the App Tracking Transparency prompt
+  and Fetch Dash's iOS App ID before an App Store build.

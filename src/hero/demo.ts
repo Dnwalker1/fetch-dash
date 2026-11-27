@@ -125,7 +125,7 @@ export async function makeDemoPortrait(img: HTMLImageElement, name: string): Pro
   g.strokeStyle = GOLD;
   g.lineWidth = 4;
   g.stroke();
-  const label = (name.trim() || 'Hero').toUpperCase().slice(0, 14);
+  const label = (name.trim() || 'Hero').toUpperCase().slice(0, 18);
   let size = 78;
   g.font = `italic 900 ${size}px "Arial Black", Impact, Arial, sans-serif`;
   while (g.measureText(label).width > S - 120 && size > 30) {
