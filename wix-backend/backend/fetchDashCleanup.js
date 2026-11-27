@@ -7,11 +7,11 @@
 //
 // Two parts:
 //
-//   1. trimFinishedGameDesigns()  a game design that is done (or failed) and
-//      still has the player's photo or its 4K print file: PERMANENTLY delete
-//      those files and clear them from the row. Normally appBackend.js does
-//      this the moment the game sees the result; this catches a game that was
-//      closed mid-wait.
+//   1. trimFinishedGameDesigns()  a game design that is done (or failed, or
+//      still 'pending' a day later) and still has the player's photo or its 4K
+//      print file: PERMANENTLY delete those files and clear them from the row.
+//      Normally appBackend.js does this the moment the game sees the result;
+//      this catches a game that was closed mid-wait.
 //
 //   2. deleteStaleInstalls()  FetchDashPlayers rows past their deleteAfter:
 //      PERMANENTLY delete every file of that player's remaining game designs,
@@ -28,12 +28,16 @@
 //
 // Logs counts only, never IDs or names. Both take { dryRun: true } to report
 // what they WOULD do: run dryRunFetchDashCleanup() from the Code panel.
+//
+// Also here: deleteGamePlayerData(code), for a player who emails asking for
+// their data to be deleted. It is run by hand and is a dry run unless given
+// { dryRun: false }.
 
 import wixData from 'wix-data';
 import { files as mediaFiles } from '@wix/media';
 import { auth as mediaAuth } from '@wix/essentials';
 import {
-  designFileIds, filesToTrim, isGameVisitorId, isOnAnOrder, stalePlan
+  designFileIds, filesToTrim, isGameVisitorId, isOnAnOrder, mergedIdsOf, playerLookup, stalePlan
 } from 'backend/fetchDashRetention';
 
 const PLAYERS = 'FetchDashPlayers';
@@ -41,7 +45,9 @@ const DESIGNS = 'PetDesigns';
 const PAGE = 50;
 const PLAYERS_PER_RUN = 500;
 const TRIMS_PER_RUN = 500;
-const FINISHED = ['ready', 'flagged', 'blocked', 'error', 'unclean', 'failed'];
+// 'pending' is included so abandoned designs are found; filesToTrim skips
+// one that is still being made.
+const FINISHED = ['ready', 'flagged', 'blocked', 'error', 'unclean', 'failed', 'pending'];
 
 /** The Velo job (jobs.config). */
 export async function deleteStaleInstalls(options = {}) {
@@ -66,6 +72,7 @@ export async function trimFinishedGameDesigns(options = {}) {
   const report = { designs: 0, filesDeleted: 0, failed: 0 };
   let skip = 0;
   let examined = 0;
+  const now = Date.now();
   while (examined < TRIMS_PER_RUN) {
     const res = await wixData.query(DESIGNS)
       .startsWith('visitorId', 'game_')
@@ -77,7 +84,7 @@ export async function trimFinishedGameDesigns(options = {}) {
     if (!res.items.length) break;
     for (const d of res.items) {
       examined++;
-      const ids = isGameVisitorId(d.visitorId) ? filesToTrim(d) : [];
+      const ids = isGameVisitorId(d.visitorId) ? filesToTrim(d, now) : [];
       if (!ids.length) { skip++; continue; }
       if (dryRun) { report.designs++; report.filesDeleted += ids.length; skip++; continue; }
       try {
@@ -233,6 +240,63 @@ async function deleteGameDesigns(visitorId) {
     out.rows++;
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// 3. A player's request to delete their data (run by hand)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deletes everything the server holds for one game player: their design rows
+ * (any age, never one on an order) and every file of them, PERMANENTLY, the
+ * rows of the older IDs merged into theirs, and their player row, count
+ * included. (So the free portraits start again on that phone: a deletion
+ * request outranks the limit.)
+ *
+ * code is the 8-character game code the game shows on its photo screen, or a
+ * full game ID. A code that matches more than one player is refused.
+ *
+ * A dry run unless called with { dryRun: false }. From the Code panel:
+ *   deleteGamePlayerData('AB12CD34')                    what would go
+ *   deleteGamePlayerData('AB12CD34', { dryRun: false }) delete it
+ * Returns counts only.
+ */
+export async function deleteGamePlayerData(code, options = {}) {
+  const dryRun = options.dryRun !== false;
+  const report = { dryRun, found: 0, playerRows: 0, designRowsDeleted: 0, filesDeleted: 0, orderedKept: 0 };
+  const look = playerLookup(code);
+  if (!look) return { ...report, refused: 'not a game code' };
+
+  let q = wixData.query(PLAYERS);
+  q = look.exact ? q.eq('_id', look.exact) : q.startsWith('_id', look.prefix);
+  const res = await q.limit(5).find({ suppressAuth: true });
+  const rows = res.items.filter(r => look.exact ? r._id === look.exact : String(r._id).toLowerCase().startsWith(look.prefix));
+  report.found = rows.length;
+  if (rows.length > 1) return { ...report, refused: 'code matches more than one player: ask for the full ID' };
+
+  // With no player row there can still be designs under the full ID.
+  const row = rows[0];
+  const ids = row ? [row._id, ...mergedIdsOf(row)] : (look.exact ? [look.exact] : []);
+  for (const id of [...new Set(ids)]) {
+    const all = await wixData.query(DESIGNS).eq('visitorId', id).limit(1000).find({ suppressAuth: true });
+    report.orderedKept += all.items.filter(d => d.visitorId === id && isOnAnOrder(d)).length;
+    if (dryRun) {
+      const mine = await gameDesignsOf(id);
+      report.designRowsDeleted += mine.length;
+      report.filesDeleted += mine.reduce((n, d) => n + designFileIds(d).length, 0);
+    } else {
+      const gone = await deleteGameDesigns(id);
+      report.designRowsDeleted += gone.rows;
+      report.filesDeleted += gone.files;
+    }
+    const player = await wixData.get(PLAYERS, id, { suppressAuth: true });
+    if (player) {
+      report.playerRows++;
+      if (!dryRun) await wixData.remove(PLAYERS, id, { suppressAuth: true });
+    }
+  }
+  console.log(`Fetch Dash deletion request${dryRun ? ' (dry run)' : ''}: ${JSON.stringify(report)}`);
+  return report;
 }
 
 // ---------------------------------------------------------------------------

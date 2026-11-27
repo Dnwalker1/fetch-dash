@@ -3,10 +3,10 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DAY_MS, DESIGNS_KEEP_DAYS, COUNT_KEEP_DAYS, seenFields, stalePlan, filesToTrim, fileIdOf, designFileIds
+  DAY_MS, DESIGNS_KEEP_DAYS, COUNT_KEEP_DAYS, seenFields, stalePlan, filesToTrim, fileIdOf, designFileIds, playerLookup
 } from 'backend/fetchDashRetention';
 import { tallyPets, portraitRefusal } from 'backend/fetchDashPets';
-import { deleteStaleInstalls, dryRunFetchDashCleanup, trimGameDesign } from 'backend/fetchDashCleanup';
+import { deleteGamePlayerData, deleteStaleInstalls, dryRunFetchDashCleanup, trimGameDesign } from 'backend/fetchDashCleanup';
 import { db } from 'wix-data';
 import { store } from '@wix/media';
 
@@ -55,6 +55,17 @@ test('file IDs and what a finished game design can lose', () => {
   assert.deepEqual(filesToTrim({ ...d, status: 'pending' }), [], 'never while it is still being made');
   assert.deepEqual(filesToTrim({ ...d, generatedArtUrl: url('v') }), ['p'], 'never the preview');
   assert.deepEqual(filesToTrim({ ...d, status: 'ordered' }), [], 'never an ordered design');
+  const old = { ...d, status: 'pending', _createdDate: daysAgo(2) };
+  assert.deepEqual(filesToTrim(old, NOW).sort(), ['g', 'p'], 'abandoned a day later');
+  assert.deepEqual(filesToTrim({ ...old, _createdDate: new Date(NOW - 3600e3) }, NOW), [], 'not while it may still finish');
+});
+
+test('game codes', () => {
+  assert.deepEqual(playerLookup('AB12CD34'), { prefix: 'game_ab12cd34' });
+  assert.deepEqual(playerLookup(' game_ab12cd34 '), { prefix: 'game_ab12cd34' });
+  const full = 'ab12cd34-0000-4000-8000-000000000000';
+  assert.deepEqual(playerLookup(full), { exact: `game_${full}` });
+  for (const bad of ['', 'AB12', 'visitor-abc', 'zz12cd34', null]) assert.equal(playerLookup(bad), null);
 });
 
 // ---------------------------------------------------------------------------
@@ -93,7 +104,9 @@ function seed() {
   // Closed mid-wait: finished, photo still there
   design('w1', 'game_active', 'error');
   // Still being made
-  design('p1', 'game_active', 'pending');
+  design('p1', 'game_active', 'pending', { _createdDate: new Date(NOW - 60e3) });
+  // Abandoned: still 'pending' 3 days later
+  design('p2', 'game_active', 'pending');
   return { players, designs };
 }
 
@@ -126,6 +139,7 @@ test('the nightly run deletes permanently and keeps what it should', async (t) =
   assert.ok(!store.files.has('a1-photo') && !store.files.has('a1-print'));
   assert.equal(designs.get('w1').originalPhotoUrl, '', 'a game closed mid-wait loses its photo too');
   assert.ok(store.files.has('p1-photo'), 'a design still being made keeps its photo');
+  assert.ok(!store.files.has('p2-photo') && store.files.has('p2-preview'), 'an abandoned one loses its photo, not its preview');
 
   // 40 days unseen: trimmed to a count
   const gone = players.get('game_gone');
@@ -177,4 +191,42 @@ test('trimGameDesign only touches game designs', async () => {
   assert.ok(store.files.has('s1-photo'));
   assert.equal(await trimGameDesign(designs.get('a1')), 2);
   assert.equal(designs.get('a1').originalPhotoUrl, '');
+});
+
+test('a deletion request removes one player and nothing else', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
+  const players = db.get('FetchDashPlayers');
+  const designs = db.get('PetDesigns');
+  const id = 'game_ab12cd34-0000-4000-8000-000000000001';
+  players.set(id, { _id: id, countedDesigns: '["k1","k2"]', designPets: '{"k1":"Bo"}', mergedFrom: '["game_oldweb"]', lastSeen: daysAgo(2), deleteAfter: daysAgo(-28) });
+  players.set('game_oldweb', { _id: 'game_oldweb', countedDesigns: '["k3"]' });
+  const add = (dId, visitorId, status) => {
+    const d = { _id: dId, visitorId, status, _createdDate: daysAgo(1), originalPhotoUrl: '', generatedArtUrl: '', previewArtUrl: url(`${dId}-preview`) };
+    store.files.add(`${dId}-preview`); designs.set(dId, d);
+  };
+  add('k1', id, 'ready'); add('k2', id, 'blocked'); add('k3', 'game_oldweb', 'ready'); add('k4', id, 'ordered');
+
+  // A code shared by two players is refused
+  const twin = 'game_ab12cd34-0000-4000-8000-000000000002';
+  players.set(twin, { _id: twin, countedDesigns: '[]' });
+  assert.match((await deleteGamePlayerData('AB12CD34', { dryRun: false })).refused, /more than one/);
+  assert.ok(players.has(id) && designs.has('k1'));
+  players.delete(twin);
+
+  const dry = await deleteGamePlayerData('AB12CD34');
+  assert.equal(dry.dryRun, true);
+  assert.equal(dry.designRowsDeleted, 3);
+  assert.equal(dry.playerRows, 2);
+  assert.ok(players.has(id) && designs.has('k1') && store.files.has('k1-preview'), 'dry run deletes nothing');
+
+  const r = await deleteGamePlayerData('ab12cd34', { dryRun: false });
+  assert.equal(r.found, 1);
+  assert.equal(r.orderedKept, 1);
+  assert.ok(!players.has(id) && !players.has('game_oldweb'));
+  for (const k of ['k1', 'k2', 'k3']) assert.ok(!designs.has(k) && !store.files.has(`${k}-preview`));
+  assert.ok(designs.has('k4'), 'a design on an order stays');
+  assert.ok(players.has('game_active') && designs.has('a1') && designs.has('s1'), 'nobody else touched');
+  assert.equal(store.trash.size, 0);
+
+  assert.equal((await deleteGamePlayerData('not-a-code', { dryRun: false })).refused, 'not a game code');
 });

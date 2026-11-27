@@ -110,6 +110,17 @@ function deviceId(): string {
   return appPlayer()?.id ?? storedId();
 }
 
+/** The short code a player quotes to have their data deleted from the
+ * server: the first 8 characters of the ID the server keeps them under. The
+ * server's delete refuses a code that matches more than one player. */
+export function gameCode(): string {
+  return deviceId().replace(/[^0-9a-z]/gi, '').slice(0, 8).toUpperCase();
+}
+
+/** How long goodwookie.com keeps a portrait it painted for the game. The
+ * game's own copy on the device is what the player keeps. */
+export const SERVER_PORTRAIT_DAYS = 7;
+
 /** Tells the server which kind of ID this is, and the game's older ID, so a
  * phone that made portraits before the app had a player ID keeps its count. */
 function idQuery(): string {
@@ -213,23 +224,32 @@ function allowanceFrom(body: Json): ServerAllowance | undefined {
 }
 
 /**
- * Keeps the portrait on the device. The server deletes unordered designs
- * after 7 days, so a saved web address would stop working. Turned into a
- * JPEG data URL (about 200 KB); if the picture can't be read, the address is
- * kept instead.
+ * Keeps the portrait on the device. The server deletes its copy after
+ * SERVER_PORTRAIT_DAYS, so a saved web address would stop working. Turned
+ * into a JPEG data URL (about 200 KB), trying three times; if the picture
+ * still can't be read, the address is kept instead and isOnDevice() is false,
+ * so the game can warn the player.
  */
-export async function keepOnDevice(url: string, maxSide = 1024): Promise<string> {
-  try {
-    const img = await loadImage(url);
-    const s = Math.min(1, maxSide / Math.max(img.width, img.height));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.width * s);
-    c.height = Math.round(img.height * s);
-    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL('image/jpeg', 0.88);
-  } catch {
-    return url;
+export async function keepOnDevice(url: string, maxSide = 1024, tries = 3): Promise<string> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const img = await loadImage(i ? `${url}${url.includes('?') ? '&' : '?'}try=${i}` : url);
+      const s = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s);
+      c.height = Math.round(img.height * s);
+      c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.88);
+    } catch {
+      if (i < tries - 1) await wait(1500);
+    }
   }
+  return url;
+}
+
+/** True when a portrait is held on the device itself, not as a server address. */
+export function isOnDevice(portrait: string | undefined): boolean {
+  return !!portrait && portrait.startsWith('data:');
 }
 
 /** Upload → start the design → wait for it. Calls onStep with a short status line. */

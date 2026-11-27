@@ -10,7 +10,7 @@ this public repo).
 
 | What | Where | Kept until |
 | --- | --- | --- |
-| The pet photo the player uploads | Media Manager, `app-uploads` | **Permanently deleted** as soon as the portrait is done or fails. A refused photo was already deleted by the design code. |
+| The pet photo the player uploads | Media Manager, `app-uploads` | **Permanently deleted** as soon as the portrait is done or fails, or the next night if the game was closed mid-wait (or the design is still stuck a day later). A refused photo was already deleted by the design code. |
 | The 4K print file | Media Manager, `pet-designs` | **Permanently deleted** with the photo. The game can't order, so it never needs it. |
 | The 1024 px portrait | Media Manager, `pet-designs` | The site's 7-day clean-up (`cleanup.js` / `petDesigns.js`), same as every unordered design. The game keeps its own copy on the phone. |
 | The design row (`PetDesigns`, `visitorId` `game_<id>`) | CMS | The same 7-day clean-up. |
@@ -24,10 +24,27 @@ Trash is never used.
 `lastSeen` is written when the game asks for its allowance or a design, at most
 once a day.
 
+## When a player asks for their data to be deleted
+
+The game's photo screen shows a game code (the first 8 characters of its ID)
+and says to email info@goodwookie.com with it. Then, in the Velo Code panel:
+
+1. `deleteGamePlayerData('AB12CD34')` is a dry run: it says how many design
+   rows, files and player rows it would delete, and how many designs on an
+   order it keeps.
+2. `deleteGamePlayerData('AB12CD34', { dryRun: false })` deletes them, files
+   permanently.
+
+It removes the player row too, count included, so that phone gets its free
+portraits again. A code that matches two players is refused; ask for the
+full ID. It logs counts only.
+
 ## On the phone
 
 The game keeps the player's portraits, pet names and progress in its own
-storage. They stay until the game is deleted (or, on the web, until site data
+storage. It turns each portrait into a picture on the phone (three tries); if
+that fails it tells the player to use Save picture, because the server's copy
+goes after 7 days. They stay until the game is deleted (or, on the web, until site data
 is cleared). The server can't see or delete these.
 
 ## Which ID

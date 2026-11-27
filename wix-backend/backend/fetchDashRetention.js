@@ -137,13 +137,45 @@ export function isFinished(d) {
   return !!d?.status && d.status !== 'pending';
 }
 
+/** A design still 'pending' this long after it was made was abandoned (a
+ * portrait takes a minute or two), so its photo goes too. */
+export const STUCK_AFTER_MS = DAY_MS;
+
+export function isAbandoned(d, now = Date.now()) {
+  const made = toTime(d?._createdDate);
+  return d?.status === 'pending' && Number.isFinite(made) && now - made >= STUCK_AFTER_MS;
+}
+
 /**
- * The files a finished game design no longer needs: the player's photo and
- * the 4K print file. Never the preview, even where a row points two fields at
+ * A deletion request's game code -> how to find the player, or null if it
+ * isn't one. The game shows the first 8 characters of its ID (gameCode() in
+ * src/hero/api.ts); a full ID, with or without "game_", also works.
+ *   { exact: 'game_<id>' }  or  { prefix: 'game_<8 chars>' }
+ */
+export function playerLookup(code) {
+  const s = String(code || '').trim().toLowerCase().replace(/^game_/, '');
+  if (/^[0-9a-f]{8}$/.test(s)) return { prefix: GAME_PREFIX + s };
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(s)) return { exact: GAME_PREFIX + s };
+  return null;
+}
+
+/** The older game IDs merged into a player row (mergedFrom is JSON text). */
+export function mergedIdsOf(row) {
+  try {
+    const v = JSON.parse(row?.mergedFrom || '[]');
+    return Array.isArray(v) ? v.filter(isGameVisitorId) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The files a finished (or abandoned) game design no longer needs: the
+ * player's photo and the 4K print file. Never the preview, even where a row points two fields at
  * the same file.
  */
-export function filesToTrim(d) {
-  if (!isFinished(d) || isOnAnOrder(d)) return [];
+export function filesToTrim(d, now = Date.now()) {
+  if ((!isFinished(d) && !isAbandoned(d, now)) || isOnAnOrder(d)) return [];
   const keep = fileIdOf(d?.previewArtUrl);
   return [...new Set([d?.originalPhotoUrl, d?.generatedArtUrl].map(fileIdOf).filter(id => id && id !== keep))];
 }

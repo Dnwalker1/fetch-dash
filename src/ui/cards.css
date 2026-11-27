@@ -60,6 +60,8 @@
 #ui .head p, #ui .lead { color: var(--slate); }
 #ui .small { font-size: 0.85em; color: var(--slate); text-align: center; }
 #ui .fine { font-size: 0.78em; color: #6a6a6a; text-align: center; margin-top: 0.5em; }
+#ui .fine.privacy { margin-top: 0.2em; }
+#ui .fine .code { font-family: ui-monospace, monospace; font-weight: bold; color: #444; user-select: all; }
 #ui .error {
   background: #fbe3dc;
   border: 1px solid var(--rust);
@@ -511,6 +513,8 @@
 @media (max-height: 460px) {
   #ui .card { padding: 8px 14px; }
   #ui .head p, #ui .fine { display: none; }
+  /* The deletion line stays: it's how a player gets their data removed */
+  #ui .fine.privacy { display: block; font-size: 0.68em; margin-top: 0.15em; }
   #ui .head + .cols { margin-top: 0.3em; }
   #ui .drop { max-height: 46vh; }
   #ui .field { margin-bottom: 0.2em; }
