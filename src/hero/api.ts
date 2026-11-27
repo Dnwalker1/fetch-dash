@@ -17,6 +17,8 @@
  * (src/hero/demo.ts), so everything can be played and tested today.
  */
 
+import { ageLine, isAgeBand, loadAgeBand, saveAgeBand } from './age';
+
 const BASE = (import.meta.env.VITE_DYP_API_BASE as string | undefined)?.replace(/\/$/, '');
 const KEY = import.meta.env.VITE_DYP_APP_KEY as string | undefined;
 // The backend makes the Arcade Hero for the game whatever is sent; this is
@@ -56,7 +58,16 @@ const MESSAGES: Record<string, string> = {
   timeout: "This one is taking a long time. Try again in a few minutes; a portrait that didn't come out isn't counted.",
   not_for_game: 'That part lives in Design Your Pet.',
   network: "Couldn't reach Design Your Pet. Check your connection and try again.",
+  age_needed: 'Please tell us when you were born first.',
+  age_blocked: ageLine('under13'),
+  minor_portraits_paused: ageLine('13-17'),
+  age_check_unavailable: 'Hero portraits are unavailable right now. Try again in a minute.',
 };
+
+/** The server's answer on age: it keeps the first band it was sent. */
+function takeServerAge(body: Json): void {
+  if (isAgeBand(body.ageBand)) saveAgeBand(body.ageBand, true);
+}
 
 export function messageFor(code: string): string {
   return MESSAGES[code] ?? MESSAGES.failed;
@@ -255,7 +266,10 @@ export function isOnDevice(portrait: string | undefined): boolean {
 /** Upload → start the design → wait for it. Calls onStep with a short status line. */
 export async function generateLive(photo: Blob, name: string, onStep: (s: string) => void, opts: HeroOptions = {}): Promise<LiveResult> {
   onStep('Uploading your photo…');
-  const u = await call('/uploadUrl', { method: 'POST', body: JSON.stringify({ mimeType: 'image/jpeg' }) });
+  // Only the age band is sent (hero/age.ts); the server checks it too.
+  const ageBand = loadAgeBand() ?? '';
+  const u = await call('/uploadUrl', { method: 'POST', body: JSON.stringify({ mimeType: 'image/jpeg', ageBand }) });
+  takeServerAge(u);
   if (!u.ok) throw new HeroError(String(u.code), messageFor(String(u.code)));
 
   let put: Response;
@@ -273,8 +287,9 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
     const d = await call(`/designs?${idQuery()}`, {
       method: 'POST',
       // `pet` is the name the free portraits are counted under (3 per pet).
-      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true }),
+      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true, ageBand }),
     });
+    takeServerAge(d);
     if (d.ok) designId = String(d.designId);
     else if (d.code === 'one_at_a_time' && d.designId) designId = String(d.designId);
     else if (d.code === 'upload_not_ready') await wait(Number(d.retryAfterMs) || 1000);

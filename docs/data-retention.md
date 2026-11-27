@@ -39,6 +39,17 @@ It removes the player row too, count included, so that phone gets its free
 portraits again. A code that matches two players is refused; ask for the
 full ID. It logs counts only.
 
+## Sent to OpenAI
+
+The game's portraits are painted by OpenAI (27 Nov 2026). For each portrait
+the server sends the pet photo, the brand's style examples and the prompt,
+which has the pet's name in it. No device or game ID is sent. OpenAI doesn't
+train on API data; it keeps requests up to 30 days to check for abuse until
+zero data retention is switched on for the project (Don asks OpenAI). Only
+players who said they are 18 or over can make portraits until then. Their
+age band (`under13`, `13-17`, `18+`) is kept on the player row with the count,
+never the birth date.
+
 ## On the phone
 
 The game keeps the player's portraits, pet names and progress in its own

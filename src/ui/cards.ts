@@ -7,6 +7,8 @@ import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, playStyle, type PlayStyle, type Progress } from '../levels';
 import { HERO_STEPS, HeroError, LIVE, SERVER_PORTRAIT_DAYS, fetchAllowance, gameCode, generateLive, isOnDevice, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
+import { ageLine, loadAgeBand, portraitsAllowed, saveAgeBand } from '../hero/age';
+import { openAgeGate } from './ageGate';
 import {
   MAX_PETS,
   PORTRAITS_PER_PET,
@@ -194,6 +196,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   const name = hero?.name ?? '';
   const allow = allowanceFor(name);
   const pets = petCounts();
+  // The live portraits are for players 18 and over for now (hero/age.ts).
+  // Asked once, when the player first goes to choose a photo.
+  const band = LIVE ? loadAgeBand() : '18+';
+  const ageOff = band !== undefined && !portraitsAllowed(band);
 
   const chips = (Object.keys(PALETTES) as string[])
     .map(
@@ -248,7 +254,12 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
             ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>`;
   }
 
-  const photoBox = allow.totalLeft > 0
+  const photoBox = ageOff
+    ? `<div class="drop used">
+         <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
+       </div>
+       <p class="small">${ageLine(band!)}</p>`
+    : allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
          <img src="${hasPhoto ? photoUrl : './hero-example.webp'}" alt="" />
          ${hasPhoto ? '' : '<span class="tag">Example</span>'}
@@ -297,7 +308,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       ${lastError ? `<p class="error">${esc(lastError)}</p>` : ''}
       <div class="actions">
         ${opts.canGoBack ? '<button class="btn ghost back">Back</button>' : '<button class="btn ghost skip">Skip, just play</button>'}
-        ${allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
+        ${!ageOff && allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
       </div>
       <p class="fine">Use a photo of just your pet${LIVE ? '' : '. This preview makes a stand-in portrait on your device; the real one comes from Design Your Pet'}.</p>
       ${LIVE ? `<p class="fine privacy">To have everything deleted from our server, email info@goodwookie.com with your game code <span class="code">${esc(gameCode())}</span>.</p>` : ''}
@@ -409,6 +420,19 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       openSetup(host, opts);
     }),
   );
+  // No age answer yet: the age screen comes first, then the photo picker
+  if (LIVE && band === undefined) {
+    r.querySelector('label.drop')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      keepName();
+      openAgeGate((b) => {
+        saveAgeBand(b);
+        openSetup(host, opts);
+        // Still inside the tap on Continue, so the picker is allowed to open
+        if (portraitsAllowed(b)) document.querySelector<HTMLInputElement>('#ui .card.setup input[type=file]')?.click();
+      });
+    });
+  }
   r.querySelector<HTMLInputElement>('input[type=file]')?.addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;

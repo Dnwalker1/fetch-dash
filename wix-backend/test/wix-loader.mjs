@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FAKES = { 'wix-data': 'wix-data.mjs', '@wix/media': 'wix-media.mjs', '@wix/essentials': 'wix-essentials.mjs' };
+const FAKES = { 'wix-data': 'wix-data.mjs', '@wix/media': 'wix-media.mjs', '@wix/essentials': 'wix-essentials.mjs', 'wix-secrets-backend': 'wix-secrets.mjs' };
 
 export async function resolve(specifier, context, next) {
   if (specifier.startsWith('backend/')) {
