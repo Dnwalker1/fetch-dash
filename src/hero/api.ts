@@ -17,6 +17,8 @@
  * (src/hero/demo.ts), so everything can be played and tested today.
  */
 
+import { ageLine, isAgeBand, loadAgeBand, saveAgeBand } from './age';
+
 const BASE = (import.meta.env.VITE_DYP_API_BASE as string | undefined)?.replace(/\/$/, '');
 const KEY = import.meta.env.VITE_DYP_APP_KEY as string | undefined;
 // The backend makes the Arcade Hero for the game whatever is sent; this is
@@ -56,7 +58,16 @@ const MESSAGES: Record<string, string> = {
   timeout: "This one is taking a long time. Try again in a few minutes; a portrait that didn't come out isn't counted.",
   not_for_game: 'That part lives in Design Your Pet.',
   network: "Couldn't reach Design Your Pet. Check your connection and try again.",
+  age_needed: 'Please tell us when you were born first.',
+  age_blocked: ageLine('under13'),
+  minor_portraits_paused: ageLine('13-17'),
+  age_check_unavailable: 'Hero portraits are unavailable right now. Try again in a minute.',
 };
+
+/** The server's answer on age: it keeps the first band it was sent. */
+function takeServerAge(body: Json): void {
+  if (isAgeBand(body.ageBand)) saveAgeBand(body.ageBand, true);
+}
 
 export function messageFor(code: string): string {
   return MESSAGES[code] ?? MESSAGES.failed;
@@ -109,6 +120,17 @@ function appPlayer(): { id: string; kind: string } | undefined {
 function deviceId(): string {
   return appPlayer()?.id ?? storedId();
 }
+
+/** The short code a player quotes to have their data deleted from the
+ * server: the first 8 characters of the ID the server keeps them under. The
+ * server's delete refuses a code that matches more than one player. */
+export function gameCode(): string {
+  return deviceId().replace(/[^0-9a-z]/gi, '').slice(0, 8).toUpperCase();
+}
+
+/** How long goodwookie.com keeps a portrait it painted for the game. The
+ * game's own copy on the device is what the player keeps. */
+export const SERVER_PORTRAIT_DAYS = 7;
 
 /** Tells the server which kind of ID this is, and the game's older ID, so a
  * phone that made portraits before the app had a player ID keeps its count. */
@@ -213,29 +235,41 @@ function allowanceFrom(body: Json): ServerAllowance | undefined {
 }
 
 /**
- * Keeps the portrait on the device. The server deletes unordered designs
- * after 7 days, so a saved web address would stop working. Turned into a
- * JPEG data URL (about 200 KB); if the picture can't be read, the address is
- * kept instead.
+ * Keeps the portrait on the device. The server deletes its copy after
+ * SERVER_PORTRAIT_DAYS, so a saved web address would stop working. Turned
+ * into a JPEG data URL (about 200 KB), trying three times; if the picture
+ * still can't be read, the address is kept instead and isOnDevice() is false,
+ * so the game can warn the player.
  */
-export async function keepOnDevice(url: string, maxSide = 1024): Promise<string> {
-  try {
-    const img = await loadImage(url);
-    const s = Math.min(1, maxSide / Math.max(img.width, img.height));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.width * s);
-    c.height = Math.round(img.height * s);
-    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL('image/jpeg', 0.88);
-  } catch {
-    return url;
+export async function keepOnDevice(url: string, maxSide = 1024, tries = 3): Promise<string> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const img = await loadImage(i ? `${url}${url.includes('?') ? '&' : '?'}try=${i}` : url);
+      const s = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s);
+      c.height = Math.round(img.height * s);
+      c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.88);
+    } catch {
+      if (i < tries - 1) await wait(1500);
+    }
   }
+  return url;
+}
+
+/** True when a portrait is held on the device itself, not as a server address. */
+export function isOnDevice(portrait: string | undefined): boolean {
+  return !!portrait && portrait.startsWith('data:');
 }
 
 /** Upload → start the design → wait for it. Calls onStep with a short status line. */
 export async function generateLive(photo: Blob, name: string, onStep: (s: string) => void, opts: HeroOptions = {}): Promise<LiveResult> {
   onStep('Uploading your photo…');
-  const u = await call('/uploadUrl', { method: 'POST', body: JSON.stringify({ mimeType: 'image/jpeg' }) });
+  // Only the age band is sent (hero/age.ts); the server checks it too.
+  const ageBand = loadAgeBand() ?? '';
+  const u = await call('/uploadUrl', { method: 'POST', body: JSON.stringify({ mimeType: 'image/jpeg', ageBand }) });
+  takeServerAge(u);
   if (!u.ok) throw new HeroError(String(u.code), messageFor(String(u.code)));
 
   let put: Response;
@@ -253,8 +287,9 @@ export async function generateLive(photo: Blob, name: string, onStep: (s: string
     const d = await call(`/designs?${idQuery()}`, {
       method: 'POST',
       // `pet` is the name the free portraits are counted under (3 per pet).
-      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true }),
+      body: JSON.stringify({ fileId: file.id, style: STYLE, text: name.toUpperCase(), pet: name.trim(), sloth: opts.sloth === true, ageBand }),
     });
+    takeServerAge(d);
     if (d.ok) designId = String(d.designId);
     else if (d.code === 'one_at_a_time' && d.designId) designId = String(d.designId);
     else if (d.code === 'upload_not_ready') await wait(Number(d.retryAfterMs) || 1000);

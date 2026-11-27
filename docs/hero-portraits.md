@@ -42,6 +42,20 @@ site) then:
   "Free portraits" below), counted in the `FetchDashPlayers` collection,
   which the 7-day clean-up doesn't touch. Only portraits that came out count;
 - still applies the daily tries limit and the site-wide hourly limit;
+- paints and checks the game's portraits with **OpenAI**, not Gemini
+  (27 Nov 2026, Don's choice: Google's terms don't allow Gemini in an app
+  likely to be used by under-18s). `backend/fetchDashOpenAI.js` pins
+  `gpt-image-2.5-sunburst-2026-09-08` (on OpenAI's zero data retention list)
+  for the picture and uses `gpt-6-luna` for the photo, name and art checks.
+  Design Your Pet and the website stay on Gemini;
+- makes portraits only for players **18 and over** for now
+  (`backend/fetchDashAge.js`). The game asks the birth month and year once,
+  at the first portrait (`src/ui/ageGate.ts`), and sends only the band
+  (`under13`, `13-17`, `18+`). The server keeps the first band and refuses
+  `/uploadUrl` and `/designs` for the others (`age_blocked`,
+  `minor_portraits_paused`), so no photo is stored or sent for them. 13-17
+  portraits wait for the parent consent flow and OpenAI's zero data
+  retention;
 - lets the game use only `allowance`, `uploadUrl`, `designs`, `designs/<id>`
   and `report`. Previews, checkout and orders answer `not_for_game`;
 - answers the browser's CORS checks (`options_…` functions, and
@@ -104,7 +118,9 @@ backstop for that.
    after 4 it says "Still painting…"). A dropped connection mid-wait just
    tries again.
 4. Copies `previewUrl` onto the device as a JPEG data URL, because the
-   server deletes unordered designs after 7 days. Shows it on the "Meet your
+   server deletes unordered designs after 7 days. Once the game has seen the
+   result, the server permanently deletes the photo and the 4K print file
+   (see `docs/data-retention.md`). Shows it on the "Meet your
    hero" card and the end card.
 5. "Report picture" on the end card calls `POST /report` (Google Play's
    AI-content rule), only for live portraits.
@@ -119,6 +135,12 @@ brings back its name, look and portrait (kept on the device), and "+ New pet"
 starts another while there's room.
 
 ## 4. Still to do
+
+- Parent or guardian consent for 13-17 players (Elon's
+  `consent-flow-proposal.md`): the email, the confirmation page and the
+  `FetchDashConsent` record (only a one-way hash kept, for 2 years, as proof:
+  Don chose Option A on 27 Nov 2026). Waits for OpenAI to approve zero data
+  retention.
 
 - The stand-in portrait in `src/hero/demo.ts` still draws the Anime Hero
   layout. It only shows when the live settings are missing.

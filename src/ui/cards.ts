@@ -6,8 +6,10 @@ import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, playStyle, type PlayStyle, type Progress } from '../levels';
-import { HERO_STEPS, HeroError, LIVE, fetchAllowance, generateLive, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
+import { HERO_STEPS, HeroError, LIVE, SERVER_PORTRAIT_DAYS, fetchAllowance, gameCode, generateLive, isOnDevice, keepOnDevice, loadImage, messageFor, preparePhoto, reportDesign } from '../hero/api';
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
+import { ageLine, loadAgeBand, portraitsAllowed, saveAgeBand } from '../hero/age';
+import { openAgeGate } from './ageGate';
 import {
   MAX_PETS,
   PORTRAITS_PER_PET,
@@ -205,6 +207,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   const name = hero?.name ?? '';
   const allow = allowanceFor(name);
   const pets = petCounts();
+  // The live portraits are for players 18 and over for now (hero/age.ts).
+  // Asked once, when the player first goes to choose a photo.
+  const band = LIVE ? loadAgeBand() : '18+';
+  const ageOff = band !== undefined && !portraitsAllowed(band);
 
   const chips = (Object.keys(PALETTES) as string[])
     .map(
@@ -271,7 +277,12 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     : card
       ? `<img class="pet card-art" src="${card}" alt="" data-fallback="${esc(flip)}" />`
       : flip;
-  const photoBox = allow.totalLeft > 0
+  const photoBox = ageOff
+    ? `<div class="drop used">
+         <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
+       </div>
+       <p class="small">${ageLine(band!)}</p>`
+    : allow.totalLeft > 0
     ? `<label class="drop${hasPhoto ? ' has' : ''}">
          ${hasPhoto ? `<img src="${photoUrl}" alt="" />` : example}
          <input type="file" accept="image/*" />
@@ -319,9 +330,10 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       ${lastError ? `<p class="error">${esc(lastError)}</p>` : ''}
       <div class="actions">
         ${opts.canGoBack ? '<button class="btn ghost back">Back</button>' : '<button class="btn ghost skip">Skip, just play</button>'}
-        ${allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
+        ${!ageOff && allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
       </div>
       <p class="fine">Use a photo of just your pet${LIVE ? '' : '. This preview makes a stand-in portrait on your device; the real one comes from Design Your Pet'}.</p>
+      ${LIVE ? `<p class="fine privacy">To have everything deleted from our server, email info@goodwookie.com with your game code <span class="code">${esc(gameCode())}</span>.</p>` : ''}
     </div>`,
   );
   lastError = '';
@@ -430,6 +442,19 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       openSetup(host, opts);
     }),
   );
+  // No age answer yet: the age screen comes first, then the photo picker
+  if (LIVE && band === undefined) {
+    r.querySelector('label.drop')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      keepName();
+      openAgeGate((b) => {
+        saveAgeBand(b);
+        openSetup(host, opts);
+        // Still inside the tap on Continue, so the picker is allowed to open
+        if (portraitsAllowed(b)) document.querySelector<HTMLInputElement>('#ui .card.setup input[type=file]')?.click();
+      });
+    });
+  }
   r.querySelector<HTMLInputElement>('input[type=file]')?.addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
@@ -508,7 +533,7 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
       const photo = await preparePhoto(photoFile);
       const res = await generateLive(photo, name || shown, setStep, { sloth: slothWanted() });
       setStep('Saving your hero…');
-      // Kept on the device: the server's copy is deleted after 7 days.
+      // Kept on the device: the server's copy is deleted after SERVER_PORTRAIT_DAYS.
       hero = { name, portrait: await keepOnDevice(res.url), source: 'live', designId: res.designId };
       // The server's count already has this one in it
       if (res.allowance?.pets) setServerPets(res.allowance.pets, res.allowance.portraitsUsed);
@@ -522,10 +547,12 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
       hero = { name, portrait: await makeDemoPortrait(img, name || shown), source: 'demo' };
       countPortrait(name || shown);
     }
-    saveHero(hero);
+    const saved = saveHero(hero);
     rememberPet(hero, host.choice());
     photoFile = undefined;
-    openHome(host, { reveal: true });
+    // A live portrait that couldn't be kept on the phone is lost once the
+    // server deletes its copy, so the player is told to save it now.
+    openHome(host, { reveal: true, notSaved: hero.source === 'live' && (!saved || !isOnDevice(hero.portrait)) });
   } catch (err) {
     const code = err instanceof HeroError ? err.code : 'failed';
     // The server says no more free portraits: the pop-up says why and where to go next
@@ -749,7 +776,7 @@ export function openTitle(onPlay: () => void): void {
   r.querySelector('.go')?.addEventListener('click', () => onPlay());
 }
 
-export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void {
+export function openHome(host: CardHost, opts: { reveal?: boolean; notSaved?: boolean } = {}): void {
   const hero = loadHero();
   const p = host.progress();
   const name = displayName(hero, host.choice().species);
@@ -793,6 +820,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
         <div class="who">
           <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(cap(name))}</h1>
           <p class="lead">${opts.reveal ? 'Your hero is ready. Pick a trail on the map.' : 'Pick a trail on the map.'}</p>
+          ${opts.notSaved ? `<p class="error">We couldn't save this portrait on your phone. Use Save picture after your next run: our copy is deleted after ${SERVER_PORTRAIT_DAYS} days.</p>` : ''}
         </div>
         <img class="headlogo" src="./art/logo.webp" alt="Fetch Dash" />
         <div class="headbtns">
