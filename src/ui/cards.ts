@@ -28,6 +28,7 @@ import {
   type Hero,
   type LimitReason,
 } from '../hero/store';
+import { adBreak, addPrivacyButton } from '../ads';
 
 /**
  * The cards shown over the game: make your hero (start), meet your hero
@@ -844,6 +845,7 @@ export function openHome(host: CardHost, opts: { reveal?: boolean } = {}): void 
   };
   pick(p.current);
   startRunner(r, host);
+  addPrivacyButton(r.querySelector('.headbtns'));
   r.querySelectorAll<HTMLButtonElement>('.stop').forEach((b) => b.addEventListener('click', () => pick(Number(b.dataset.level))));
   r.querySelectorAll<HTMLButtonElement>('.bstop').forEach((b) => b.addEventListener('click', () => pickBonus(Number(b.dataset.after))));
   r.querySelector('.play')?.addEventListener('click', go);
@@ -878,7 +880,8 @@ export function openEnd(host: CardHost, res: RunResult): void {
   const primaryLevel = res.won && next ? next.id : res.level;
   // After the levels in BONUS_AFTER the bonus round comes next (it can be skipped)
   const bonus = res.won && BONUS_AFTER.includes(res.level) && host.playBonus ? () => host.playBonus!(res.level) : undefined;
-  const go = () => (bonus ? bonus() : host.play(primaryLevel));
+  // Leaving this card is a natural break, where the phone app may show an ad (ads.ts)
+  const go = () => adBreak(() => (bonus ? bonus() : host.play(primaryLevel)));
 
   const r = show(
     `<div class="card end${res.won ? ' won' : ''}">
@@ -919,11 +922,13 @@ export function openEnd(host: CardHost, res: RunResult): void {
   );
   startRunner(r, host);
   r.querySelector('.again')?.addEventListener('click', go);
-  r.querySelector('.skip')?.addEventListener('click', () => (next ? host.play(primaryLevel) : openHome(host)));
-  r.querySelector('.levels-btn')?.addEventListener('click', () => {
-    host.progress().current = primaryLevel;
-    openHome(host);
-  });
+  r.querySelector('.skip')?.addEventListener('click', () => adBreak(() => (next ? host.play(primaryLevel) : openHome(host))));
+  r.querySelector('.levels-btn')?.addEventListener('click', () =>
+    adBreak(() => {
+      host.progress().current = primaryLevel;
+      openHome(host);
+    }),
+  );
   r.querySelector('.make')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
   r.querySelector('.savepic')?.addEventListener('click', () => void savePicture(hero!, name, level.name, res));
   r.querySelector('.report')?.addEventListener('click', async (e) => {
@@ -953,7 +958,7 @@ export function openBonusEnd(host: CardHost, res: BonusResult): void {
     [`Streak bonus (${res.streaks} × ${BONUS.streak.bonus})`, res.streaks * BONUS.streak.bonus],
   ];
   const primary = next ? `Level ${next.id}: ${next.name} ▶` : 'Trail map ▶';
-  const go = () => (next ? host.play(next.id) : openHome(host));
+  const go = () => adBreak(() => (next ? host.play(next.id) : openHome(host)));
   const r = show(
     `<div class="card end won bonusend">
       <div class="cols">
@@ -982,11 +987,13 @@ export function openBonusEnd(host: CardHost, res: BonusResult): void {
   );
   startRunner(r, host);
   r.querySelector('.again')?.addEventListener('click', go);
-  r.querySelector('.toss')?.addEventListener('click', () => host.playBonus?.(res.after ?? 0));
-  r.querySelector('.levels-btn')?.addEventListener('click', () => {
-    if (next) host.progress().current = next.id;
-    openHome(host);
-  });
+  r.querySelector('.toss')?.addEventListener('click', () => adBreak(() => host.playBonus?.(res.after ?? 0)));
+  r.querySelector('.levels-btn')?.addEventListener('click', () =>
+    adBreak(() => {
+      if (next) host.progress().current = next.id;
+      openHome(host);
+    }),
+  );
 }
 
 /** Portrait plus a strip with the result, saved as a picture to share. */

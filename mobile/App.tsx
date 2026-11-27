@@ -1,9 +1,10 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+import { adStatusScript, ads, type AdStatus } from './ads';
 import { getPlayerId, playerIdScript, type PlayerId } from './playerId';
 import { prepareGame } from './prepareGame';
 
@@ -19,6 +20,19 @@ export default function App() {
   useKeepAwake();
   const [state, setState] = useState<State>({ kind: 'loading', done: 0, total: 0 });
   const [attempt, setAttempt] = useState(0);
+  // WebView's extra-props type is named (<object>) so its ref type-checks
+  const web = useRef<WebView<object>>(null);
+  const adStatus = useRef<AdStatus>({ privacy: false });
+
+  // Ads: Google's consent form (where required) shows over the loading
+  // screen on first launch, then the first ad loads in the background.
+  useEffect(() => {
+    void ads.start();
+    return ads.onStatus((s) => {
+      adStatus.current = s;
+      web.current?.injectJavaScript(adStatusScript(s));
+    });
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -36,7 +50,8 @@ export default function App() {
     <View style={styles.root}>
       <StatusBar hidden />
       {state.kind === 'ready' ? (
-        <WebView
+        <WebView<object>
+          ref={web}
           style={styles.root}
           containerStyle={styles.root}
           source={{ uri: joinUri(state.dir, 'index.html') }}
@@ -50,8 +65,11 @@ export default function App() {
           domStorageEnabled
           // The ID goodwookie.com counts free hero portraits against (playerId.ts).
           // Given twice, in case a phone skips the early one; the game reads it late.
-          injectedJavaScriptBeforeContentLoaded={playerIdScript(state.player)}
+          injectedJavaScriptBeforeContentLoaded={playerIdScript(state.player) + adStatusScript(adStatus.current)}
           injectedJavaScript={playerIdScript(state.player)}
+          // The game says when the player is between runs (src/ads.ts); ads.ts
+          // shows an ad if one is due, then tells the game to carry on.
+          onMessage={(e) => ads.handle(e.nativeEvent.data, (js) => web.current?.injectJavaScript(js))}
           // Sound effects start on the first tap without asking.
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback
