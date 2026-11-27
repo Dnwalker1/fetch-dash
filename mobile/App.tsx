@@ -1,12 +1,15 @@
 import { useKeepAwake } from 'expo-keep-awake';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
-import { Image, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { type ComponentRef, type RefObject, useEffect, useRef, useState } from 'react';
+import { Image, Keyboard, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { adStatusScript, ads, type AdStatus } from './ads';
 import { getPlayerId, playerIdScript, type PlayerId } from './playerId';
 import { prepareGame } from './prepareGame';
+
+type ViewHandle = ComponentRef<typeof View>;
 
 const BG = '#1d2b1f';
 const LOGO = require('./assets/logo.webp');
@@ -17,12 +20,45 @@ type State =
   | { kind: 'error'; message: string };
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <Game />
+    </SafeAreaProvider>
+  );
+}
+
+/**
+ * How much of the screen the on-screen keyboard covers. The app draws edge to
+ * edge, so Android doesn't shrink it for the keyboard; without this the
+ * keyboard sits on top of the hero card in landscape. Measured against the
+ * app's own frame, so a phone that does shrink the app gets 0.
+ */
+function useKeyboardCover(root: RefObject<ViewHandle | null>): number {
+  const [cover, setCover] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', (e) => {
+      const top = e.endCoordinates.screenY;
+      if (!root.current) return setCover(e.endCoordinates.height);
+      root.current.measureInWindow((_x, y, _w, h) => setCover(Math.max(0, Math.round(y + h - top))));
+    });
+    const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setCover(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [root]);
+  return cover;
+}
+
+function Game() {
   useKeepAwake();
   const [state, setState] = useState<State>({ kind: 'loading', done: 0, total: 0 });
   const [attempt, setAttempt] = useState(0);
   // WebView's extra-props type is named (<object>) so its ref type-checks
   const web = useRef<WebView<object>>(null);
   const adStatus = useRef<AdStatus>({ privacy: false });
+  const frame = useRef<ViewHandle>(null);
+  const keyboard = useKeyboardCover(frame);
 
   // Ads: Google's consent form (where required) shows over the loading
   // screen on first launch, then the first ad loads in the background.
@@ -47,8 +83,12 @@ export default function App() {
   }, [attempt]);
 
   return (
-    <View style={styles.root}>
+    // Kept clear of the navigation bar and the camera cutout (the app draws
+    // under them), and lifted above the keyboard so the field being typed in
+    // stays in view.
+    <SafeAreaView style={styles.root} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar hidden />
+      <View ref={frame} style={[styles.root, keyboard ? { paddingBottom: keyboard } : null]}>
       {state.kind === 'ready' ? (
         <WebView<object>
           ref={web}
@@ -109,7 +149,8 @@ export default function App() {
           )}
         </View>
       )}
-    </View>
+      </View>
+    </SafeAreaView>
   );
 }
 

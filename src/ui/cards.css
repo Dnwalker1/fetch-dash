@@ -543,6 +543,18 @@
   #ui .levels { margin-top: 0.4em; gap: 0.35em; }
 }
 
+/* Keyboard open on a phone held sideways: only a strip of the screen is left.
+   The card fills it, and the photo, intro and example runner step aside so the
+   name and the choices under it are what show. They come back with the keyboard closed. */
+@media (max-height: 300px) {
+  #ui .card { max-height: 100%; width: min(900px, 98vw); padding: 6px 12px; border-radius: 12px; }
+  #ui .card.setup .head h1 { font-size: 16px; margin: 0; }
+  #ui .card.setup .cols { grid-template-columns: 1fr; margin-top: 0.2em; }
+  #ui .card.setup .col.left,
+  #ui .card.setup .runner,
+  #ui .card.setup .fine { display: none; }
+}
+
 /* Stars */
 #ui .star { font-style: normal; color: #d8cfb8; }
 #ui .star.on { color: var(--gold); text-shadow: 0 1px 0 var(--bronze); }

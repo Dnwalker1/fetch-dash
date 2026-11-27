@@ -128,8 +128,31 @@ export function closeCards(): void {
   }
 }
 
+/**
+ * Keeps the field being typed in on screen. On a phone held sideways the
+ * keyboard leaves only a strip of the screen (the app shrinks the game to
+ * that strip), so the card scrolls the field into the middle of what's left.
+ */
+let focusKeeper = false;
+function keepFocusInView(): void {
+  if (focusKeeper) return;
+  focusKeeper = true;
+  const typing = () => {
+    const el = document.activeElement;
+    return el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'file' && el.closest('#ui') ? el : null;
+  };
+  const reveal = () => requestAnimationFrame(() => typing()?.scrollIntoView({ block: 'center', inline: 'nearest' }));
+  window.addEventListener('resize', reveal);
+  window.visualViewport?.addEventListener('resize', reveal);
+  // Again once the keyboard has had time to open
+  document.addEventListener('focusin', () => {
+    if (typing()) window.setTimeout(reveal, 350);
+  });
+}
+
 function show(html: string, onEnter?: () => void): HTMLDivElement {
   closeCards();
+  keepFocusInView();
   const r = ui();
   r.innerHTML = html;
   r.classList.add('open');
@@ -318,7 +341,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
         <div class="col left">${photoBox}</div>
         <div class="col right">
           <label class="field">Name
-            <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" />
+            <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" enterkeyhint="done" />
           </label>
           ${petRow}
           <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
@@ -510,6 +533,13 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
     go.textContent = empty ? 'Type a name first' : '✨ Make my hero';
   };
   nameInput.addEventListener('input', nameNeeded);
+  // The keyboard's Go/Done key closes the keyboard, so the whole card shows again
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      nameInput.blur();
+    }
+  });
   nameNeeded();
   if (!opts.canGoBack && !name) nameInput.focus({ preventScroll: true });
 }
