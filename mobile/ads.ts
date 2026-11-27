@@ -29,10 +29,11 @@ export const AD_RULES = {
 
 /**
  * Don's "Between runs" interstitial unit from AdMob, per platform. Empty
- * means no ads in store builds on that platform yet.
+ * means no ads in store builds on that platform yet (iOS has no app in
+ * AdMob yet).
  */
 const BETWEEN_RUNS_UNIT = {
-  android: '',
+  android: 'ca-app-pub-3611997283952590/9764409914',
   ios: '',
 };
 

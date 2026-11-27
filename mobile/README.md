@@ -95,10 +95,12 @@ inside the WebView, so the game's page never loads ad code.
 - **Test ads:** every build except the `production` profile shows Google's
   test ads (`EXPO_PUBLIC_REAL_ADS=1` is set only there in `eas.json`), so
   testers can tap them safely. Never tap real ads in your own app.
-- **IDs:** the AdMob App IDs are in `app.json` (the plugin entry; Google's test
-  App IDs until Fetch Dash's own are in), and the "Between runs" ad unit IDs
-  are `BETWEEN_RUNS_UNIT` in `ads.ts`. Store builds show no ads while that is
-  empty.
+- **IDs:** the AdMob App IDs are in `app.json` (the plugin entry): Fetch
+  Dash's own for Android (`~3604702384`), Google's test one for iOS until an
+  iOS app is added in AdMob. The "Between runs" ad unit IDs are
+  `BETWEEN_RUNS_UNIT` in `ads.ts`; a platform with an empty one shows no ads
+  in store builds. Test builds use the real App ID with Google's test ad
+  unit, which is how Google says to test.
 
 ## Not done yet
 
