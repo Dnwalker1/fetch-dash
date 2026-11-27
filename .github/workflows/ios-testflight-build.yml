@@ -1,0 +1,110 @@
+# Builds the iPhone app (mobile/) on EAS and sends it to TestFlight.
+#
+# Start it from the Actions tab: "iOS TestFlight build" > "Run workflow", and
+# pick the branch to build. The build runs on Expo's Mac servers with the
+# "testflight" profile (the store build, but with Google's test ads), and EAS
+# uploads it to App Store Connect when it's done. Apple then takes 10 to 30
+# minutes to process it before it shows in TestFlight.
+#
+# Before the first run, two things must already exist on Expo (one run of
+# `eas build -p ios --profile testflight --auto-submit` from a computer sets
+# both up, see mobile/README.md):
+#   - the iOS signing certificate and provisioning profile for
+#     com.goodwookie.fetchdash, and
+#   - an App Store Connect API key for submissions.
+# And mobile/eas.json needs the app's Apple ID as submit.testflight.ios.ascAppId.
+name: iOS TestFlight build
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: Send the build to TestFlight when it finishes
+        type: boolean
+        default: true
+      wait:
+        description: Wait for the build and show the result here (uses about 20 to 40 Actions minutes)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # The EXPO_TOKEN secret lives in this GitHub environment.
+    environment: fetch-dash-token
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Check the setup
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          SUBMIT: ${{ inputs.submit }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN is empty. It must be a secret in the GitHub environment this job names."
+            exit 1
+          fi
+          asc=$(jq -r '.submit.testflight.ios.ascAppId // empty' eas.json)
+          if [ "$SUBMIT" = "true" ] && [ -z "$asc" ]; then
+            echo "::error::mobile/eas.json has no submit.testflight.ios.ascAppId. Add the app's Apple ID from App Store Connect (App Information > Apple ID), or run with 'submit' off."
+            exit 1
+          fi
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          packager: npm
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Build on EAS (and send to TestFlight)
+        id: eas
+        env:
+          WAIT: ${{ inputs.wait }}
+          SUBMIT: ${{ inputs.submit }}
+        run: |
+          if [ "$WAIT" = "true" ]; then wait_flag=--wait; else wait_flag=--no-wait; fi
+          submit_flag=
+          if [ "$SUBMIT" = "true" ]; then submit_flag=--auto-submit; fi
+          eas build --profile testflight --platform ios --non-interactive --json $wait_flag $submit_flag > build.json
+          id=$(jq -r '.[0].id' build.json)
+          status=$(jq -r '.[0].status' build.json)
+          build_no=$(jq -r '.[0].appBuildVersion // empty' build.json)
+          version=$(jq -r '.[0].appVersion // empty' build.json)
+          page="https://expo.dev/accounts/goodwookies-team/projects/fetch-dash/builds/$id"
+          {
+            echo "## iOS TestFlight build"
+            echo ""
+            echo "- Branch: \`${GITHUB_REF_NAME}\` at \`${GITHUB_SHA::7}\`"
+            echo "- EAS build: [$id]($page) ($status)"
+            [ -n "$version" ] && echo "- Version $version, build $build_no"
+            if [ "$SUBMIT" = "true" ]; then
+              echo "- Sent to App Store Connect when the build finishes. The submission shows on the build page. Apple takes 10 to 30 minutes to process it before it shows in TestFlight."
+            else
+              echo "- Not sent to TestFlight (submit was off)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "EAS build page: $page"
+          if [ "$WAIT" = "true" ] && [ "$status" != "FINISHED" ]; then
+            echo "::error::EAS build ended as $status. See $page"
+            exit 1
+          fi
