@@ -1,0 +1,4 @@
+# results, spend log and any test photos: never committed (the repo is public)
+out/
+photos/
+__pycache__/

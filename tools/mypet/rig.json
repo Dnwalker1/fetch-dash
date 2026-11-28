@@ -1,0 +1,1194 @@
+{
+ "note": "Made by tools/mypet/export-rig.mjs from src/art. Do not edit by hand.",
+ "poses": {
+  "run": {
+   "w": 189,
+   "h": 112,
+   "n": 8
+  },
+  "jump": {
+   "w": 176,
+   "h": 150,
+   "n": 1
+  },
+  "slide": {
+   "w": 198,
+   "h": 79,
+   "n": 1
+  },
+  "ready": {
+   "w": 189,
+   "h": 150,
+   "n": 4
+  },
+  "catch": {
+   "w": 189,
+   "h": 150,
+   "n": 4
+  },
+  "swim": {
+   "w": 189,
+   "h": 112,
+   "n": 6
+  },
+  "dive": {
+   "w": 189,
+   "h": 112,
+   "n": 1
+  },
+  "back-run": {
+   "w": 189,
+   "h": 112,
+   "n": 8
+  },
+  "back-lean-left": {
+   "w": 189,
+   "h": 112,
+   "n": 8
+  },
+  "back-lean-right": {
+   "w": 189,
+   "h": 112,
+   "n": 8
+  },
+  "back-jump": {
+   "w": 176,
+   "h": 150,
+   "n": 1
+  }
+ },
+ "looks": [
+  {
+   "id": "lab/yellow",
+   "species": "dog",
+   "label": "Lab, yellow",
+   "dir": "public/art/pets/lab/",
+   "choice": {
+    "breed": "lab",
+    "coat": "yellow"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#ffd192"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "lab/yellow/gray-muzzle",
+   "species": "dog",
+   "label": "Lab, yellow, gray muzzle",
+   "dir": "public/art/pets/lab/",
+   "choice": {
+    "breed": "lab",
+    "coat": "yellow",
+    "muzzle": true
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#ffd192"
+    },
+    {
+     "layer": "mark-muzzle",
+     "tint": "#d9d3ca"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "lab/black",
+   "species": "dog",
+   "label": "Lab, black",
+   "dir": "public/art/pets/lab/",
+   "choice": {
+    "breed": "lab",
+    "coat": "black"
+   },
+   "layers": [
+    {
+     "layer": "coat-black"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "lab/black/gray-muzzle",
+   "species": "dog",
+   "label": "Lab, black, gray muzzle",
+   "dir": "public/art/pets/lab/",
+   "choice": {
+    "breed": "lab",
+    "coat": "black",
+    "muzzle": true
+   },
+   "layers": [
+    {
+     "layer": "coat-black"
+    },
+    {
+     "layer": "mark-muzzle",
+     "tint": "#d9d3ca"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "lab/chocolate",
+   "species": "dog",
+   "label": "Lab, chocolate",
+   "dir": "public/art/pets/lab/",
+   "choice": {
+    "breed": "lab",
+    "coat": "chocolate"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#7e5034"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "lab/chocolate/gray-muzzle",
+   "species": "dog",
+   "label": "Lab, chocolate, gray muzzle",
+   "dir": "public/art/pets/lab/",
+   "choice": {
+    "breed": "lab",
+    "coat": "chocolate",
+    "muzzle": true
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#7e5034"
+    },
+    {
+     "layer": "mark-muzzle",
+     "tint": "#d9d3ca"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "gsd/black-and-tan/ears-up",
+   "species": "dog",
+   "label": "Shepherd, black and tan, up ears",
+   "dir": "public/art/pets/gsd/",
+   "choice": {
+    "breed": "gsd",
+    "coat": "black-and-tan",
+    "ears": "up"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c98a4b"
+    },
+    {
+     "layer": "mark-saddle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-up",
+     "tint": "#c98a4b"
+    },
+    {
+     "layer": "ears-up-mark-saddle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "gsd/black-and-tan/ears-soft",
+   "species": "dog",
+   "label": "Shepherd, black and tan, soft ears",
+   "dir": "public/art/pets/gsd/",
+   "choice": {
+    "breed": "gsd",
+    "coat": "black-and-tan",
+    "ears": "soft"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c98a4b"
+    },
+    {
+     "layer": "mark-saddle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-soft",
+     "tint": "#c98a4b"
+    },
+    {
+     "layer": "ears-soft-mark-saddle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "gsd/sable/ears-up",
+   "species": "dog",
+   "label": "Shepherd, sable, up ears",
+   "dir": "public/art/pets/gsd/",
+   "choice": {
+    "breed": "gsd",
+    "coat": "sable",
+    "ears": "up"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c29560"
+    },
+    {
+     "layer": "mark-saddle-light",
+     "tint": "#5e4a38",
+     "alpha": 0.9
+    },
+    {
+     "layer": "ears-up",
+     "tint": "#c29560"
+    },
+    {
+     "layer": "ears-up-mark-saddle-light",
+     "tint": "#5e4a38",
+     "alpha": 0.9
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "gsd/sable/ears-soft",
+   "species": "dog",
+   "label": "Shepherd, sable, soft ears",
+   "dir": "public/art/pets/gsd/",
+   "choice": {
+    "breed": "gsd",
+    "coat": "sable",
+    "ears": "soft"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c29560"
+    },
+    {
+     "layer": "mark-saddle-light",
+     "tint": "#5e4a38",
+     "alpha": 0.9
+    },
+    {
+     "layer": "ears-soft",
+     "tint": "#c29560"
+    },
+    {
+     "layer": "ears-soft-mark-saddle-light",
+     "tint": "#5e4a38",
+     "alpha": 0.9
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "gsd/black/ears-up",
+   "species": "dog",
+   "label": "Shepherd, black, up ears",
+   "dir": "public/art/pets/gsd/",
+   "choice": {
+    "breed": "gsd",
+    "coat": "black",
+    "ears": "up"
+   },
+   "layers": [
+    {
+     "layer": "coat-black"
+    },
+    {
+     "layer": "ears-up-black"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "gsd/black/ears-soft",
+   "species": "dog",
+   "label": "Shepherd, black, soft ears",
+   "dir": "public/art/pets/gsd/",
+   "choice": {
+    "breed": "gsd",
+    "coat": "black",
+    "ears": "soft"
+   },
+   "layers": [
+    {
+     "layer": "coat-black"
+    },
+    {
+     "layer": "ears-soft-black"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/black-white/ears-tipped",
+   "species": "dog",
+   "label": "Collie, black and white, tipped ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "black-white",
+    "ears": "tipped"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-tipped",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "ears-tipped-mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/black-white/ears-prick",
+   "species": "dog",
+   "label": "Collie, black and white, prick ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "black-white",
+    "ears": "prick"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-prick",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "ears-prick-mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/black-white/ears-drop",
+   "species": "dog",
+   "label": "Collie, black and white, drop ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "black-white",
+    "ears": "drop"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-drop",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "ears-drop-mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/red-white/ears-tipped",
+   "species": "dog",
+   "label": "Collie, red and white, tipped ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "red-white",
+    "ears": "tipped"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#d99a63"
+    },
+    {
+     "layer": "ears-tipped",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "ears-tipped-mark-black",
+     "tint": "#d99a63"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/red-white/ears-prick",
+   "species": "dog",
+   "label": "Collie, red and white, prick ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "red-white",
+    "ears": "prick"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#d99a63"
+    },
+    {
+     "layer": "ears-prick",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "ears-prick-mark-black",
+     "tint": "#d99a63"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/red-white/ears-drop",
+   "species": "dog",
+   "label": "Collie, red and white, drop ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "red-white",
+    "ears": "drop"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#d99a63"
+    },
+    {
+     "layer": "ears-drop",
+     "tint": "#f6efe6"
+    },
+    {
+     "layer": "ears-drop-mark-black",
+     "tint": "#d99a63"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/blue-merle/ears-tipped",
+   "species": "dog",
+   "label": "Collie, blue merle, tipped ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "blue-merle",
+    "ears": "tipped"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f3efea"
+    },
+    {
+     "layer": "mark-black-light",
+     "tint": "#9ca3ae"
+    },
+    {
+     "layer": "mark-merle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-tipped",
+     "tint": "#f3efea"
+    },
+    {
+     "layer": "ears-tipped-mark-black-light",
+     "tint": "#9ca3ae"
+    },
+    {
+     "layer": "ears-tipped-mark-merle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/blue-merle/ears-prick",
+   "species": "dog",
+   "label": "Collie, blue merle, prick ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "blue-merle",
+    "ears": "prick"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f3efea"
+    },
+    {
+     "layer": "mark-black-light",
+     "tint": "#9ca3ae"
+    },
+    {
+     "layer": "mark-merle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-prick",
+     "tint": "#f3efea"
+    },
+    {
+     "layer": "ears-prick-mark-black-light",
+     "tint": "#9ca3ae"
+    },
+    {
+     "layer": "ears-prick-mark-merle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "collie/blue-merle/ears-drop",
+   "species": "dog",
+   "label": "Collie, blue merle, drop ears",
+   "dir": "public/art/pets/collie/",
+   "choice": {
+    "breed": "collie",
+    "coat": "blue-merle",
+    "ears": "drop"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f3efea"
+    },
+    {
+     "layer": "mark-black-light",
+     "tint": "#9ca3ae"
+    },
+    {
+     "layer": "mark-merle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "ears-drop",
+     "tint": "#f3efea"
+    },
+    {
+     "layer": "ears-drop-mark-black-light",
+     "tint": "#9ca3ae"
+    },
+    {
+     "layer": "ears-drop-mark-merle",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "doxie/red",
+   "species": "dog",
+   "label": "Dachshund, red",
+   "dir": "public/art/pets/doxie/",
+   "choice": {
+    "breed": "doxie",
+    "coat": "red"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c8692a"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "doxie/black-and-tan",
+   "species": "dog",
+   "label": "Dachshund, black and tan",
+   "dir": "public/art/pets/doxie/",
+   "choice": {
+    "breed": "doxie",
+    "coat": "black-and-tan"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c67a35"
+    },
+    {
+     "layer": "mark-blacktan",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "doxie/dapple",
+   "species": "dog",
+   "label": "Dachshund, dapple",
+   "dir": "public/art/pets/doxie/",
+   "choice": {
+    "breed": "doxie",
+    "coat": "dapple"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#c67a35"
+    },
+    {
+     "layer": "mark-blacktan",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "mark-dapple",
+     "tint": "#bfb3a2",
+     "alpha": 0.8
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "beagle/tricolor",
+   "species": "dog",
+   "label": "Beagle, tricolor",
+   "dir": "public/art/pets/beagle/",
+   "choice": {
+    "breed": "beagle",
+    "coat": "tricolor"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f6eee4"
+    },
+    {
+     "layer": "mark-tan",
+     "tint": "#e0914d"
+    },
+    {
+     "layer": "mark-black",
+     "tint": "#4a4548"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "beagle/lemon",
+   "species": "dog",
+   "label": "Beagle, lemon",
+   "dir": "public/art/pets/beagle/",
+   "choice": {
+    "breed": "beagle",
+    "coat": "lemon"
+   },
+   "layers": [
+    {
+     "layer": "coat-light",
+     "tint": "#fff8ec"
+    },
+    {
+     "layer": "mark-tan-light",
+     "tint": "#f3d08a"
+    },
+    {
+     "layer": "mark-black-light",
+     "tint": "#efcb7e"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "frenchie/fawn/tail-stub",
+   "species": "dog",
+   "label": "Frenchie, fawn, stub tail",
+   "dir": "public/art/pets/frenchie/",
+   "choice": {
+    "breed": "frenchie",
+    "coat": "fawn",
+    "tail": "stub"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#e8b67e"
+    },
+    {
+     "layer": "mark-mask",
+     "tint": "#5a4636"
+    },
+    {
+     "layer": "tail-stub",
+     "tint": "#e8b67e"
+    },
+    {
+     "layer": "tail-stub-mark-mask",
+     "tint": "#5a4636"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "frenchie/fawn/tail-screw",
+   "species": "dog",
+   "label": "Frenchie, fawn, screw tail",
+   "dir": "public/art/pets/frenchie/",
+   "choice": {
+    "breed": "frenchie",
+    "coat": "fawn",
+    "tail": "screw"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#e8b67e"
+    },
+    {
+     "layer": "mark-mask",
+     "tint": "#5a4636"
+    },
+    {
+     "layer": "tail-screw",
+     "tint": "#e8b67e"
+    },
+    {
+     "layer": "tail-screw-mark-mask",
+     "tint": "#5a4636"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "frenchie/brindle/tail-stub",
+   "species": "dog",
+   "label": "Frenchie, brindle, stub tail",
+   "dir": "public/art/pets/frenchie/",
+   "choice": {
+    "breed": "frenchie",
+    "coat": "brindle",
+    "tail": "stub"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#a27850"
+    },
+    {
+     "layer": "mark-brindle",
+     "tint": "#3b2a1e",
+     "alpha": 0.92
+    },
+    {
+     "layer": "mark-mask",
+     "tint": "#33261f"
+    },
+    {
+     "layer": "tail-stub",
+     "tint": "#a27850"
+    },
+    {
+     "layer": "tail-stub-mark-brindle",
+     "tint": "#3b2a1e",
+     "alpha": 0.92
+    },
+    {
+     "layer": "tail-stub-mark-mask",
+     "tint": "#33261f"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "frenchie/brindle/tail-screw",
+   "species": "dog",
+   "label": "Frenchie, brindle, screw tail",
+   "dir": "public/art/pets/frenchie/",
+   "choice": {
+    "breed": "frenchie",
+    "coat": "brindle",
+    "tail": "screw"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#a27850"
+    },
+    {
+     "layer": "mark-brindle",
+     "tint": "#3b2a1e",
+     "alpha": 0.92
+    },
+    {
+     "layer": "mark-mask",
+     "tint": "#33261f"
+    },
+    {
+     "layer": "tail-screw",
+     "tint": "#a27850"
+    },
+    {
+     "layer": "tail-screw-mark-brindle",
+     "tint": "#3b2a1e",
+     "alpha": 0.92
+    },
+    {
+     "layer": "tail-screw-mark-mask",
+     "tint": "#33261f"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "frenchie/cream/tail-stub",
+   "species": "dog",
+   "label": "Frenchie, cream, stub tail",
+   "dir": "public/art/pets/frenchie/",
+   "choice": {
+    "breed": "frenchie",
+    "coat": "cream",
+    "tail": "stub"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#ffdfae"
+    },
+    {
+     "layer": "mark-mask-light",
+     "tint": "#b0906f"
+    },
+    {
+     "layer": "tail-stub",
+     "tint": "#ffdfae"
+    },
+    {
+     "layer": "tail-stub-mark-mask-light",
+     "tint": "#b0906f"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "frenchie/cream/tail-screw",
+   "species": "dog",
+   "label": "Frenchie, cream, screw tail",
+   "dir": "public/art/pets/frenchie/",
+   "choice": {
+    "breed": "frenchie",
+    "coat": "cream",
+    "tail": "screw"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#ffdfae"
+    },
+    {
+     "layer": "mark-mask-light",
+     "tint": "#b0906f"
+    },
+    {
+     "layer": "tail-screw",
+     "tint": "#ffdfae"
+    },
+    {
+     "layer": "tail-screw-mark-mask-light",
+     "tint": "#b0906f"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/brown",
+   "species": "cat",
+   "label": "Cat, brown",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "brown"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#b07040"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#e8c39a"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#7a4a26"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/golden",
+   "species": "cat",
+   "label": "Cat, golden",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "golden"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#d9a441"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#f6dfa8"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#a8762a"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/black",
+   "species": "cat",
+   "label": "Cat, black",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "black"
+   },
+   "layers": [
+    {
+     "layer": "coat-black"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#c58b54"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#1f1a18"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/white",
+   "species": "cat",
+   "label": "Cat, white",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "white"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#f2ece2"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#ffffff"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#c9bfae"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/grey",
+   "species": "cat",
+   "label": "Cat, grey",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "grey"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#9a9ea6"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#d9dce0"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#6b6f77"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/ginger",
+   "species": "cat",
+   "label": "Cat, ginger",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "ginger"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#d9782f"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#f6c99a"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#a4541c"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  },
+  {
+   "id": "cat/cream",
+   "species": "cat",
+   "label": "Cat, cream",
+   "dir": "public/art/pets/cat/",
+   "choice": {
+    "palette": "cream"
+   },
+   "layers": [
+    {
+     "layer": "coat",
+     "tint": "#e9d2a8"
+    },
+    {
+     "layer": "mark-light",
+     "tint": "#fff6e4"
+    },
+    {
+     "layer": "mark-dark",
+     "tint": "#bfa477"
+    },
+    {
+     "layer": "detail"
+    }
+   ]
+  }
+ ]
+}
