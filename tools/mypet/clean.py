@@ -29,7 +29,7 @@ CHECKS = {
     'fit': 0.72,        # overlap of the repainted pet with the rig outline (IoU), at least
     'holes': 0.08,      # share of the outline the model left empty, at most
     'spill': 0.28,      # share of the repainted pet outside the outline, at most
-    'scale': 0.35,      # how far the model resized the pet (|scale - 1|), at most
+    'scale': 0.50,      # how far the model resized the pet (|scale - 1|); the line-up undoes it, so only a wild resize fails
     'drift': 28.0,      # frame's average color distance from the reference frame (0-441), at most
 }
 REF = ('run', 2)

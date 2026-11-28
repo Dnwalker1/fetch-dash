@@ -28,8 +28,10 @@ RATES = {
     IMAGE_MODEL: {'text_in': 5.0, 'image_in': 8.0, 'out': 30.0},
     CHECK_MODEL: {'text_in': 5.0, 'image_in': 5.0, 'out': 30.0},
 }
-# What one call can cost at most, for the budget check before it is made.
-WORST = {'image': 1.50, 'check': 0.10}
+# What one call could cost, for the budget check before it is made. Real calls
+# on 28 Nov 2026 cost $0.04 to $0.05 (picture) and $0.01 to $0.02 (photo
+# reading) at medium quality; these leave several times that as a margin.
+WORST = {'image': 0.40, 'check': 0.05}
 
 
 class Budget:
