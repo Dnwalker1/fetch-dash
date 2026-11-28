@@ -1,0 +1,970 @@
+{
+ "version": 1,
+ "note": "Batch 1 entries in the docs/breeds.json format, to append to breeds[]. Cell sizes, stack order and naming are unchanged from docs/breeds.json.",
+ "breeds": [
+  {
+   "id": "golden",
+   "label": "Golden",
+   "name": "Golden (feathered retriever)",
+   "covers": "Golden Retriever, golden mixes, Irish/English Setter, Flat-coated Retriever, Nova Scotia Duck Tolling Retriever, long-haired retriever mixes",
+   "dir": "art/pets/golden/",
+   "defaultCoat": "golden",
+   "coats": {
+    "golden": [
+     {
+      "layer": "coat",
+      "tint": "#E0A458"
+     }
+    ],
+    "cream": [
+     {
+      "layer": "coat",
+      "tint": "#F1D29C"
+     }
+    ],
+    "red": [
+     {
+      "layer": "coat",
+      "tint": "#B9652F"
+     }
+    ],
+    "black": [
+     {
+      "layer": "coat-black"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "golden": "#E0A458",
+    "cream": "#F1D29C",
+    "red": "#B9652F",
+    "black": "#2B2A2E"
+   },
+   "variants": {},
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "fit": 1,
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "coat-black",
+    "detail"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-golden-acc-bandana-run",
+     "jump": "pet-golden-acc-bandana-jump",
+     "slide": "pet-golden-acc-bandana-slide",
+     "ready": "pet-golden-acc-bandana-ready",
+     "catch": "pet-golden-acc-bandana-catch",
+     "swim": "pet-golden-acc-bandana-swim",
+     "dive": "pet-golden-acc-bandana-dive",
+     "back-run": "pet-golden-acc-bandana-back-run",
+     "back-lean-left": "pet-golden-acc-bandana-back-lean-left",
+     "back-lean-right": "pet-golden-acc-bandana-back-lean-right",
+     "back-jump": "pet-golden-acc-bandana-back-jump"
+    },
+    "coat": {
+     "run": "pet-golden-coat-run",
+     "jump": "pet-golden-coat-jump",
+     "slide": "pet-golden-coat-slide",
+     "ready": "pet-golden-coat-ready",
+     "catch": "pet-golden-coat-catch",
+     "swim": "pet-golden-coat-swim",
+     "dive": "pet-golden-coat-dive",
+     "back-run": "pet-golden-coat-back-run",
+     "back-lean-left": "pet-golden-coat-back-lean-left",
+     "back-lean-right": "pet-golden-coat-back-lean-right",
+     "back-jump": "pet-golden-coat-back-jump"
+    },
+    "coat-black": {
+     "run": "pet-golden-coat-black-run",
+     "jump": "pet-golden-coat-black-jump",
+     "slide": "pet-golden-coat-black-slide",
+     "ready": "pet-golden-coat-black-ready",
+     "catch": "pet-golden-coat-black-catch",
+     "swim": "pet-golden-coat-black-swim",
+     "dive": "pet-golden-coat-black-dive",
+     "back-run": "pet-golden-coat-black-back-run",
+     "back-lean-left": "pet-golden-coat-black-back-lean-left",
+     "back-lean-right": "pet-golden-coat-black-back-lean-right",
+     "back-jump": "pet-golden-coat-black-back-jump"
+    },
+    "detail": {
+     "run": "pet-golden-detail-run",
+     "jump": "pet-golden-detail-jump",
+     "slide": "pet-golden-detail-slide",
+     "ready": "pet-golden-detail-ready",
+     "catch": "pet-golden-detail-catch",
+     "swim": "pet-golden-detail-swim",
+     "dive": "pet-golden-detail-dive",
+     "back-run": "pet-golden-detail-back-run",
+     "back-lean-left": "pet-golden-detail-back-lean-left",
+     "back-lean-right": "pet-golden-detail-back-lean-right",
+     "back-jump": "pet-golden-detail-back-jump"
+    }
+   },
+   "exampleStack": {
+    "coat": "golden",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#E0A458"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      187.0,
+      95.5
+     ],
+     [
+      186.0,
+      49.0
+     ],
+     [
+      187.0,
+      101.0
+     ],
+     [
+      186.0,
+      49.0
+     ],
+     [
+      186.0,
+      48.0
+     ],
+     [
+      186.0,
+      45.5
+     ],
+     [
+      187.0,
+      95.0
+     ],
+     [
+      185.0,
+      95.5
+     ]
+    ],
+    "noseJump": [
+     173.0,
+     44.0
+    ],
+    "noseSlide": [
+     191.0,
+     67.5
+    ],
+    "slothSeatHeadTopPerFrame": {
+     "run": [
+      [
+       154.0,
+       33
+      ],
+      [
+       159.5,
+       28
+      ],
+      [
+       160.0,
+       30
+      ],
+      [
+       160.5,
+       27
+      ],
+      [
+       160.0,
+       25
+      ],
+      [
+       159.5,
+       22
+      ],
+      [
+       153.0,
+       34
+      ],
+      [
+       153.5,
+       32
+      ]
+     ],
+     "jump": [
+      [
+       145.5,
+       21
+      ]
+     ],
+     "slide": [
+      [
+       154.0,
+       21
+      ]
+     ],
+     "ready": [
+      [
+       160.0,
+       39
+      ],
+      [
+       160.0,
+       39
+      ],
+      [
+       160.0,
+       39
+      ],
+      [
+       160.0,
+       39
+      ]
+     ],
+     "catch": [
+      [
+       159.5,
+       66
+      ],
+      [
+       159.5,
+       61
+      ],
+      [
+       167.5,
+       34
+      ],
+      [
+       158.5,
+       27
+      ]
+     ],
+     "swim": [
+      [
+       150.0,
+       42
+      ],
+      [
+       150.5,
+       42
+      ],
+      [
+       150.5,
+       40
+      ],
+      [
+       149.5,
+       39
+      ],
+      [
+       149.0,
+       39
+      ],
+      [
+       149.0,
+       41
+      ]
+     ],
+     "back-run": [
+      [
+       123.0,
+       16
+      ],
+      [
+       124.5,
+       15
+      ],
+      [
+       124.5,
+       15
+      ],
+      [
+       124.5,
+       16
+      ],
+      [
+       123.5,
+       16
+      ],
+      [
+       123.5,
+       16
+      ],
+      [
+       123.5,
+       14
+      ],
+      [
+       123.0,
+       16
+      ]
+     ],
+     "back-lean-left": [
+      [
+       111.5,
+       19
+      ],
+      [
+       112.0,
+       18
+      ],
+      [
+       112.5,
+       17
+      ],
+      [
+       112.0,
+       18
+      ],
+      [
+       111.5,
+       19
+      ],
+      [
+       110.5,
+       18
+      ],
+      [
+       110.0,
+       16
+      ],
+      [
+       110.0,
+       17
+      ]
+     ],
+     "back-lean-right": [
+      [
+       134.0,
+       17
+      ],
+      [
+       135.5,
+       16
+      ],
+      [
+       136.0,
+       16
+      ],
+      [
+       135.5,
+       17
+      ],
+      [
+       134.0,
+       17
+      ],
+      [
+       133.5,
+       17
+      ],
+      [
+       133.0,
+       17
+      ],
+      [
+       133.5,
+       17
+      ]
+     ],
+     "back-jump": [
+      [
+       115.0,
+       69
+      ]
+     ]
+    },
+    "slothSeatNote": "[x, y] in cell pixels from rider.ts headTop on the coat layer (ear option layers are not counted, same as GSD/Collie)"
+   },
+   "alignment": {
+    "runBottomGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "runRightGap": [
+     1,
+     2,
+     1,
+     2,
+     2,
+     2,
+     1,
+     3
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 1
+   },
+   "hitBox": "unchanged: config.ts PET 56 x 56 (slide 26) times SIZE_SCALE"
+  },
+  {
+   "id": "terrier",
+   "label": "Terrier",
+   "name": "Terrier (wiry, bearded)",
+   "covers": "Miniature/Standard Schnauzer, West Highland White, Scottish, Cairn, Wire Fox, Border, Airedale, Norfolk/Norwich (ears folded or prick), scruffy terrier mixes",
+   "dir": "art/pets/terrier/",
+   "defaultCoat": "gray",
+   "coats": {
+    "gray": [
+     {
+      "layer": "coat",
+      "tint": "#9C9A96"
+     }
+    ],
+    "white": [
+     {
+      "layer": "coat",
+      "tint": "#F4F1EA"
+     }
+    ],
+    "wheaten": [
+     {
+      "layer": "coat",
+      "tint": "#E2C48E"
+     }
+    ],
+    "tan": [
+     {
+      "layer": "coat",
+      "tint": "#B07A45"
+     }
+    ],
+    "black": [
+     {
+      "layer": "coat-black"
+     }
+    ]
+   },
+   "coatSwatch": {
+    "gray": "#9C9A96",
+    "white": "#F4F1EA",
+    "wheaten": "#E2C48E",
+    "tan": "#B07A45",
+    "black": "#2B2A2E"
+   },
+   "variants": {
+    "ears": {
+     "default": "folded",
+     "options": [
+      "folded",
+      "prick"
+     ]
+    },
+    "tail": {
+     "default": "docked",
+     "options": [
+      "docked",
+      "natural"
+     ]
+    }
+   },
+   "features": {
+    "bandana": true,
+    "tailtip": false,
+    "muzzle": false
+   },
+   "fit": 1,
+   "layers": [
+    "acc-bandana",
+    "coat",
+    "coat-black",
+    "detail",
+    "ears-folded",
+    "ears-folded-black",
+    "ears-prick",
+    "ears-prick-black",
+    "tail-docked",
+    "tail-docked-black",
+    "tail-natural",
+    "tail-natural-black"
+   ],
+   "textureKeys": {
+    "acc-bandana": {
+     "run": "pet-terrier-acc-bandana-run",
+     "jump": "pet-terrier-acc-bandana-jump",
+     "slide": "pet-terrier-acc-bandana-slide",
+     "ready": "pet-terrier-acc-bandana-ready",
+     "catch": "pet-terrier-acc-bandana-catch",
+     "swim": "pet-terrier-acc-bandana-swim",
+     "dive": "pet-terrier-acc-bandana-dive",
+     "back-run": "pet-terrier-acc-bandana-back-run",
+     "back-lean-left": "pet-terrier-acc-bandana-back-lean-left",
+     "back-lean-right": "pet-terrier-acc-bandana-back-lean-right",
+     "back-jump": "pet-terrier-acc-bandana-back-jump"
+    },
+    "coat": {
+     "run": "pet-terrier-coat-run",
+     "jump": "pet-terrier-coat-jump",
+     "slide": "pet-terrier-coat-slide",
+     "ready": "pet-terrier-coat-ready",
+     "catch": "pet-terrier-coat-catch",
+     "swim": "pet-terrier-coat-swim",
+     "dive": "pet-terrier-coat-dive",
+     "back-run": "pet-terrier-coat-back-run",
+     "back-lean-left": "pet-terrier-coat-back-lean-left",
+     "back-lean-right": "pet-terrier-coat-back-lean-right",
+     "back-jump": "pet-terrier-coat-back-jump"
+    },
+    "coat-black": {
+     "run": "pet-terrier-coat-black-run",
+     "jump": "pet-terrier-coat-black-jump",
+     "slide": "pet-terrier-coat-black-slide",
+     "ready": "pet-terrier-coat-black-ready",
+     "catch": "pet-terrier-coat-black-catch",
+     "swim": "pet-terrier-coat-black-swim",
+     "dive": "pet-terrier-coat-black-dive",
+     "back-run": "pet-terrier-coat-black-back-run",
+     "back-lean-left": "pet-terrier-coat-black-back-lean-left",
+     "back-lean-right": "pet-terrier-coat-black-back-lean-right",
+     "back-jump": "pet-terrier-coat-black-back-jump"
+    },
+    "detail": {
+     "run": "pet-terrier-detail-run",
+     "jump": "pet-terrier-detail-jump",
+     "slide": "pet-terrier-detail-slide",
+     "ready": "pet-terrier-detail-ready",
+     "catch": "pet-terrier-detail-catch",
+     "swim": "pet-terrier-detail-swim",
+     "dive": "pet-terrier-detail-dive",
+     "back-run": "pet-terrier-detail-back-run",
+     "back-lean-left": "pet-terrier-detail-back-lean-left",
+     "back-lean-right": "pet-terrier-detail-back-lean-right",
+     "back-jump": "pet-terrier-detail-back-jump"
+    },
+    "ears-folded": {
+     "run": "pet-terrier-ears-folded-run",
+     "jump": "pet-terrier-ears-folded-jump",
+     "slide": "pet-terrier-ears-folded-slide",
+     "ready": "pet-terrier-ears-folded-ready",
+     "catch": "pet-terrier-ears-folded-catch",
+     "swim": "pet-terrier-ears-folded-swim",
+     "dive": "pet-terrier-ears-folded-dive",
+     "back-run": "pet-terrier-ears-folded-back-run",
+     "back-lean-left": "pet-terrier-ears-folded-back-lean-left",
+     "back-lean-right": "pet-terrier-ears-folded-back-lean-right",
+     "back-jump": "pet-terrier-ears-folded-back-jump"
+    },
+    "ears-folded-black": {
+     "run": "pet-terrier-ears-folded-black-run",
+     "jump": "pet-terrier-ears-folded-black-jump",
+     "slide": "pet-terrier-ears-folded-black-slide",
+     "ready": "pet-terrier-ears-folded-black-ready",
+     "catch": "pet-terrier-ears-folded-black-catch",
+     "swim": "pet-terrier-ears-folded-black-swim",
+     "dive": "pet-terrier-ears-folded-black-dive",
+     "back-run": "pet-terrier-ears-folded-black-back-run",
+     "back-lean-left": "pet-terrier-ears-folded-black-back-lean-left",
+     "back-lean-right": "pet-terrier-ears-folded-black-back-lean-right",
+     "back-jump": "pet-terrier-ears-folded-black-back-jump"
+    },
+    "ears-prick": {
+     "run": "pet-terrier-ears-prick-run",
+     "jump": "pet-terrier-ears-prick-jump",
+     "slide": "pet-terrier-ears-prick-slide",
+     "ready": "pet-terrier-ears-prick-ready",
+     "catch": "pet-terrier-ears-prick-catch",
+     "swim": "pet-terrier-ears-prick-swim",
+     "dive": "pet-terrier-ears-prick-dive",
+     "back-run": "pet-terrier-ears-prick-back-run",
+     "back-lean-left": "pet-terrier-ears-prick-back-lean-left",
+     "back-lean-right": "pet-terrier-ears-prick-back-lean-right",
+     "back-jump": "pet-terrier-ears-prick-back-jump"
+    },
+    "ears-prick-black": {
+     "run": "pet-terrier-ears-prick-black-run",
+     "jump": "pet-terrier-ears-prick-black-jump",
+     "slide": "pet-terrier-ears-prick-black-slide",
+     "ready": "pet-terrier-ears-prick-black-ready",
+     "catch": "pet-terrier-ears-prick-black-catch",
+     "swim": "pet-terrier-ears-prick-black-swim",
+     "dive": "pet-terrier-ears-prick-black-dive",
+     "back-run": "pet-terrier-ears-prick-black-back-run",
+     "back-lean-left": "pet-terrier-ears-prick-black-back-lean-left",
+     "back-lean-right": "pet-terrier-ears-prick-black-back-lean-right",
+     "back-jump": "pet-terrier-ears-prick-black-back-jump"
+    },
+    "tail-docked": {
+     "run": "pet-terrier-tail-docked-run",
+     "jump": "pet-terrier-tail-docked-jump",
+     "slide": "pet-terrier-tail-docked-slide",
+     "ready": "pet-terrier-tail-docked-ready",
+     "catch": "pet-terrier-tail-docked-catch",
+     "swim": "pet-terrier-tail-docked-swim",
+     "dive": "pet-terrier-tail-docked-dive",
+     "back-run": "pet-terrier-tail-docked-back-run",
+     "back-lean-left": "pet-terrier-tail-docked-back-lean-left",
+     "back-lean-right": "pet-terrier-tail-docked-back-lean-right",
+     "back-jump": "pet-terrier-tail-docked-back-jump"
+    },
+    "tail-docked-black": {
+     "run": "pet-terrier-tail-docked-black-run",
+     "jump": "pet-terrier-tail-docked-black-jump",
+     "slide": "pet-terrier-tail-docked-black-slide",
+     "ready": "pet-terrier-tail-docked-black-ready",
+     "catch": "pet-terrier-tail-docked-black-catch",
+     "swim": "pet-terrier-tail-docked-black-swim",
+     "dive": "pet-terrier-tail-docked-black-dive",
+     "back-run": "pet-terrier-tail-docked-black-back-run",
+     "back-lean-left": "pet-terrier-tail-docked-black-back-lean-left",
+     "back-lean-right": "pet-terrier-tail-docked-black-back-lean-right",
+     "back-jump": "pet-terrier-tail-docked-black-back-jump"
+    },
+    "tail-natural": {
+     "run": "pet-terrier-tail-natural-run",
+     "jump": "pet-terrier-tail-natural-jump",
+     "slide": "pet-terrier-tail-natural-slide",
+     "ready": "pet-terrier-tail-natural-ready",
+     "catch": "pet-terrier-tail-natural-catch",
+     "swim": "pet-terrier-tail-natural-swim",
+     "dive": "pet-terrier-tail-natural-dive",
+     "back-run": "pet-terrier-tail-natural-back-run",
+     "back-lean-left": "pet-terrier-tail-natural-back-lean-left",
+     "back-lean-right": "pet-terrier-tail-natural-back-lean-right",
+     "back-jump": "pet-terrier-tail-natural-back-jump"
+    },
+    "tail-natural-black": {
+     "run": "pet-terrier-tail-natural-black-run",
+     "jump": "pet-terrier-tail-natural-black-jump",
+     "slide": "pet-terrier-tail-natural-black-slide",
+     "ready": "pet-terrier-tail-natural-black-ready",
+     "catch": "pet-terrier-tail-natural-black-catch",
+     "swim": "pet-terrier-tail-natural-black-swim",
+     "dive": "pet-terrier-tail-natural-black-dive",
+     "back-run": "pet-terrier-tail-natural-black-back-run",
+     "back-lean-left": "pet-terrier-tail-natural-black-back-lean-left",
+     "back-lean-right": "pet-terrier-tail-natural-black-back-lean-right",
+     "back-jump": "pet-terrier-tail-natural-black-back-jump"
+    }
+   },
+   "exampleStack": {
+    "coat": "gray",
+    "bandana": "red",
+    "layers": [
+     {
+      "layer": "coat",
+      "tint": "#9C9A96"
+     },
+     {
+      "layer": "ears-folded",
+      "tint": "#9C9A96"
+     },
+     {
+      "layer": "tail-docked",
+      "tint": "#9C9A96"
+     },
+     {
+      "layer": "acc-bandana",
+      "tint": "#C8362E"
+     },
+     {
+      "layer": "detail"
+     }
+    ]
+   },
+   "anchors": {
+    "noseRunPerFrame": [
+     [
+      188.0,
+      67.44444444444444
+     ],
+     [
+      188.0,
+      62.0
+     ],
+     [
+      188.0,
+      62.5
+     ],
+     [
+      188.0,
+      61.266666666666666
+     ],
+     [
+      188.0,
+      62.2
+     ],
+     [
+      188.0,
+      63.0
+     ],
+     [
+      188.0,
+      60.90909090909091
+     ],
+     [
+      188.0,
+      94.0
+     ]
+    ],
+    "noseJump": [
+     175.0,
+     82.66666666666667
+    ],
+    "noseSlide": [
+     197.0,
+     73.0
+    ],
+    "slothSeatHeadTopPerFrame": {
+     "run": [
+      [
+       164.5,
+       38
+      ],
+      [
+       166.0,
+       40
+      ],
+      [
+       165.5,
+       37
+      ],
+      [
+       165.5,
+       34
+      ],
+      [
+       166.5,
+       37
+      ],
+      [
+       167.0,
+       40
+      ],
+      [
+       166.5,
+       37
+      ],
+      [
+       165.0,
+       41
+      ]
+     ],
+     "jump": [
+      [
+       151.5,
+       55
+      ]
+     ],
+     "slide": [
+      [
+       172.5,
+       36
+      ]
+     ],
+     "ready": [
+      [
+       165.5,
+       55
+      ],
+      [
+       165.5,
+       55
+      ],
+      [
+       165.5,
+       55
+      ],
+      [
+       166.0,
+       55
+      ]
+     ],
+     "catch": [
+      [
+       166.0,
+       77
+      ],
+      [
+       166.0,
+       78
+      ],
+      [
+       171.0,
+       56
+      ],
+      [
+       164.5,
+       50
+      ]
+     ],
+     "swim": [
+      [
+       166.0,
+       44
+      ],
+      [
+       165.0,
+       42
+      ],
+      [
+       164.5,
+       39
+      ],
+      [
+       165.0,
+       40
+      ],
+      [
+       165.0,
+       40
+      ],
+      [
+       164.5,
+       41
+      ]
+     ],
+     "back-run": [
+      [
+       124.5,
+       32
+      ],
+      [
+       125.0,
+       30
+      ],
+      [
+       125.0,
+       29
+      ],
+      [
+       125.0,
+       30
+      ],
+      [
+       124.0,
+       32
+      ],
+      [
+       124.5,
+       30
+      ],
+      [
+       124.5,
+       29
+      ],
+      [
+       124.0,
+       30
+      ]
+     ],
+     "back-lean-left": [
+      [
+       115.5,
+       33
+      ],
+      [
+       116.5,
+       33
+      ],
+      [
+       116.5,
+       32
+      ],
+      [
+       115.5,
+       33
+      ],
+      [
+       115.5,
+       33
+      ],
+      [
+       114.5,
+       32
+      ],
+      [
+       114.0,
+       31
+      ],
+      [
+       114.0,
+       32
+      ]
+     ],
+     "back-lean-right": [
+      [
+       134.0,
+       34
+      ],
+      [
+       135.0,
+       32
+      ],
+      [
+       136.0,
+       31
+      ],
+      [
+       135.0,
+       32
+      ],
+      [
+       133.5,
+       33
+      ],
+      [
+       132.5,
+       33
+      ],
+      [
+       133.5,
+       31
+      ],
+      [
+       133.0,
+       33
+      ]
+     ],
+     "back-jump": [
+      [
+       116.0,
+       81
+      ]
+     ]
+    },
+    "slothSeatNote": "[x, y] in cell pixels from rider.ts headTop on the coat layer (ear option layers are not counted, same as GSD/Collie)"
+   },
+   "alignment": {
+    "runBottomGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     3
+    ],
+    "runRightGap": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "jumpBottomGap": 0,
+    "slideBottomGap": 0
+   },
+   "hitBox": "unchanged: config.ts PET 56 x 56 (slide 26) times SIZE_SCALE"
+  }
+ ]
+}

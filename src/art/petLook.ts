@@ -78,7 +78,8 @@ export function petLookFor(scene: Phaser.Scene, c: PetChoice): PetLook {
       jump: b.jump,
       slide: b.slide,
       stand: DOG_STAND,
-      scale: BREED_FIT / BREED_RES,
+      // each body's own size setting (1 = as painted); the hit box does not change
+      scale: (BREED_FIT * (breedById(dog.breed)?.fit ?? 1)) / BREED_RES,
       originX: BREED_ORIGIN_X,
       tint: base.tint,
       alpha: base.alpha,
