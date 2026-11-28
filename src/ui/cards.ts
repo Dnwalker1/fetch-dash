@@ -2,7 +2,7 @@ import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
 import { cardArtUrl } from '../art/petLook';
-import { BANDANAS, BREEDS, breedById, coatSwatch, coatSwatch2, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
+import { BANDANAS, breedById, coatSwatch, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, playStyle, type PlayStyle, type Progress } from '../levels';
@@ -10,6 +10,8 @@ import { HERO_STEPS, HeroError, LIVE, SERVER_PORTRAIT_DAYS, fetchAllowance, game
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
 import { ageLine, loadAgeBand, portraitsAllowed, saveAgeBand } from '../hero/age';
 import { openAgeGate } from './ageGate';
+import { CAT_PATTERNS, bodiesFor, comingSoon, findBody, type BodySize } from './bodies';
+import { SLOTH, paintedWithSloth } from '../art/rider';
 import {
   MAX_PETS,
   PORTRAITS_PER_PET,
@@ -119,14 +121,27 @@ export function isUiEvent(e: Event): boolean {
   return Boolean(root && e.target instanceof Node && root.contains(e.target));
 }
 
+/** Told when the home screen (or a card over it) opens and closes, so the game can hide its score and buttons behind it. */
+let homeListener: ((open: boolean) => void) | undefined;
+let homeShowing = false;
+export function onHomeScreen(cb: ((open: boolean) => void) | undefined): void {
+  homeListener = cb;
+}
+function setHomeShowing(on: boolean): void {
+  if (on === homeShowing) return;
+  homeShowing = on;
+  homeListener?.(on);
+}
+
 export function closeCards(): void {
+  setHomeShowing(false);
   if (runnerTimer) window.clearInterval(runnerTimer);
   runnerTimer = undefined;
   if (keyHandler) document.removeEventListener('keydown', keyHandler);
   keyHandler = undefined;
   if (root) {
     root.innerHTML = '';
-    root.classList.remove('open', 'title');
+    root.classList.remove('open', 'title', 'home');
   }
 }
 
@@ -209,7 +224,28 @@ function startRunner(r: HTMLElement, host: CardHost): void {
 // Make your hero
 // ---------------------------------------------------------------------------
 
-export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
+/** The pet maker's steps, in order. */
+const STEPS = ['Pet', 'Body', 'Coat', 'Extras', 'Photo'] as const;
+const STEP_HINT = [
+  'Two quick choices, then the fun part.',
+  'Pick the shape closest to your pet. For a mix, go with its body type.',
+  'Colors and shapes for this body.',
+  'All optional. More things to wear unlock as you play.',
+  'Optional. You can add a photo any time from My Pet.',
+];
+/** The step the pet maker is on (kept while the card redraws after each tap). */
+let setupStep = 0;
+/** The size filter on the Body step. */
+let bodyFilter: 'all' | BodySize = 'all';
+
+/**
+ * The pet maker: five short steps (Pet, Body, Coat, Extras, Photo) with the
+ * pet on the left, changing with every tap. Every tap saves the choice and
+ * redraws the card on the same step.
+ */
+export function openSetup(host: CardHost, opts: { canGoBack: boolean; step?: number }): void {
+  if (opts.step !== undefined) setupStep = Math.max(0, Math.min(STEPS.length - 1, opts.step));
+  const step = setupStep;
   // Once per visit, take the server's count of free portraits (it's the one
   // that counts) and redraw the card if it differs from the device's.
   if (LIVE && !serverCountChecked) {
@@ -224,7 +260,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       // Keep a name typed while the count was on its way.
       const typed = document.querySelector<HTMLInputElement>('#ui .card.setup .name');
       if (typed) saveHero({ ...(loadHero() ?? {}), name: typed.value.trim() });
-      openSetup(host, opts);
+      openSetup(host, { canGoBack: opts.canGoBack });
     });
   }
   const hero = loadHero();
@@ -237,137 +273,199 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   // Asked once, when the player first goes to choose a photo.
   const band = LIVE ? loadAgeBand() : '18+';
   const ageOff = band !== undefined && !portraitsAllowed(band);
+  const canPortrait = !ageOff && allow.totalLeft > 0;
 
-  const chips = (Object.keys(PALETTES) as string[])
-    .map(
-      (k) =>
-        `<button class="chip coat${c.palette === k ? ' on' : ''}" data-palette="${k}" title="${PALETTES[k].label}" aria-label="${PALETTES[k].label}" style="--coat:#${PALETTES[k].fur.toString(16).padStart(6, '0')}"></button>`,
-    )
-    .join('');
   const seg = (field: string, value: string, items: [string, string][]) =>
     items.map(([v, label]) => `<button class="seg${value === v ? ' on' : ''}" data-${field}="${v}">${label}</button>`).join('');
-  // Painted sprites for this species, if any are made yet
   const looks = sheetsFor(c.species);
   const look = sheetFor(c);
-  const hexOf = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
   const dog = c.species === 'dog' ? c.dog : undefined;
   const breed = breedById(dog?.breed);
-  let lookRow: string;
-  let coatRow: string;
-  if (c.species === 'dog') {
-    // Chewy, or one of the layered breeds with its own coats, ears or tail, and a bandana
-    const pick = breed?.id ?? (look ? look.id : 'chewy');
-    lookRow = `<div class="field">Breed <div class="segs">${seg('breed', pick, [['chewy', '\u{1F3A8} Chewy'], ...BREEDS.map((b): [string, string] => [b.id, esc(b.label)])])}</div></div>`;
-    if (breed && dog) {
-      const coatChips = Object.entries(breed.coats)
-        .map(([k, v]) => `<button class="chip coat${dog.coat === k ? ' on' : ''}" data-coat="${k}" title="${esc(v.label)}" aria-label="${esc(v.label)}" style="--coat:${hexOf(coatSwatch(breed, k))};--coat2:${hexOf(coatSwatch2(breed, k))}"></button>`)
+  const isChewy = paintedWithSloth(c);
+  /** which entry of the body list this pet is */
+  const bodyId = c.species === 'cat' ? 'shorthair' : (breed?.id ?? (look ? look.id : 'chewy'));
+  const body = bodiesFor(c.species).find((b) => b.id === bodyId);
+
+  // ---- the pet on the left ----
+  const meta = [c.species === 'dog' ? 'Dog' : 'Cat', body?.label, breed && dog ? breed.coats[dog.coat]?.label : c.species === 'cat' ? PALETTES[c.palette]?.label : '', cap(c.size)]
+    .filter(Boolean)
+    .join(' · ');
+  const stage = `<div class="stage">${petPicture(c)}${plate(displayName(hero, c.species))}<span class="meta">${esc(meta)}</span></div>`;
+
+  // ---- each step's content ----
+  let pane = '';
+  if (step === 0) {
+    // The pets that already have portraits, to switch between them
+    const petRow = pets.length
+      ? `<div class="field">Your pets <div class="segs pets">${pets
+          .map((p) => {
+            const left = Math.max(0, PORTRAITS_PER_PET - p.used);
+            const on = petKey(p.name) === petKey(name);
+            return `<button class="seg${on ? ' on' : ''}" data-pet="${esc(p.name)}">${esc(p.name)} <small>${left ? `${left} left` : 'all used'}</small></button>`;
+          })
+          .join('')}${allow.newPetsLeft > 0 && allow.totalLeft > 0 && !allow.isNew ? '<button class="seg add" data-pet="">+ New pet</button>' : ''}</div></div>`
+      : '';
+    pane = `<h2>Who's your hero?</h2>
+      <label class="field">Name
+        <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" enterkeyhint="done" />
+      </label>
+      ${petRow}
+      <div class="species">
+        <button class="sp${c.species === 'dog' ? ' on' : ''}" data-species="dog"><img src="art/pets/lab/card-yellow.webp" alt="" />Dog</button>
+        <button class="sp${c.species === 'cat' ? ' on' : ''}" data-species="cat"><img src="art/pets/cat/card-ginger.webp" alt="" />Cat</button>
+      </div>
+      ${canPortrait ? `<div class="shortcut"><p><b>Have a photo of your pet?</b> Add it and Design Your Pet paints them as an Arcade Hero.</p><button class="btn navy" data-step="4">Add a photo</button></div>` : ''}`;
+  } else if (step === 1) {
+    const list = bodiesFor(c.species);
+    const tiles = list
+      .filter((b) => bodyFilter === 'all' || b.size === bodyFilter)
+      .map((b) => {
+        if (comingSoon(c.species, b)) return `<div class="body soon" data-body-id="${b.id}"><span class="soon-tag">Coming soon</span><div class="ph">🐾</div><b>${esc(b.label)}</b><small>${esc(b.covers)}</small></div>`;
+        const pic = bodyCard(c, b.id);
+        const on = b.id === bodyId;
+        const attr = c.species === 'cat' ? '' : ` data-breed="${b.id}"`;
+        return `<button class="body${on ? ' on' : ''}" data-body-id="${b.id}"${attr}>${pic ? `<img src="${pic}" alt="" />` : '<div class="ph">🐾</div>'}<b>${esc(b.label)}</b><small>${esc(b.covers)}</small></button>`;
+      })
+      .join('');
+    pane = `<h2>Pick a body</h2>
+      <input class="find" type="search" placeholder="${c.species === 'cat' ? 'Type a breed, like Maine Coon or Siamese' : 'Type a breed, like Schnauzer or Pit bull'}" autocomplete="off" enterkeyhint="search" />
+      <p class="hit" aria-live="polite"></p>
+      <div class="segs">${seg('filter', bodyFilter, [['all', 'All'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div>
+      <div class="bodies">${tiles}</div>
+      <div class="field">Size in the game <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>`;
+  } else if (step === 2) {
+    if (c.species === 'dog' && breed && dog) {
+      const coats = Object.entries(breed.coats)
+        .map(([k, v]) => {
+          const pic = cardArtUrl({ ...c, dog: { ...dog, coat: k } });
+          const hex = `#${coatSwatch(breed, k).toString(16).padStart(6, '0')}`;
+          return `<button class="coattile${dog.coat === k ? ' on' : ''}" data-coat="${k}" style="--swatch:${hex}">${pic ? `<img src="${pic}" alt="" />` : '<i class="swatchpic"></i>'}<span>${esc(v.label)}</span></button>`;
+        })
         .join('');
       const shapes = (['ears', 'tail'] as const)
         .filter((g) => breed.variants[g])
         .map((g) => `<div class="field">${g === 'ears' ? 'Ears' : 'Tail'} <div class="segs">${seg(`shape-${g}`, shapeOption(dog, g)!, breed.variants[g]!.map((o): [string, string] => [o, cap(o)]))}</div></div>`)
         .join('');
-      const bandanas =
-        `<button class="chip coat none${dog.bandana ? '' : ' on'}" data-bandana="" title="No bandana" aria-label="No bandana"></button>` +
-        Object.entries(BANDANAS)
-          .map(([k, v]) => `<button class="chip coat${dog.bandana === k ? ' on' : ''}" data-bandana="${k}" title="${cap(k)}" aria-label="${cap(k)} bandana" style="--coat:${hexOf(v)}"></button>`)
-          .join('');
-      const toggles = [
-        breed.features.tailtip ? `<button class="seg${dog.tailtip ? ' on' : ''}" data-feature="tailtip">White tail tip</button>` : '',
-        breed.features.muzzle ? `<button class="seg${dog.muzzle ? ' on' : ''}" data-feature="muzzle">Gray muzzle</button>` : '',
-      ].join('');
-      coatRow =
-        `<div class="field">Coat <span class="coatname">${esc(breed.coats[dog.coat].label)}</span><div class="chips">${coatChips}</div></div>` +
-        shapes +
-        `<div class="field">Bandana <div class="chips">${bandanas}</div></div>` +
-        (toggles ? `<div class="field">Extras <div class="segs">${toggles}</div></div>` : '');
+      pane = `<h2>Coat and markings</h2>
+        <div class="field">Coat <span class="coatname">${esc(breed.coats[dog.coat].label)}</span><div class="coats">${coats}</div></div>
+        ${shapes}
+        <div class="field">Markings <span class="soon-tag">Coming soon</span><div class="segs">${['White chest', 'White socks', 'Face blaze', 'Spots'].map((m) => `<button class="seg" disabled>${m}</button>`).join('')}</div></div>`;
+    } else if (c.species === 'cat') {
+      const coats = (Object.keys(PALETTES) as string[])
+        .map((k) => `<button class="coattile${c.palette === k ? ' on' : ''}" data-palette="${k}"><img src="art/pets/cat/card-${k}.webp" alt="" /><span>${PALETTES[k].label}</span></button>`)
+        .join('');
+      pane = `<h2>Coat and pattern</h2>
+        <div class="field">Coat <div class="coats">${coats}</div>${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>
+        ${looks.length ? `<div class="field">Look <div class="segs">${seg('look', look?.id ?? 'drawn', [['drawn', 'Drawn'], ...looks.map((l): [string, string] => [l.id, `\u{1F3A8} ${esc(l.label)}`])])}</div></div>` : ''}
+        <div class="field">Pattern <span class="soon-tag">Coming soon</span><div class="segs">${CAT_PATTERNS.map((m) => `<button class="seg" disabled>${m}</button>`).join('')}</div></div>`;
     } else {
-      coatRow = `<div class="field">Coat <span class="note">Chewy is painted in his own colors.</span></div>`;
+      pane = `<h2>Coat</h2><p class="lead">Chewy is painted in his own colors. Pick another body to choose a coat, or go on to Extras.</p>`;
     }
+  } else if (step === 3) {
+    const hexOf = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+    const bandanas =
+      breed && dog
+        ? `<div class="field">Bandana <div class="chips"><button class="chip coat none${dog.bandana ? '' : ' on'}" data-bandana="" title="No bandana" aria-label="No bandana"></button>${Object.entries(BANDANAS)
+            .map(([k, v]) => `<button class="chip coat${dog.bandana === k ? ' on' : ''}" data-bandana="${k}" title="${cap(k)}" aria-label="${cap(k)} bandana" style="--coat:${hexOf(v)}"></button>`)
+            .join('')}</div></div>`
+        : `<p class="note">Bandanas come to ${isChewy ? 'Chewy' : 'cats'} with Elon's next pictures.</p>`;
+    const toggles =
+      breed && dog
+        ? [breed.features.tailtip ? `<button class="seg${dog.tailtip ? ' on' : ''}" data-feature="tailtip">White tail tip</button>` : '', breed.features.muzzle ? `<button class="seg${dog.muzzle ? ' on' : ''}" data-feature="muzzle">Gray muzzle</button>` : ''].join('')
+        : '';
+    pane = `<h2>Extras</h2>
+      <label class="sloth"><input type="checkbox"${slothWanted() || isChewy ? ' checked' : ''}${isChewy ? ' disabled' : ''} />
+        <img src="art/sloth/side.webp" alt="" />
+        <span>Bring the sloth along <small>${isChewy ? 'Chewy always brings him.' : `He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head, in the game and in the portrait.`}</small></span></label>
+      ${bandanas}
+      ${toggles ? `<div class="field">Details <div class="segs">${toggles}</div></div>` : ''}
+      <p class="note">Hats, collars and more are coming to the Wardrobe on the home screen.</p>`;
   } else {
-    lookRow = looks.length
-      ? `<div class="field">Look <div class="segs">${seg('look', look?.id ?? 'drawn', [['drawn', 'Drawn'], ...looks.map((l): [string, string] => [l.id, `\u{1F3A8} ${esc(l.label)}`])])}</div></div>`
-      : '';
-    coatRow = `<div class="field">Coat <div class="chips">${chips}</div>
-            ${hasPhoto ? '<span class="note">Matched to your photo. Tap to change.</span>' : ''}</div>`;
+    // The example portrait is Chewy (with the sloth). For any other pet, the
+    // photo box shows that pet instead, so it never looks like the wrong breed.
+    const card = isChewy ? undefined : cardArtUrl(c);
+    const flip = '<img class="flip pet" alt="" />';
+    const example = isChewy
+      ? `<img src="./hero-example.webp" alt="" /><span class="tag">Example</span>`
+      : card
+        ? `<img class="pet card-art" src="${card}" alt="" data-fallback="${esc(flip)}" />`
+        : flip;
+    const photoBox = ageOff
+      ? `<div class="drop used"><img src="${hero?.portrait ?? './hero-example.webp'}" alt="" /></div>
+         <p class="small">${ageLine(band!)}</p>`
+      : allow.totalLeft > 0
+        ? `<label class="drop${hasPhoto ? ' has' : ''}">
+             ${hasPhoto ? `<img src="${photoUrl}" alt="" />` : example}
+             <input type="file" accept="image/*" />
+             <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
+           </label>`
+        : `<div class="drop used"><img src="${hero?.portrait ?? './hero-example.webp'}" alt="" /></div>
+           <p class="small">You've used all ${TOTAL_PORTRAITS} free hero portraits.</p>
+           <button class="btn gold more">Keep designing in Design Your Pet</button>`;
+    pane = `<h2>Hero portrait <span class="note">optional</span></h2>
+      <div class="photostep">
+        <div class="col">${photoBox}</div>
+        <div class="col">
+          <p class="lead">Add a photo and Design Your Pet paints ${esc(displayName(hero, c.species))} as an Arcade Hero, for the end cards and the shirt.</p>
+          ${canPortrait ? `<p class="small allow">${allowanceLine(name)}</p>${nameAckBox(name)}` : ''}
+          <p class="fine">Use a photo of just your pet${LIVE ? '' : '. This preview makes a stand-in portrait on your device; the real one comes from Design Your Pet'}.</p>
+          ${LIVE ? `<p class="fine privacy">To have everything deleted from our server, email info@goodwookie.com with your game code <span class="code">${esc(gameCode())}</span>.</p>` : ''}
+        </div>
+      </div>`;
   }
 
-  // The example portrait is Chewy (with the sloth). For any other pet, the
-  // photo box shows that pet running instead, so it never looks like the
-  // wrong breed.
-  // (its painted card picture, or the running pet if it has none)
-  const chewy = c.species === 'dog' && !breed && (!look || look.id === 'chewy');
-  const card = chewy ? undefined : cardArtUrl(c);
-  const flip = '<img class="flip pet" alt="" />';
-  const example = chewy
-    ? `<img src="./hero-example.webp" alt="" /><span class="tag">Example</span>`
-    : card
-      ? `<img class="pet card-art" src="${card}" alt="" data-fallback="${esc(flip)}" />`
-      : flip;
-  const photoBox = ageOff
-    ? `<div class="drop used">
-         <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
-       </div>
-       <p class="small">${ageLine(band!)}</p>`
-    : allow.totalLeft > 0
-    ? `<label class="drop${hasPhoto ? ' has' : ''}">
-         ${hasPhoto ? `<img src="${photoUrl}" alt="" />` : example}
-         <input type="file" accept="image/*" />
-         <span class="pick">${hasPhoto ? 'Change photo' : '📷 Choose a photo'}</span>
-       </label>
-       <label class="sloth"><input type="checkbox"${slothWanted() ? ' checked' : ''} />
-         <span>🦥 Bring the sloth along <small>He rides on ${c.species === 'cat' ? 'your cat' : 'your pup'}'s head, in the game and in the portrait</small></span></label>
-       <p class="small allow">${allowanceLine(name)}</p>`
-    : `<div class="drop used">
-         <img src="${hero?.portrait ?? './hero-example.webp'}" alt="" />
-       </div>
-       <p class="small">You've used all ${TOTAL_PORTRAITS} free hero portraits.</p>
-       <button class="btn gold more">Keep designing in Design Your Pet</button>`;
-  // The pets that already have portraits, to switch between them
-  const petRow = pets.length
-    ? `<div class="field">Your pets <div class="segs pets">${pets
-        .map((p) => {
-          const left = Math.max(0, PORTRAITS_PER_PET - p.used);
-          const on = petKey(p.name) === petKey(name);
-          return `<button class="seg${on ? ' on' : ''}" data-pet="${esc(p.name)}">${esc(p.name)} <small>${left ? `${left} left` : 'all used'}</small></button>`;
-        })
-        .join('')}${allow.newPetsLeft > 0 && allow.totalLeft > 0 && !allow.isNew ? '<button class="seg add" data-pet="">+ New pet</button>' : ''}</div></div>`
-    : '';
-
+  // ---- the card ----
+  const steps = STEPS.map((l, i) => `<button class="${i < step ? 'done' : i === step ? 'now' : ''}" data-step="${i}"><i>${i < step ? '✓' : i + 1}</i>${l}</button>`).join('');
+  const left = step === 0 ? (opts.canGoBack ? '<button class="btn ghost back">Back</button>' : '<button class="btn ghost skip">Skip, just play</button>') : `<button class="btn ghost" data-step="${step - 1}">‹ Back</button>`;
+  const right =
+    step < STEPS.length - 1
+      ? `<button class="btn primary" data-step="${step + 1}">Next: ${STEPS[step + 1]} ›</button>`
+      : canPortrait && hasPhoto
+        ? '<button class="btn ghost save">Skip the portrait</button><button class="btn primary go">✨ Make my hero</button>'
+        : `<button class="btn primary save">${opts.canGoBack ? 'Save ✓' : 'Play ▶'}</button>`;
   const r = show(
-    `<div class="card setup">
-      <div class="head">
-        <h1>Make your pet the hero</h1>
-        <p>Add a photo and Design Your Pet paints them as an Arcade Hero, dashing after the ball. Then you play as them!</p>
+    `<div class="card setup maker">
+      <div class="mk-head">
+        ${opts.canGoBack ? '<button class="round back" aria-label="Save and go back">‹</button>' : ''}
+        <h1>Make your hero</h1>
+        <nav class="steps" aria-label="Steps">${steps}</nav>
       </div>
-      <div class="cols">
-        <div class="col left">${photoBox}</div>
-        <div class="col right">
-          <label class="field">Name
-            <input class="name" maxlength="18" placeholder="Your pet's name" value="${esc(name)}" autocomplete="off" enterkeyhint="done" />
-          </label>
-          ${!ageOff && allow.totalLeft > 0 ? nameAckBox(name) : ''}
-          ${petRow}
-          <div class="field">Pet <div class="segs">${seg('species', c.species, [['dog', '🐶 Dog'], ['cat', '🐱 Cat']])}</div></div>
-          <div class="field">Size <div class="segs">${seg('size', c.size, [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}</div></div>
-          ${lookRow}
-          ${coatRow}
-          <div class="runner"><span>In the game</span><img alt="" /></div>
-        </div>
+      <div class="mk-main">
+        ${stage}
+        <div class="pane">${pane}</div>
       </div>
       ${lastError ? `<p class="error">${esc(lastError)}</p>` : ''}
-      <div class="actions">
-        ${opts.canGoBack ? '<button class="btn ghost back">Back</button>' : '<button class="btn ghost skip">Skip, just play</button>'}
-        ${!ageOff && allow.totalLeft > 0 && hasPhoto ? '<button class="btn primary go">✨ Make my hero</button>' : `<button class="btn primary save">${opts.canGoBack ? 'Save' : 'Play ▶'}</button>`}
-      </div>
-      <p class="fine">Use a photo of just your pet${LIVE ? '' : '. This preview makes a stand-in portrait on your device; the real one comes from Design Your Pet'}.</p>
-      ${LIVE ? `<p class="fine privacy">To have everything deleted from our server, email info@goodwookie.com with your game code <span class="code">${esc(gameCode())}</span>.</p>` : ''}
+      <div class="mk-foot">${left}<span class="hint">${STEP_HINT[step]}</span>${right}</div>
     </div>`,
   );
   lastError = '';
+  setHomeShowing(true); // the maker covers the trail, so the HUD and the pet on it step aside
+  // a body or coat whose card picture isn't painted yet shows a paw or its coat color instead
+  r.querySelectorAll<HTMLImageElement>('.body img, .coattile img').forEach((img) => {
+    img.onerror = () => {
+      img.onerror = null;
+      const t = document.createElement('template');
+      t.innerHTML = img.closest('.coattile') ? '<i class="swatchpic"></i>' : '<div class="ph">🐾</div>';
+      img.replaceWith(t.content);
+    };
+  });
   startRunner(r, host);
+  seatSloths(r);
 
-  const nameInput = r.querySelector<HTMLInputElement>('.name')!;
-  const keepName = () => keepHeroName(host, nameInput.value.trim());
+  const nameInput = r.querySelector<HTMLInputElement>('.name');
+  const typedName = () => (nameInput ? nameInput.value.trim() : name);
+  const keepName = () => {
+    if (nameInput) keepHeroName(host, nameInput.value.trim());
+  };
+  const redraw = () => openSetup(host, { canGoBack: opts.canGoBack });
+
+  // Steps: the tabs at the top and Back / Next at the bottom
+  r.querySelectorAll<HTMLButtonElement>('[data-step]').forEach((b) =>
+    b.addEventListener('click', () => {
+      keepName();
+      openSetup(host, { canGoBack: opts.canGoBack, step: Number(b.dataset.step) });
+    }),
+  );
 
   // Switch to one of the pets with portraits, or start a new one
   r.querySelectorAll<HTMLButtonElement>('[data-pet]').forEach((b) =>
@@ -375,7 +473,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       keepName();
       const next = b.dataset.pet ?? '';
       keepHeroName(host, next);
-      openSetup(host, opts);
+      redraw();
       if (!next) document.querySelector<HTMLInputElement>('#ui .card.setup .name')?.focus({ preventScroll: true });
     }),
   );
@@ -384,28 +482,74 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   r.querySelectorAll<HTMLButtonElement>('[data-species]').forEach((b) =>
     b.addEventListener('click', () => {
       keepName();
-      host.setChoice({ ...host.choice(), species: b.dataset.species as Species });
-      openSetup(host, opts);
+      const sp = b.dataset.species as Species;
+      if (sp !== host.choice().species) {
+        bodyFilter = 'all';
+        host.setChoice({ ...host.choice(), species: sp });
+      }
+      redraw();
     }),
   );
   r.querySelectorAll<HTMLButtonElement>('[data-size]').forEach((b) =>
     b.addEventListener('click', () => {
-      keepName();
       host.setChoice({ ...host.choice(), size: b.dataset.size as Size });
-      openSetup(host, opts);
+      redraw();
+    }),
+  );
+  r.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach((b) =>
+    b.addEventListener('click', () => {
+      bodyFilter = b.dataset.filter as typeof bodyFilter;
+      redraw();
     }),
   );
   r.querySelectorAll<HTMLButtonElement>('[data-look]').forEach((b) =>
     b.addEventListener('click', () => {
-      keepName();
       const id = b.dataset.look;
       host.setChoice({ ...host.choice(), look: id === 'drawn' ? undefined : id });
-      openSetup(host, opts);
+      redraw();
     }),
   );
-  // Breed dogs: every change saves and re-opens the card
-  const setDog = (f: (d: DogChoice) => DogChoice | undefined, look?: string) => {
-    keepName();
+
+  // Body search: typing a breed lights up the body it uses
+  const find = r.querySelector<HTMLInputElement>('.find');
+  const hit = r.querySelector('.hit');
+  find?.addEventListener('input', () => {
+    const b = findBody(host.choice().species, find.value);
+    r.querySelectorAll<HTMLElement>('[data-body-id]').forEach((el) => el.classList.toggle('match', el.dataset.bodyId === b?.id));
+    if (hit) {
+      const typed = esc(find.value.trim());
+      hit.textContent = '';
+      if (find.value.trim().length < 3) return;
+      hit.innerHTML = !b
+        ? 'No match yet. Pick the closest shape.'
+        : comingSoon(host.choice().species, b)
+          ? `${typed} uses the <b>${esc(b.label)}</b> body. It's coming soon, so pick the closest one for now.`
+          : `${typed} uses the <b>${esc(b.label)}</b> body. Tap it to choose it.`;
+    }
+    // a filter could hide the match
+    if (b && bodyFilter !== 'all' && b.size !== bodyFilter) {
+      bodyFilter = 'all';
+      const keep = find.value;
+      redraw();
+      const again = document.querySelector<HTMLInputElement>('#ui .card.setup .find');
+      if (again) {
+        again.value = keep;
+        again.focus({ preventScroll: true });
+        again.dispatchEvent(new Event('input'));
+      }
+      return;
+    }
+    r.querySelector('.body.match')?.scrollIntoView({ block: 'nearest' });
+  });
+  find?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      find.blur();
+    }
+  });
+
+  // Breed dogs: every change saves and redraws the card
+  const setDog = (f: (d: DogChoice) => DogChoice | undefined, lookId?: string) => {
     const cur = host.choice();
     const next: PetChoice = { ...cur };
     const d = cur.dog ? f(cur.dog) : undefined;
@@ -414,17 +558,16 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       delete next.look;
     } else {
       delete next.dog;
-      next.look = look;
+      next.look = lookId;
     }
     host.setChoice(next);
-    openSetup(host, opts);
+    redraw();
   };
   r.querySelectorAll<HTMLButtonElement>('[data-breed]').forEach((b) =>
     b.addEventListener('click', () => {
       const id = b.dataset.breed!;
       const br = breedById(id);
-      keepName();
-      const next: PetChoice = { ...host.choice() };
+      const next: PetChoice = { ...host.choice(), species: 'dog' };
       if (br) {
         // keep the bandana when switching breeds
         next.dog = { breed: id as BreedId, coat: br.defaultCoat, ...(next.dog?.bandana ? { bandana: next.dog.bandana } : {}) };
@@ -434,7 +577,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
         next.look = 'chewy';
       }
       host.setChoice(next);
-      openSetup(host, opts);
+      redraw();
     }),
   );
   r.querySelectorAll<HTMLButtonElement>('[data-coat]').forEach((b) => b.addEventListener('click', () => setDog((d) => ({ ...d, coat: b.dataset.coat! }))));
@@ -464,19 +607,17 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   );
   r.querySelectorAll<HTMLButtonElement>('[data-palette]').forEach((b) =>
     b.addEventListener('click', () => {
-      keepName();
       host.setChoice({ ...host.choice(), palette: b.dataset.palette! });
-      openSetup(host, opts);
+      redraw();
     }),
   );
   // No age answer yet: the age screen comes first, then the photo picker
   if (LIVE && band === undefined) {
     r.querySelector('label.drop')?.addEventListener('click', (e) => {
       e.preventDefault();
-      keepName();
       openAgeGate((b) => {
         saveAgeBand(b);
-        openSetup(host, opts);
+        redraw();
         // Still inside the tap on Continue, so the picker is allowed to open
         if (portraitsAllowed(b)) document.querySelector<HTMLInputElement>('#ui .card.setup input[type=file]')?.click();
       });
@@ -485,7 +626,6 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
   r.querySelector<HTMLInputElement>('input[type=file]')?.addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
-    keepName();
     photoFile = f;
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     photoUrl = URL.createObjectURL(f);
@@ -496,68 +636,156 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean }): void {
       lastError = messageFor('bad_photo');
       photoFile = undefined;
     }
-    openSetup(host, opts);
+    redraw();
   });
 
   const finish = () => {
     keepName();
     const h = loadHero();
     if (!h?.name) saveHero({ ...(h ?? {}), name: '' });
+    setupStep = 0;
     openHome(host);
   };
-  r.querySelector('.save')?.addEventListener('click', finish);
-  r.querySelector('.back')?.addEventListener('click', finish);
+  r.querySelectorAll('.save, .back').forEach((el) => el.addEventListener('click', finish));
   r.querySelector('.skip')?.addEventListener('click', () => {
     keepName();
+    setupStep = 0;
     host.play(host.progress().current);
   });
   r.querySelector<HTMLInputElement>('.sloth:not(.nameack) input')?.addEventListener('change', (e) => {
     setSlothWanted((e.target as HTMLInputElement).checked);
     host.setChoice(host.choice()); // the sloth hops on (or off) the pet in the game too
+    redraw();
   });
   r.querySelector('.go')?.addEventListener('click', () => {
-    keepName();
     // This pet's free portraits are used (or 3 pets have theirs): explain where to go next
-    const blocked = allowanceFor(nameInput.value.trim()).blocked;
-    if (blocked) return openLimitPopup(blocked, nameInput.value.trim());
-    void makeHero(host, opts);
+    const blocked = allowanceFor(typedName()).blocked;
+    if (blocked) return openLimitPopup(blocked, typedName());
+    void makeHero(host, { canGoBack: opts.canGoBack });
   });
   // The portrait letters the name, so it needs one before it can be made
   const go = r.querySelector<HTMLButtonElement>('.go');
-  const allowLine = r.querySelector('.allow');
   const ackBox = r.querySelector<HTMLLabelElement>('.nameack');
   const ackInput = ackBox?.querySelector('input');
   const nameNeeded = () => {
     // Each name is its own pet, so the count follows the name as it's typed
-    if (allowLine) allowLine.innerHTML = allowanceLine(nameInput.value.trim());
-    const k = petKey(nameInput.value);
-    r.querySelectorAll<HTMLButtonElement>('.pets [data-pet]').forEach((c) => c.classList.toggle('on', Boolean(c.dataset.pet) && petKey(c.dataset.pet!) === k));
+    const k = petKey(typedName());
+    r.querySelectorAll<HTMLButtonElement>('.pets [data-pet]').forEach((el) => el.classList.toggle('on', Boolean(el.dataset.pet) && petKey(el.dataset.pet!) === k));
+    r.querySelectorAll('.card.setup .plate').forEach((p) => (p.textContent = (typedName() || displayName(null, host.choice().species)).toUpperCase()));
     // The personal-use box shows only for a name the server asked about
-    const ack = nameAck(nameInput.value.trim());
+    const ack = nameAck(typedName());
     if (ackBox && ackInput) {
       ackBox.hidden = ack === undefined;
       ackInput.checked = ack === true;
     }
     if (!go) return;
-    const empty = !nameInput.value.trim();
+    const empty = !typedName();
     const unticked = ack === false;
     go.disabled = empty || unticked;
-    go.textContent = empty ? 'Type a name first' : unticked ? 'Tick the box first' : '✨ Make my hero';
+    go.textContent = empty ? 'Add a name first (step 1)' : unticked ? 'Tick the box first' : '✨ Make my hero';
   };
   ackInput?.addEventListener('change', () => {
-    setNameAck(nameInput.value.trim(), ackInput.checked);
+    setNameAck(typedName(), ackInput.checked);
     nameNeeded();
   });
-  nameInput.addEventListener('input', nameNeeded);
+  nameInput?.addEventListener('input', nameNeeded);
   // The keyboard's Go/Done key closes the keyboard, so the whole card shows again
-  nameInput.addEventListener('keydown', (e) => {
+  nameInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       nameInput.blur();
     }
   });
   nameNeeded();
-  if (!opts.canGoBack && !name) nameInput.focus({ preventScroll: true });
+  if (step === 0 && !opts.canGoBack && !name) nameInput?.focus({ preventScroll: true });
+}
+
+/** A body's picture for its tile: this pet's coat when it's the same body, else the body's first coat. */
+function bodyCard(c: PetChoice, id: string): string | undefined {
+  if (c.species === 'cat') return `art/pets/cat/card-${c.palette}.webp`;
+  if (id === 'chewy') return cardArtUrl({ species: 'dog', size: c.size, palette: c.palette, look: 'chewy' });
+  const b = breedById(id);
+  if (!b) return undefined;
+  const coat = c.dog?.breed === id ? c.dog.coat : b.defaultCoat;
+  return cardArtUrl({ species: 'dog', size: c.size, palette: c.palette, dog: { breed: b.id, coat } });
+}
+
+/**
+ * The pet standing, for the pet maker and the home screen: its painted card
+ * picture with the sloth on its head when he's riding, or the running pet
+ * when it has no card picture.
+ */
+function petPicture(c: PetChoice, cls = ''): string {
+  const card = cardArtUrl(c);
+  const flip = `<div class="petpic ${cls}"><img class="flip" alt="" /></div>`;
+  if (!card) return flip;
+  const sloth = slothWanted() && !paintedWithSloth(c) ? `<img class="rider" src="art/sloth/side.webp" alt="" data-species="${c.species}" />` : '';
+  return `<div class="petpic ${cls}"><img class="card-art" src="${card}" alt="" data-fallback="${esc('<img class="flip" alt="" />')}" />${sloth}</div>`;
+}
+
+/**
+ * Seats the sloth on the top of the pet's head in a card picture, the way
+ * rider.ts does it in the game: the head is the highest point of the front
+ * 40% of the body (pets face right).
+ */
+function seatSloths(r: HTMLElement): void {
+  r.querySelectorAll<HTMLImageElement>('img.rider').forEach((sloth) => {
+    const pet = sloth.parentElement?.querySelector<HTMLImageElement>('img.card-art');
+    if (!pet) return;
+    sloth.style.visibility = 'hidden';
+    const seat = () => {
+      const w = pet.naturalWidth;
+      const h = pet.naturalHeight;
+      if (!w || !h || !sloth.naturalWidth) return;
+      const cv = document.createElement('canvas');
+      cv.width = w;
+      cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(pet, 0, 0);
+      let data: Uint8ClampedArray;
+      try {
+        data = ctx.getImageData(0, 0, w, h).data;
+      } catch {
+        return;
+      }
+      let top = -1;
+      let bottom = -1;
+      let headX = 0;
+      const solid = (x: number, y: number) => data[(y * w + x) * 4 + 3] > 128;
+      for (let y = 0; y < h && top < 0; y++) {
+        const xs: number[] = [];
+        for (let x = Math.floor(w * 0.6); x < w; x++) if (solid(x, y)) xs.push(x);
+        if (xs.length) {
+          top = y;
+          headX = xs.reduce((a, b) => a + b, 0) / xs.length;
+        }
+      }
+      for (let y = h - 1; y >= 0 && bottom < 0; y--) {
+        for (let x = 0; x < w; x++)
+          if (solid(x, y)) {
+            bottom = y;
+            break;
+          }
+      }
+      if (top < 0 || bottom <= top) return;
+      const petH = bottom - top;
+      const size = sloth.dataset.species === 'cat' ? SLOTH.size.cat : SLOTH.size.dog;
+      const sh = petH * size;
+      const sw = sh * (sloth.naturalWidth / sloth.naturalHeight);
+      const y = top + petH * SLOTH.sink;
+      sloth.style.width = `${(sw / w) * 100}%`;
+      sloth.style.left = `${((headX - SLOTH.seat.side.x * sw) / w) * 100}%`;
+      sloth.style.top = `${((y - SLOTH.seat.side.y * sh) / h) * 100}%`;
+      sloth.style.visibility = '';
+    };
+    const both = () => {
+      if (pet.complete && sloth.complete) seat();
+    };
+    pet.addEventListener('load', both);
+    sloth.addEventListener('load', both);
+    both();
+  });
 }
 
 /** Shown once the server says the name also belongs to a brand or character. */
@@ -604,6 +832,7 @@ async function makeHero(host: CardHost, opts: { canGoBack: boolean }): Promise<v
     const saved = saveHero(hero);
     rememberPet(hero, host.choice());
     photoFile = undefined;
+    setupStep = 0;
     // A live portrait that couldn't be kept on the phone is lost once the
     // server deletes its copy, so the player is told to save it now.
     openHome(host, { reveal: true, notSaved: hero.source === 'live' && (!saved || !isOnDevice(hero.portrait)) });
@@ -832,7 +1061,226 @@ export function openTitle(onPlay: () => void): void {
   r.querySelector('.go')?.addEventListener('click', () => onPlay());
 }
 
+// ---------------------------------------------------------------------------
+// Home: the pet, Play, and the buttons along the bottom
+// ---------------------------------------------------------------------------
+
+const ICON = {
+  paw: '<svg viewBox="0 0 40 40" fill="#c8641f" stroke="#5a2c10" stroke-width="2"><ellipse cx="20" cy="27" rx="9" ry="7.5"/><ellipse cx="9" cy="17" rx="3.6" ry="4.6"/><ellipse cx="16" cy="10.5" rx="3.6" ry="4.8"/><ellipse cx="24" cy="10.5" rx="3.6" ry="4.8"/><ellipse cx="31" cy="17" rx="3.6" ry="4.6"/></svg>',
+  map: '<svg viewBox="0 0 40 40" stroke="#16202a" stroke-width="2" stroke-linejoin="round"><path d="M5 9l9-3 12 4 9-3v24l-9 3-12-4-9 3z" fill="#f3e2b4"/><path d="M14 6v24M26 10v24" fill="none"/><path d="M9 25c4-1 5-6 9-6s5 4 9 2" fill="none" stroke="#a85433" stroke-dasharray="2 2"/></svg>',
+  bandana: '<svg viewBox="0 0 40 40" stroke="#16202a" stroke-width="2" stroke-linejoin="round"><path d="M5 11q15 7 30 0l-2 5Q26 34 20 34 14 34 7 16z" fill="#24346a"/><circle cx="14" cy="19" r="1.6" fill="#fff" stroke="none"/><circle cx="24" cy="22" r="1.6" fill="#fff" stroke="none"/><circle cx="19" cy="27" r="1.6" fill="#fff" stroke="none"/></svg>',
+  jar: '<svg viewBox="0 0 40 40" stroke="#16202a" stroke-width="2" stroke-linejoin="round"><rect x="11" y="5" width="18" height="5" rx="1.5" fill="#a85433"/><path d="M10 12h20q3 0 3 4v15q0 5-5 5H12q-5 0-5-5V16q0-4 3-4z" fill="#eaf4f7"/><g transform="translate(12 19) scale(.42)"><path d="M8 3a5 5 0 0 1 4.6 3h14.8A5 5 0 1 1 32 12a5 5 0 1 1-4.6 2H12.6A5 5 0 1 1 8 8a5 5 0 1 1 0-5z" fill="#f6e7c6" stroke="#7a5a28" stroke-width="3"/></g></svg>',
+  shirt: '<svg viewBox="0 0 40 40" stroke="#16202a" stroke-width="2" stroke-linejoin="round"><path d="M14 5l-9 5 3 8 4-2v19h16V16l4 2 3-8-9-5q-2 4-6 4t-6-4z" fill="#fff"/><circle cx="20" cy="21" r="4.5" fill="#c79a3e"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="#16202a" stroke-width="2.2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+};
+
+/** 3,000 treats buy a $3 Design Your Pet coupon (Don, Nov 28). The coupon itself comes in a later build. */
+export const COUPON = { treats: 3000, dollars: 3 };
+
+function treatPill(host: CardHost, cls = ''): string {
+  const cat = host.choice().species === 'cat';
+  return `<button class="treatpill ${cls}" data-open="treats" title="Your treats" aria-label="Your treats: ${host.progress().bonusTreats}"><img src="art/props/${cat ? 'fish' : 'bone'}.webp" alt="" /><b>${host.progress().bonusTreats.toLocaleString()}</b></button>`;
+}
+
 export function openHome(host: CardHost, opts: { reveal?: boolean; notSaved?: boolean } = {}): void {
+  const hero = loadHero();
+  const p = host.progress();
+  const c = host.choice();
+  const name = displayName(hero, c.species);
+  const l = levelById(p.current);
+  const r = show(
+    `<div class="homescr${opts.reveal ? ' reveal' : ''}">
+      <img class="logo" src="./art/logo.webp" alt="Fetch Dash" />
+      <div class="hero">
+        ${petPicture(c, 'home')}
+        <button class="plate edit" title="Edit ${esc(name)}">${esc(name.toUpperCase())} <small>✎ edit</small></button>
+      </div>
+      <div class="topbar">
+        ${treatPill(host)}
+        <button class="round settings" aria-label="Settings">${ICON.gear}</button>
+      </div>
+      ${opts.reveal ? `<div class="meet"><b>Meet ${esc(cap(name))}!</b> Your hero is ready.${hero?.portrait ? ' <button class="link portrait">See the portrait</button>' : ''}</div>` : ''}
+      ${opts.notSaved ? `<p class="error homeerr">We couldn't save this portrait on your phone. Use Save picture after your next run: our copy is deleted after ${SERVER_PORTRAIT_DAYS} days.</p>` : ''}
+      <div class="playzone">
+        <button class="lvlribbon" data-open="map">Level ${l.id} · ${esc(l.name)} <span class="stars">${starRow(p.stars[l.id] ?? 0)}</span></button>
+        <button class="btn primary play">Play ▶</button>
+      </div>
+      <nav class="dock" aria-label="Menu">
+        <button class="tile" data-open="pet"><i>${ICON.paw}</i><span>My Pet</span></button>
+        <button class="tile" data-open="map"><i>${ICON.map}</i><span>Trail map</span></button>
+        <button class="tile" data-open="wardrobe"><i>${ICON.bandana}</i><span>Wardrobe</span></button>
+        <button class="tile" data-open="treats"><i>${ICON.jar}</i><span>Treats</span></button>
+        <button class="tile" data-open="merch"><i>${ICON.shirt}</i><span>Merch</span></button>
+      </nav>
+    </div>`,
+    () => host.play(host.progress().current),
+  );
+  r.classList.add('home');
+  setHomeShowing(true);
+  startRunner(r, host);
+  seatSloths(r);
+  r.querySelector('.play')?.addEventListener('click', () => host.play(host.progress().current));
+  r.querySelector('.edit')?.addEventListener('click', () => openSetup(host, { canGoBack: true, step: 0 }));
+  r.querySelector('.settings')?.addEventListener('click', () => openSettings(host));
+  r.querySelector('.portrait')?.addEventListener('click', () => {
+    if (!hero?.portrait) return;
+    const big = document.createElement('button');
+    big.className = 'bigportrait';
+    big.innerHTML = `<img src="${esc(hero.portrait)}" alt="Hero portrait" /><span>Tap to close</span>`;
+    big.addEventListener('click', () => big.remove());
+    r.querySelector('.homescr')?.appendChild(big);
+  });
+  bindOpeners(r, host);
+}
+
+/** The buttons that open the other cards (home, map, and the cards themselves). */
+function bindOpeners(r: HTMLElement, host: CardHost): void {
+  r.querySelectorAll<HTMLButtonElement>('[data-open]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const to = b.dataset.open;
+      if (to === 'pet') openSetup(host, { canGoBack: true, step: 0 });
+      else if (to === 'map') openMap(host);
+      else if (to === 'wardrobe') openWardrobe(host);
+      else if (to === 'treats') openTreats(host);
+      else if (to === 'merch') openMerch(host);
+      else if (to === 'home') openHome(host);
+    }),
+  );
+}
+
+/** A card over the home screen: a title, the treat count and a close button. */
+function homeCard(host: CardHost, cls: string, title: string, body: string): HTMLDivElement {
+  const r = show(
+    `<div class="card homecard ${cls}">
+      <div class="hc-head"><h1>${title}</h1>${treatPill(host)}<button class="round close" data-open="home" aria-label="Close">×</button></div>
+      <div class="hc-body">${body}</div>
+    </div>`,
+  );
+  setHomeShowing(true);
+  bindOpeners(r, host);
+  return r;
+}
+
+/** Wardrobe items still to be painted (Elon's list: /mnt/project-files/wardrobe/wardrobe-for-elon.md). */
+const WARDROBE_SOON: { icon: string; name: string; unlock: string }[] = [
+  { icon: '📿', name: 'Collar', unlock: '15 ★' },
+  { icon: '🎀', name: 'Bow tie', unlock: '600 treats' },
+  { icon: '🧣', name: 'Scarf', unlock: '900 treats' },
+  { icon: '🧢', name: 'Ball cap', unlock: '1,000 treats' },
+  { icon: '🌼', name: 'Flower crown', unlock: '1,200 treats' },
+  { icon: '🕶️', name: 'Sunglasses', unlock: '1,500 treats' },
+  { icon: '🎉', name: 'Party hat', unlock: 'Rank 5' },
+  { icon: '🦸', name: 'Hero cape', unlock: 'All 19 levels' },
+];
+
+export function openWardrobe(host: CardHost): void {
+  const c = host.choice();
+  const dog = c.species === 'dog' ? c.dog : undefined;
+  const chewy = paintedWithSloth(c);
+  const hexOf = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+  const bandanas = dog
+    ? `<button class="item${dog.bandana ? '' : ' on'}" data-bandana=""><span class="swatch none"></span><span>None</span></button>` +
+      Object.entries(BANDANAS)
+        .map(([k, v]) => `<button class="item${dog.bandana === k ? ' on' : ''}" data-bandana="${k}"><span class="swatch" style="background:${hexOf(v)}"></span><span>${cap(k)}</span></button>`)
+        .join('')
+    : '';
+  const sloth = `<button class="item${slothWanted() || chewy ? ' on' : ''}" data-sloth${chewy ? ' disabled' : ''}><img src="art/sloth/side.webp" alt="" /><span>${chewy ? 'Always on' : 'Sloth'}</span></button>`;
+  const soon = WARDROBE_SOON.map((w) => `<div class="item lock"><span class="ic">${w.icon}</span><span>${w.name}</span><small>🔒 ${w.unlock}</small></div>`).join('');
+  const r = homeCard(
+    host,
+    'wardrobe',
+    'Wardrobe',
+    `<div class="tryon">${petPicture(c, 'try')}<div class="who"><b>${esc(cap(displayName(loadHero(), c.species)))}</b><p>Tap something to try it on.${dog ? '' : ` Bandanas come to ${chewy ? 'Chewy' : 'cats'} with Elon's next pictures.`}</p></div></div>
+     <div class="items">${bandanas}${sloth}</div>
+     <h2>Coming soon</h2>
+     <div class="items">${soon}</div>`,
+  );
+  seatSloths(r);
+  r.querySelectorAll<HTMLButtonElement>('[data-bandana]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const cur = host.choice();
+      if (!cur.dog) return;
+      const d = { ...cur.dog };
+      if (b.dataset.bandana) d.bandana = b.dataset.bandana;
+      else delete d.bandana;
+      host.setChoice({ ...cur, dog: d });
+      openWardrobe(host);
+    }),
+  );
+  r.querySelector('[data-sloth]')?.addEventListener('click', () => {
+    setSlothWanted(!slothWanted());
+    host.setChoice(host.choice());
+    openWardrobe(host);
+  });
+}
+
+export function openTreats(host: CardHost): void {
+  const jar = host.progress().bonusTreats;
+  const cat = host.choice().species === 'cat';
+  const toGo = Math.max(0, COUPON.treats - jar);
+  const pct = Math.min(100, Math.round((jar / COUPON.treats) * 100));
+  homeCard(
+    host,
+    'treats',
+    'Treats',
+    `<p class="lead">Every ${cat ? 'fish' : 'treat'} your pet catches is saved here: on the trail, in bonus rounds, everywhere.</p>
+     <div class="row warm">
+       <div class="grow"><b>Treat rewards</b> <span class="soon-tag">Coming soon</span><br>
+       <small>${COUPON.treats.toLocaleString()} treats get you a $${COUPON.dollars} Design Your Pet coupon, for a shirt or hoodie with your hero on it.</small>
+       <div class="bar"><span style="width:${pct}%"></span></div>
+       <small>${toGo ? `${toGo.toLocaleString()} to go` : 'You have enough!'}</small></div>
+     </div>
+     <div class="row"><div class="grow"><b>Spend them in the Wardrobe</b><br><small>Bow ties, caps, sunglasses and more, as Elon paints them.</small></div><button class="btn ghost" data-open="wardrobe">Wardrobe</button></div>
+     <div class="row"><div class="grow"><b>Treat packs, free treats and Remove ads</b><br><small>Coming in the next build.</small></div></div>`,
+  );
+}
+
+export function openMerch(host: CardHost): void {
+  const hero = loadHero();
+  const c = host.choice();
+  const name = cap(displayName(hero, c.species));
+  const pic = hero?.portrait ? `<img class="onshirt" src="${esc(hero.portrait)}" alt="" />` : `<img class="onshirt" src="./hero-example.webp" alt="" />`;
+  const r = homeCard(
+    host,
+    'merch',
+    `${esc(name)} on a shirt`,
+    `<div class="merchrow">
+       <div class="shirt"><svg viewBox="0 0 200 200"><path d="M68 18 22 42l14 42 20-10v110h88V74l20 10 14-42-46-24q-10 18-32 18T68 18z" fill="#26323d" stroke="#16202a" stroke-width="4" stroke-linejoin="round"/></svg>${pic}</div>
+       <div class="grow">
+         <h2>Put your hero on a shirt</h2>
+         <p>${hero?.portrait ? `${esc(name)}'s Arcade Hero portrait` : 'Your pet as an Arcade Hero'}, printed by Design Your Pet. Sizes XS to 5XL.</p>
+         <div class="segs"><span class="seg on">Front print $26</span><span class="seg">Back print $34</span></div>
+         <div class="actions"><a class="btn gold" href="${shopUrl('home-merch')}" target="_blank" rel="noopener">Open Design Your Pet →</a>${hero?.portrait ? '' : '<button class="btn ghost addphoto">Make a hero portrait</button>'}</div>
+         <p class="small">Treat coupons (${COUPON.treats.toLocaleString()} treats for $${COUPON.dollars}) are coming soon.</p>
+       </div>
+     </div>`,
+  );
+  r.querySelector('.addphoto')?.addEventListener('click', () => openSetup(host, { canGoBack: true, step: 4 }));
+}
+
+export function openSettings(host: CardHost): void {
+  const r = homeCard(
+    host,
+    'settings',
+    'Settings',
+    `<div class="actions left">
+       ${tutorialDone() ? '<button class="btn ghost tut">Replay tutorial</button>' : ''}
+       <a class="btn ghost" href="${shopUrl('settings')}" target="_blank" rel="noopener">Design Your Pet</a>
+     </div>
+     ${LIVE ? `<p class="small">Your game code: <span class="code">${esc(gameCode())}</span>. To have everything deleted from our server, email info@goodwookie.com with it.</p>` : ''}
+     <div class="actions left privacyrow"></div>`,
+  );
+  addPrivacyButton(r.querySelector('.privacyrow'));
+  r.querySelector('.tut')?.addEventListener('click', () => {
+    setTutorialDone(false);
+    host.play(1);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The trail map: pick a level
+// ---------------------------------------------------------------------------
+export function openMap(host: CardHost): void {
   const hero = loadHero();
   const p = host.progress();
   const name = displayName(hero, host.choice().species);
@@ -870,19 +1318,16 @@ export function openHome(host: CardHost, opts: { reveal?: boolean; notSaved?: bo
   }).join('');
 
   const r = show(
-    `<div class="card home mapcard${opts.reveal ? ' reveal' : ''}">
+    `<div class="card home mapcard">
       <div class="maphead">
         ${heroMedal(hero)}
         <div class="who">
-          <h1>${opts.reveal ? `Meet ${esc(name)}!` : esc(cap(name))}</h1>
-          <p class="lead">${opts.reveal ? 'Your hero is ready. Pick a trail on the map.' : 'Pick a trail on the map.'}</p>
-          ${opts.notSaved ? `<p class="error">We couldn't save this portrait on your phone. Use Save picture after your next run: our copy is deleted after ${SERVER_PORTRAIT_DAYS} days.</p>` : ''}
+          <h1>${esc(cap(name))}</h1>
+          <p class="lead">Pick a trail on the map.</p>
         </div>
         <img class="headlogo" src="./art/logo.webp" alt="Fetch Dash" />
         <div class="headbtns">
-          <button class="btn ghost edit">${hero?.portrait ? 'Edit hero' : '✨ Make a hero portrait'}</button>
-          ${tutorialDone() ? '<button class="btn ghost tut">Replay tutorial</button>' : ''}
-          <a class="shoplink" href="${shopUrl('home')}" target="_blank" rel="noopener">Put ${esc(name)} on a shirt →</a>
+          <button class="btn ghost homebtn">‹ Home</button>
         </div>
       </div>
       <div class="map" style="background: ${patches}, var(--parchment)">
@@ -955,15 +1400,11 @@ export function openHome(host: CardHost, opts: { reveal?: boolean; notSaved?: bo
   };
   pick(p.current);
   startRunner(r, host);
-  addPrivacyButton(r.querySelector('.headbtns'));
   r.querySelectorAll<HTMLButtonElement>('.stop').forEach((b) => b.addEventListener('click', () => pick(Number(b.dataset.level))));
   r.querySelectorAll<HTMLButtonElement>('.bstop').forEach((b) => b.addEventListener('click', () => pickBonus(Number(b.dataset.after))));
   r.querySelector('.play')?.addEventListener('click', go);
-  r.querySelector('.edit')?.addEventListener('click', () => openSetup(host, { canGoBack: true }));
-  r.querySelector('.tut')?.addEventListener('click', () => {
-    setTutorialDone(false);
-    host.play(1);
-  });
+  setHomeShowing(true);
+  r.querySelector('.homebtn')?.addEventListener('click', () => openHome(host));
   // Tap the small hero picture to see the whole portrait; tap again to close it
   const medal = r.querySelector<HTMLButtonElement>('button.medal');
   medal?.addEventListener('click', () => {
