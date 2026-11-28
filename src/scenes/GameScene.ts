@@ -19,7 +19,7 @@ import { SIZE_SCALE, loadPet, makePetTextures, petKey, savePet, type PetChoice }
 import { BACK_POSES, backLookFor, extraLookFor, petFrameUrls, petLookFor, queuePetArt, queuePoses, type BackLook, type ExtraLook, type PetLook, type Pose } from '../art/petLook';
 import { BRAKE, CLIMB, CLIMB_TALL, DISTRACTION, TUNNEL, GAME_HEIGHT, GAME_WIDTH, GREET, GROUND_Y, PET, RENDER_SCALE, SCORE, SPAWN, SPECIES, SWIM } from '../config';
 import { groundYAt, levelById, loadProgress, saveProgress, LEVELS, TREAT_STAR_SHARE, type ChaserKind, type GawkKind, type LevelDef, type ObstacleKind, type Progress, type SwimObstacle } from '../levels';
-import { cardsOpen, closeCards, isUiEvent, openEnd, openHome, openSetup, openTitle, refreshPetFrames, type CardHost } from '../ui/cards';
+import { cardsOpen, closeCards, isUiEvent, onHomeScreen, openEnd, openHome, openSetup, openTitle, refreshPetFrames, type CardHost } from '../ui/cards';
 import { loadHero, slothWanted } from '../hero/store';
 import { SLOTH, headTop, paintedWithSloth, queueSloth } from '../art/rider';
 import { addDebugOverlay } from '../ui/debug';
@@ -651,10 +651,35 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => closeCards());
+    // The home screen sits over the trail: the score, buttons and "Tap to run" step aside while it's up
+    onHomeScreen((on) => this.hideHud(on));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      onHomeScreen(undefined);
+      closeCards();
+    });
   }
 
   // ---------- Cards (start, home, end) ----------
+
+  private hudHidden: (Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible)[] = [];
+
+  /** Hides (or brings back) the pet on the trail and everything drawn over it: the score, the progress bar, the buttons and the center text. */
+  private hideHud(on: boolean): void {
+    if (on) {
+      for (const o of this.children.list) {
+        const v = o as Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Visible & Phaser.GameObjects.Components.Depth;
+        // the HUD, plus the pet standing on the trail (the home screen shows its own picture)
+        const pet = o === this.petSprite || o === this.petShadow;
+        if (typeof v.depth === 'number' && (v.depth >= 10 || pet) && v.visible) {
+          v.setVisible(false);
+          this.hudHidden.push(v);
+        }
+      }
+    } else {
+      for (const o of this.hudHidden) if (o.active) o.setVisible(true);
+      this.hudHidden = [];
+    }
+  }
 
   private cardHost(): CardHost {
     return {
@@ -982,7 +1007,7 @@ export class GameScene extends Phaser.Scene {
     btn.add(bg);
     btn.add(
       this.add
-        .text(0, 0, '\u{1F43E} Map', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a', resolution: RENDER_SCALE })
+        .text(0, 0, '\u{1F3E0} Home', { fontFamily: 'Arial, sans-serif', fontSize: '17px', fontStyle: 'bold', color: '#16202a', resolution: RENDER_SCALE })
         .setOrigin(0.5),
     );
     this.mapBtn = btn;
@@ -1063,6 +1088,8 @@ export class GameScene extends Phaser.Scene {
     };
     const stars = won ? 1 + Number(goals.treats) + Number(goals.clean) : 0;
     this.progress.stars[id] = Math.max(this.progress.stars[id] ?? 0, stars);
+    // Every treat caught goes in the treat jar, kept for the Wardrobe and treat rewards
+    this.progress.bonusTreats += this.treatCount;
     if (won) {
       if (!this.progress.done.includes(id)) this.progress.done.push(id);
       this.progress.unlocked = Math.max(this.progress.unlocked, Math.min(LEVELS.length, id + 1));
@@ -3182,7 +3209,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(sp.depth + 0.05)
       .setAlpha(sp.alpha)
       .setTint(this.petDim ? dim(0xffffff) : 0xffffff)
-      .setVisible(true);
+      .setVisible(sp.visible);
   }
 
   private drawBackground(): void {

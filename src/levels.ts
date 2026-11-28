@@ -831,7 +831,7 @@ export interface Progress {
   best: Record<number, number>;
   done: number[]; // levels finished at least once
   stars: Record<number, number>; // most stars earned on each level (0-3)
-  bonusTreats: number; // treats earned in bonus rounds (the treat jar)
+  bonusTreats: number; // the treat jar: every treat caught, on the trail and in bonus rounds
 }
 
 /** A Backyard Toss bonus round opens after each of these levels. */
