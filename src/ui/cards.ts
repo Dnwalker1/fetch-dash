@@ -2,7 +2,7 @@ import './cards.css';
 import { PALETTES, type PetChoice, type Size, type Species } from '../art/pets';
 import { sheetFor, sheetsFor } from '../art/sheets';
 import { cardArtUrl } from '../art/petLook';
-import { BANDANAS, breedById, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
+import { BANDANAS, breedById, coatSwatch, shapeOption, type BreedId, type DogChoice } from '../art/breeds';
 import { BONUS } from '../config';
 import { setTutorialDone, tutorialDone } from '../tutorial';
 import { BONUS_AFTER, LEVELS, levelById, playStyle, type PlayStyle, type Progress } from '../levels';
@@ -338,7 +338,8 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean; step?: num
       const coats = Object.entries(breed.coats)
         .map(([k, v]) => {
           const pic = cardArtUrl({ ...c, dog: { ...dog, coat: k } });
-          return `<button class="coattile${dog.coat === k ? ' on' : ''}" data-coat="${k}">${pic ? `<img src="${pic}" alt="" />` : ''}<span>${esc(v.label)}</span></button>`;
+          const hex = `#${coatSwatch(breed, k).toString(16).padStart(6, '0')}`;
+          return `<button class="coattile${dog.coat === k ? ' on' : ''}" data-coat="${k}" style="--swatch:${hex}">${pic ? `<img src="${pic}" alt="" />` : '<i class="swatchpic"></i>'}<span>${esc(v.label)}</span></button>`;
         })
         .join('');
       const shapes = (['ears', 'tail'] as const)
@@ -439,6 +440,15 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean; step?: num
   );
   lastError = '';
   setHomeShowing(true); // the maker covers the trail, so the HUD and the pet on it step aside
+  // a body or coat whose card picture isn't painted yet shows a paw or its coat color instead
+  r.querySelectorAll<HTMLImageElement>('.body img, .coattile img').forEach((img) => {
+    img.onerror = () => {
+      img.onerror = null;
+      const t = document.createElement('template');
+      t.innerHTML = img.closest('.coattile') ? '<i class="swatchpic"></i>' : '<div class="ph">🐾</div>';
+      img.replaceWith(t.content);
+    };
+  });
   startRunner(r, host);
   seatSloths(r);
 
