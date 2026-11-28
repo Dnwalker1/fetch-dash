@@ -21,11 +21,15 @@ from PIL import Image
 import grid as G
 import rig
 
+# Set from the first real runs (28 Nov 2026): the model repaints each pet a
+# little looser than the rig (fur past the outline, a thicker tail), which is
+# trimmed away, so spill and fit are loose. Holes (outline left unpainted)
+# matter most. Resizing is undone by the line-up, so it is only reported.
 CHECKS = {
-    'fit': 0.90,        # overlap of the repainted pet with the rig outline (IoU), at least
-    'holes': 0.05,      # share of the outline the model left empty, at most
-    'spill': 0.08,      # share of the repainted pet outside the outline, at most
-    'scale': 0.12,      # how far the model resized the pet (|scale - 1|), at most
+    'fit': 0.72,        # overlap of the repainted pet with the rig outline (IoU), at least
+    'holes': 0.08,      # share of the outline the model left empty, at most
+    'spill': 0.28,      # share of the repainted pet outside the outline, at most
+    'scale': 0.35,      # how far the model resized the pet (|scale - 1|), at most
     'drift': 28.0,      # frame's average color distance from the reference frame (0-441), at most
 }
 REF = ('run', 2)
@@ -130,14 +134,22 @@ def _stats(rgb: np.ndarray, a: np.ndarray) -> tuple[np.ndarray, np.ndarray, floa
 
 
 def clean_grid(out_rgb: np.ndarray, grid: dict, rig_cells: dict) -> dict:
-    """Cleans every cell of one grid. Returns {(pose, i): {'cell': RGBA float, 'm': measures}}."""
+    """Cleans every cell of one grid (RGB on green, or RGBA on transparent).
+    Returns {(pose, i): {'cell': RGBA float, 'm': measures}}."""
     res = {}
+    alpha_out = None
+    if out_rgb.shape[-1] == 4:
+        a = out_rgb[..., 3]
+        # use the picture's own transparency when it really has a see-through background
+        if (a < 0.5).mean() > 0.2:
+            alpha_out = a
+        out_rgb = out_rgb[..., :3]
     for c in grid['cells']:
         pose, i = c['pose'], c['i']
         rc = rig_cells[pose][i]
         sx, sy, sw, sh = c['slot']
         slot = out_rgb[sy:sy + sh, sx:sx + sw]
-        mask = segment(slot)
+        mask = alpha_out[sy:sy + sh, sx:sx + sw] > 0.5 if alpha_out is not None else segment(slot)
         target = G.rig_alpha_in_slot(rc, c)
         s, ox, oy, iou = align(mask, target)
         # the slot, resampled into rig coordinates (smooth), then to game size

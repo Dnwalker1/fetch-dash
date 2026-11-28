@@ -46,16 +46,32 @@ Answer with JSON:
   "markings": "<short: where the white, dark or patterned areas are>",
   "why": "<one short sentence>"}}"""
 
-PAINT_PROMPT = """Image 1 is a sheet of {n} small game sprites of one {species}, each in its own box on a flat bright green (#00FF00) background. Image 2 is a photo of the player's real {species}.
+PAINT_PROMPT = """Image 1 is a sheet of {n} small game sprites of one {species}, each in its own box on {bg_desc}. Image 2 is a photo of the player's real {species}.
 
 Repaint every sprite in image 1 so it is clearly this exact {species} from image 2: its coat colors, its markings and patches in the same places, its face mask, ear colors, eye color and tail color.{markings}
 
 Rules, for every sprite:
-- Keep each sprite's exact outline, pose, size and position in its box. Do not move, resize, redraw or add legs, ears or tails. Only the colors and fur inside each outline change.
+- Keep each sprite's exact outline, pose, size and position in its box. Each sprite must fill the same area as in image 1: do not shrink, move, resize, redraw or add legs, ears or tails. Only the colors and fur inside each outline change.
 - The markings must sit on the same body parts in every sprite (they are all the same animal running, jumping, sliding, standing, catching, swimming and diving).
-- Same soft painted style as image 1: light from the upper left, a soft belly highlight, outlines a darker shade of the fur (never black outlines), no shading on the background.
-- Keep the background flat pure green (#00FF00) everywhere outside the sprites. No shadows, no ground, no text, no frames, no collars or logos.
+- Same soft painted style as image 1: light from the upper left, a soft belly highlight, outlines a darker shade of the fur (never black outlines).
+- {bg_rule} No glow, no halo, no vignette, no shadows, no ground, no text, no frames, no collars or logos.
 - Do not put a person, any text or anything else in the picture."""
+
+BACK_PROMPT = """Image 1 is a sheet of {n} small game sprites of one {species} seen from behind (running away, leaning left, leaning right, jumping), each in its own box on {bg_desc}. Image 2 is a photo of the player's real {species}. Image 3 shows the same {species} already painted from the side for this game.
+
+Repaint every sprite in image 1 so it is clearly this exact {species}, seen from behind: the same coat colors, markings, tail and ear colors as in images 2 and 3, on the body parts you would see from behind (back, rump, tail, back of the head and ears, back legs).{markings}
+
+Rules, for every sprite:
+- Keep each sprite's exact outline, pose, size and position in its box. Each sprite must fill the same area as in image 1: do not shrink, move, resize, redraw or add legs, ears or tails. Only the colors and fur inside each outline change.
+- The markings must sit on the same body parts in every sprite.
+- Same soft painted style as images 1 and 3: light from the upper left, outlines a darker shade of the fur (never black outlines).
+- {bg_rule} No glow, no halo, no vignette, no shadows, no ground, no text, no frames, no collars or logos.
+- Do not put a person, any text or anything else in the picture."""
+
+BG_TEXT = {
+    'transparent': ('a fully transparent background', 'Keep the background fully transparent everywhere outside the sprites.'),
+    'green': ('a flat bright green (#00FF00) background', 'Keep the background flat pure green (#00FF00) everywhere outside the sprites.'),
+}
 
 
 def _load_photo(p: Path) -> bytes:
@@ -91,13 +107,13 @@ def _save(dest: Path, look: dict, cleaned: dict, full: dict, meta: dict) -> dict
     sprites.mkdir(exist_ok=True)
     strips = {}
     for p, spec in rig.poses().items():
-        if p in G.PAINT_POSES:
+        if (p, 0) in cleaned:
             cl = [cleaned[(p, i)]['cell'] for i in range(spec['n'])]
         else:
             cl = full[p]  # back views: the matched look as it is
         strips[p] = rig.strip_of(cl)
         rig.to_image(strips[p]).save(sprites / f'custom-{p}.webp', lossless=True)
-    _contact(dest / 'preview.png', look, full, strips)
+    _contact(dest / 'preview.png', look, full, strips, {p for p, _ in cleaned})
     _gif(dest / 'run.gif', strips['run'], 8)
     fails = {f'{p}-{i}': v['m']['fails'] for (p, i), v in cleaned.items() if v['m']['fails']}
     ms = [v['m'] for v in cleaned.values()]
@@ -109,7 +125,7 @@ def _save(dest: Path, look: dict, cleaned: dict, full: dict, meta: dict) -> dict
     return report
 
 
-def _contact(path: Path, look: dict, full: dict, strips: dict) -> None:
+def _contact(path: Path, look: dict, full: dict, strips: dict, painted: set) -> None:
     """Each pose: the matched look on top, the result under it, at 2x on a light background."""
     pad, scale = 10, 2
     rows = []
@@ -125,7 +141,7 @@ def _contact(path: Path, look: dict, full: dict, strips: dict) -> None:
     for p, a, b in rows:
         d.text((pad, y + 4), p, fill=(40, 40, 40, 255))
         d.text((pad, y + 18), 'matched', fill=(120, 120, 120, 255))
-        d.text((pad, y + a.height * scale + pad + 4), 'painted' if p in G.PAINT_POSES else 'kept', fill=(120, 120, 120, 255))
+        d.text((pad, y + a.height * scale + pad + 4), 'painted' if p in painted else 'kept', fill=(120, 120, 120, 255))
         for k, im in enumerate((a, b)):
             big = im.resize((im.width * scale, im.height * scale), Image.NEAREST)
             sheet.alpha_composite(big, (110, y + k * (a.height * scale + pad)))
@@ -167,7 +183,9 @@ def paint_one(photo_path: Path, args, budget) -> dict:
     if args.look:
         look, m = rig.look_by_id(args.look), None
     else:
-        m = match(photo, budget, f'{name}: match')
+        prev = dest / 'report.json'
+        prev_m = json.loads(prev.read_text()).get('match') if args.reuse and prev.exists() else None
+        m = prev_m or match(photo, budget, f'{name}: match')
         meta['match'] = m
         if not m.get('is_pet_photo') or m.get('has_person'):
             dest.mkdir(parents=True, exist_ok=True)
@@ -181,26 +199,41 @@ def paint_one(photo_path: Path, args, budget) -> dict:
     markings = f' Its markings: {m["markings"]}.' if m and m.get('markings') else ''
     cleaned_raw, usage_all, cost0 = {}, [], budget.total
     dest.mkdir(parents=True, exist_ok=True)
-    for k, g in enumerate(G.plan(args.layout)):
-        gin = G.build(body, g)
+    grids = G.plan(args.layout) + (G.plan('back') if args.back == 'paint' else [])
+    side_png = None
+    for k, g in enumerate(grids):
+        clear = args.bg == 'transparent'
+        gin = G.build(body, g, transparent=clear)
         Image.fromarray(np.clip(gin * 255 + 0.5, 0, 255).astype(np.uint8)).save(dest / f'grid{k + 1}-sent.png')
-        prompt = PAINT_PROMPT.format(n=len(g['cells']), species=species, markings=markings)
+        bg_desc, bg_rule = BG_TEXT[args.bg]
+        prompt = (BACK_PROMPT if g['back'] else PAINT_PROMPT).format(n=len(g['cells']), species=species, markings=markings, bg_desc=bg_desc, bg_rule=bg_rule)
+        extra = side_png if g['back'] else None
         size = f'{g["size"][0]}x{g["size"][1]}'
-        try:
-            png, usage = O.repaint(_png(gin), photo, prompt, size, args.quality, budget, f'{name}: grid {k + 1}')
-        except O.OpenAIError as e:
-            if e.status == 400 and 'size' in e.message.lower():
-                print(f'  size {size} refused ({e.message}); trying size=auto')
-                png, usage = O.repaint(_png(gin), photo, prompt, 'auto', args.quality, budget, f'{name}: grid {k + 1} (auto size)')
-                meta['size_fallback'] = True
-            else:
-                raise
+        bg = 'transparent' if clear else None
+        back = dest / f'grid{k + 1}-back.png'
+        if args.reuse and back.exists():
+            png, usage = back.read_bytes(), {}
+            meta['reused'] = True
+        else:
+            try:
+                png, usage = O.repaint(_png(gin), photo, prompt, size, args.quality, budget, f'{name}: grid {k + 1}', bg, extra)
+            except O.OpenAIError as e:
+                if e.status == 400 and 'size' in e.message.lower():
+                    print(f'  size {size} refused ({e.message}); trying size=auto')
+                    png, usage = O.repaint(_png(gin), photo, prompt, 'auto', args.quality, budget, f'{name}: grid {k + 1} (auto size)', bg, extra)
+                    meta['size_fallback'] = True
+                else:
+                    raise
+            back.write_bytes(png)
         usage_all.append(usage)
-        got = Image.open(io.BytesIO(png)).convert('RGB')
-        got.save(dest / f'grid{k + 1}-back.png')
+        if not g['back'] and side_png is None:
+            side_png = png
+        got = Image.open(io.BytesIO(png)).convert('RGBA')
         meta.setdefault('returned_sizes', []).append(list(got.size))
         if got.size != g['size']:
             got = got.resize(g['size'], Image.LANCZOS)
+        if (np.asarray(got)[..., 3] < 128).mean() > 0.2:
+            meta['returned_transparent'] = True
         cleaned_raw.update(C.clean_grid(np.asarray(got, dtype=np.float32) / 255.0, g, body))
     cleaned = C.finish(cleaned_raw, det, args.steady)
     meta['usage'] = usage_all
@@ -306,18 +339,21 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
     sub.add_parser('looks')
-    gp = sub.add_parser('grid'); gp.add_argument('--look', required=True); gp.add_argument('--layout', default='one', choices=G.LAYOUTS)
+    gp = sub.add_parser('grid'); gp.add_argument('--look', required=True); gp.add_argument('--layout', default='one', choices=['one', 'two'])
     dp = sub.add_parser('dry-run'); dp.add_argument('--look', required=True); dp.add_argument('--fake'); dp.add_argument('--seed', type=int, default=1)
     mp = sub.add_parser('match'); mp.add_argument('--photo', required=True, type=Path)
     pp = sub.add_parser('paint'); pp.add_argument('--photo', required=True, type=Path)
     bp = sub.add_parser('batch'); bp.add_argument('--photos', required=True, type=Path)
     for p in (dp, pp, bp):
-        p.add_argument('--layout', default='one', choices=G.LAYOUTS)
+        p.add_argument('--layout', default='one', choices=['one', 'two'])
         p.add_argument('--steady', type=float, default=0.5, help='0-1: how hard to pull frame colors toward the reference frame')
         p.add_argument('--name')
     for p in (pp, bp):
         p.add_argument('--look', help='skip step 1 and use this look')
         p.add_argument('--quality', default='medium', choices=['low', 'medium', 'high'])
+        p.add_argument('--back', default='paint', choices=['paint', 'keep'], help='paint the views from behind too (a second picture), or keep the matched look')
+        p.add_argument('--bg', default='transparent', choices=list(BG_TEXT), help='background the model paints on')
+        p.add_argument('--reuse', action='store_true', help='clean the picture saved from the last run again instead of paying for a new one')
     for p in (mp, pp, bp):
         p.add_argument('--budget', type=float, default=40.0, help='stop before total spend could pass this many dollars')
     args = ap.parse_args(argv)

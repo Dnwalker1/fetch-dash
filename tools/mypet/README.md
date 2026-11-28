@@ -14,17 +14,33 @@ Wix site or in the phone app.
 2. **Paint** (`/v1/images/edits`, pinned `gpt-image-2.5-sunburst-2026-09-08`,
    the same model as the game's portraits). The matched look's 25 cells
    (run 8, jump, slide, ready 4, catch 4, swim 6, dive) are drawn at 2x, each
-   in its own 448 x 352 box on flat green, in one 2240 x 1760 picture
-   (`--layout two` splits it in two). The model gets that picture and the
-   photo and repaints the coat to match the pet, keeping every outline.
+   in its own 448 x 352 box on a transparent background, in one 2240 x 1760
+   picture (`--layout two` splits it in two). The model gets that picture and
+   the photo and repaints the coat to match the pet, keeping every outline.
+   A second picture does the 25 views from behind, with the painted side
+   views as a third reference so the markings match (`--back keep` skips it
+   and keeps the matched look from behind).
 3. **Clean** (code only, `clean.py`). For each cell: find the pet, line it back
    up with the rig's outline (image models nudge and resize), shrink to game
    size, keep exactly the rig's outline, fill gaps, take off green fringe,
    pull colors toward run frame 2 so markings keep their shade, and put the
-   rig's eyes and nose back on top. The 4 back views use the matched look as
-   is (small on screen, and it saves a third of the cost).
-4. **Check** every cell: fit to the outline (IoU at least 0.90), holes and
-   spill, how much the model resized it, and color drift between frames.
+   rig's eyes and nose back on top.
+4. **Check** every cell: fit to the outline, holes (outline left unpainted,
+   the one that matters most), spill, how much the model resized it, and
+   color drift between frames. Limits are in `clean.py` and were loosened
+   after the first real runs: the model paints a little past the outline,
+   which is trimmed off.
+
+## First real runs (28 Nov 2026)
+
+- Transparent background, not green: on green the model painted a dark,
+  glowing background, and the pets couldn't be found.
+- The model shrinks the pets to about 75 to 80% in their boxes; the line-up
+  undoes it.
+- A tabby cat: side and extra poses $0.04, views from behind $0.05, photo
+  reading $0.016, so about $0.11 per pet at medium quality.
+
+`--reuse` cleans the pictures saved from the last run again at no cost.
 
 Output per pet in `out/<name>/`: `sprites/custom-<pose>.webp` (game sizes,
 same cells as `public/art/pets/`), `preview.png` (every pose, matched look

@@ -11,7 +11,8 @@ import numpy as np
 
 import rig
 
-# The poses the model repaints. The back views use the matched look as is.
+# The poses the model repaints: side-on and extra poses in one picture, the
+# views from behind in a second (or kept from the matched look with --back keep).
 PAINT_POSES = ['run', 'jump', 'slide', 'ready', 'catch', 'swim', 'dive']
 BACK_POSES = ['back-run', 'back-lean-left', 'back-lean-right', 'back-jump']
 
@@ -22,6 +23,8 @@ BG = (0, 255, 0)            # flat green background
 LAYOUTS = {
     # all 25 cells in one picture: best for keeping markings the same across frames
     'one': [{'poses': PAINT_POSES, 'cols': 5, 'rows': 5}],
+    # the 25 views from behind: back-run, back-lean-left, back-lean-right (8 each), back-jump
+    'back': [{'poses': BACK_POSES, 'cols': 5, 'rows': 5, 'back': True}],
     # two pictures, in case a 2240 x 1760 picture is refused or too dear
     'two': [
         {'poses': ['run', 'jump', 'slide', 'ready'], 'cols': 4, 'rows': 4},
@@ -44,7 +47,7 @@ def plan(layout: str) -> list[dict]:
             x = col * sw + (sw - w) // 2
             y = row * sh + (sh - h) // 2
             cells.append({'pose': p, 'i': i, 'box': (x, y, w, h), 'slot': (col * sw, row * sh, sw, sh)})
-        out.append({'size': (g['cols'] * sw, g['rows'] * sh), 'cells': cells})
+        out.append({'size': (g['cols'] * sw, g['rows'] * sh), 'cells': cells, 'back': g.get('back', False)})
     return out
 
 
@@ -55,9 +58,15 @@ def _up(cell: np.ndarray) -> np.ndarray:
     return np.asarray(im, dtype=np.float32) / 255.0
 
 
-def build(look_cells: dict[str, list[np.ndarray]], grid: dict) -> np.ndarray:
-    """The grid picture (RGB float) with each cell drawn over the green background."""
+def build(look_cells: dict[str, list[np.ndarray]], grid: dict, transparent: bool = False) -> np.ndarray:
+    """The grid picture: RGB float on the green background, or RGBA on a transparent one."""
     W, H = grid['size']
+    if transparent:
+        img = np.zeros((H, W, 4), dtype=np.float32)
+        for c in grid['cells']:
+            x, y, w, h = c['box']
+            img[y:y + h, x:x + w] = _up(look_cells[c['pose']][c['i']])
+        return img
     img = np.zeros((H, W, 3), dtype=np.float32)
     img[...] = np.array(BG, dtype=np.float32) / 255.0
     for c in grid['cells']:

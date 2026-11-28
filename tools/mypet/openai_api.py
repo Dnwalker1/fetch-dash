@@ -127,8 +127,9 @@ def read_photo(photo_jpeg: bytes, prompt: str, budget: Budget, note: str) -> dic
     return json.loads(text)
 
 
-def repaint(grid_png: bytes, photo_jpeg: bytes, prompt: str, size: str, quality: str, budget: Budget, note: str) -> tuple[bytes, dict]:
-    """Step 2: the image model repaints the grid. Returns (PNG bytes, usage)."""
+def repaint(grid_png: bytes, photo_jpeg: bytes, prompt: str, size: str, quality: str, budget: Budget, note: str, background: str | None = None, extra_png: bytes | None = None) -> tuple[bytes, dict]:
+    """Step 2: the image model repaints the grid (image 1) from the photo (image 2), with an
+    optional third picture for reference. Returns (PNG bytes, usage)."""
     budget.check('image')
     boundary = '----mypet' + uuid.uuid4().hex
     parts: list[bytes] = []
@@ -142,13 +143,18 @@ def repaint(grid_png: bytes, photo_jpeg: bytes, prompt: str, size: str, quality:
         parts.append(b'\r\n')
 
     field('model', IMAGE_MODEL)
-    field('prompt', 'The 2 attached images are numbered in the order they are attached.\n\n' + prompt)
+    n_img = 3 if extra_png else 2
+    field('prompt', f'The {n_img} attached images are numbered in the order they are attached.\n\n' + prompt)
     field('size', size)
     field('quality', quality)
     field('output_format', 'png')
+    if background:
+        field('background', background)
     field('n', '1')
     file('image[]', 'image1.png', 'image/png', grid_png)
     file('image[]', 'image2.jpg', 'image/jpeg', photo_jpeg)
+    if extra_png:
+        file('image[]', 'image3.png', 'image/png', extra_png)
     parts.append(f'--{boundary}--\r\n'.encode())
     j = _post('/images/edits', b''.join(parts), f'multipart/form-data; boundary={boundary}')
     usage = j.get('usage') or {}
