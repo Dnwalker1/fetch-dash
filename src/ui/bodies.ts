@@ -1,10 +1,12 @@
 import type { Species } from '../art/pets';
+import { breedById } from '../art/breeds';
 
 /**
  * The bodies the pet maker lists, painted or still to come, and the breed
  * names a player might type to find them. Elon's list of new bodies, in his
  * order, is /mnt/project-files/mypet/breeds-for-elon.md; when one is painted
- * it moves into BREEDS (src/art/breeds.ts) and its entry here loses `soon`.
+ * it moves into BREEDS (src/art/breeds.ts), which makes it pickable here even
+ * while its entry still says `soon` (tidy the flag away when convenient).
  */
 
 export type BodySize = 'small' | 'medium' | 'large';
@@ -51,6 +53,11 @@ export const CAT_BODIES: BodyEntry[] = [
 
 /** Cat patterns Elon is painting as layers (shown as "coming soon" for now). */
 export const CAT_PATTERNS = ['Tabby', 'Calico', 'Tuxedo', 'Bicolor', 'Pointed'];
+
+/** A body still to come: marked `soon` and not yet in BREEDS. */
+export function comingSoon(species: Species, b: BodyEntry): boolean {
+  return !!b.soon && !(species === 'dog' && breedById(b.id));
+}
 
 export function bodiesFor(species: Species): BodyEntry[] {
   return species === 'cat' ? CAT_BODIES : DOG_BODIES;

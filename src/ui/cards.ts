@@ -10,7 +10,7 @@ import { HERO_STEPS, HeroError, LIVE, SERVER_PORTRAIT_DAYS, fetchAllowance, game
 import { makeDemoPortrait, matchPalette } from '../hero/demo';
 import { ageLine, loadAgeBand, portraitsAllowed, saveAgeBand } from '../hero/age';
 import { openAgeGate } from './ageGate';
-import { CAT_PATTERNS, bodiesFor, findBody, type BodySize } from './bodies';
+import { CAT_PATTERNS, bodiesFor, comingSoon, findBody, type BodySize } from './bodies';
 import { SLOTH, paintedWithSloth } from '../art/rider';
 import {
   MAX_PETS,
@@ -320,7 +320,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean; step?: num
     const tiles = list
       .filter((b) => bodyFilter === 'all' || b.size === bodyFilter)
       .map((b) => {
-        if (b.soon) return `<div class="body soon" data-body-id="${b.id}"><span class="soon-tag">Coming soon</span><div class="ph">🐾</div><b>${esc(b.label)}</b><small>${esc(b.covers)}</small></div>`;
+        if (comingSoon(c.species, b)) return `<div class="body soon" data-body-id="${b.id}"><span class="soon-tag">Coming soon</span><div class="ph">🐾</div><b>${esc(b.label)}</b><small>${esc(b.covers)}</small></div>`;
         const pic = bodyCard(c, b.id);
         const on = b.id === bodyId;
         const attr = c.species === 'cat' ? '' : ` data-breed="${b.id}"`;
@@ -512,7 +512,7 @@ export function openSetup(host: CardHost, opts: { canGoBack: boolean; step?: num
       if (find.value.trim().length < 3) return;
       hit.innerHTML = !b
         ? 'No match yet. Pick the closest shape.'
-        : b.soon
+        : comingSoon(host.choice().species, b)
           ? `${typed} uses the <b>${esc(b.label)}</b> body. It's coming soon, so pick the closest one for now.`
           : `${typed} uses the <b>${esc(b.label)}</b> body. Tap it to choose it.`;
     }
