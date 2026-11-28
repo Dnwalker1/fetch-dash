@@ -11,9 +11,14 @@ import Phaser from 'phaser';
  * the chosen ear or tail shape for each body layer, the Lab's optional tail
  * tip and gray muzzle, the bandana, and last the eyes and nose (never tinted).
  * Files: public/art/pets/<breed>/<layer>-<state>.webp.
+ *
+ * Batch 1 of the new bodies (Nov 28, 2026; see docs in the drop's README):
+ * 'golden' (feathered retriever: Goldens, golden mixes, setters, Flat-coats,
+ * Tollers) and 'terrier' (wiry, bearded: Schnauzers, Westie, Scottie, Cairn,
+ * Wire Fox, Border, Airedale, scruffy mixes), each in all 11 poses.
  */
 
-export type BreedId = 'lab' | 'gsd' | 'collie' | 'doxie' | 'beagle' | 'frenchie';
+export type BreedId = 'lab' | 'gsd' | 'collie' | 'doxie' | 'beagle' | 'frenchie' | 'golden' | 'terrier';
 export type BreedState = 'run' | 'jump' | 'slide';
 
 /** One coat layer: its tint (none for painted black) and see-through amount. */
@@ -49,6 +54,12 @@ export interface Breed {
   variants: Partial<Record<'ears' | 'tail', string[]>>;
   /** optional Lab features */
   features: { tailtip?: boolean; muzzle?: boolean };
+  /**
+   * Size of the drawn body against the shared painted scale (1 = as painted).
+   * Only the picture changes; the hit box stays PET.width x PET.height.
+   * Used by petLookFor (petLook.ts). Left at 1 for every body for now.
+   */
+  fit?: number;
 }
 
 export const CELL = { frameWidth: 189, frameHeight: 112, frames: 8, frameRate: 16 };
@@ -131,6 +142,37 @@ export const BREEDS: Breed[] = [
     },
     variants: { tail: ['stub', 'screw'] },
     features: {},
+  },
+  {
+    // feathered retriever body (no sloth): Golden, golden mixes, setters, Flat-coat, Toller
+    id: 'golden',
+    label: 'Golden',
+    defaultCoat: 'golden',
+    coats: {
+      golden: { label: 'Golden', layers: [L('coat', 0xe0a458)] },
+      cream: { label: 'Cream', layers: [L('coat', 0xf1d29c)] },
+      red: { label: 'Red', layers: [L('coat', 0xb9652f)] },
+      black: { label: 'Black', layers: [L('coat-black')] },
+    },
+    variants: {},
+    features: {},
+    fit: 1,
+  },
+  {
+    // wiry, bearded terrier body: Schnauzer, Westie, Scottie, Cairn, Wire Fox, Border, Airedale, scruffy mixes
+    id: 'terrier',
+    label: 'Terrier',
+    defaultCoat: 'gray',
+    coats: {
+      gray: { label: 'Salt and pepper', layers: [L('coat', 0x9c9a96)] },
+      white: { label: 'White', layers: [L('coat', 0xf4f1ea)] },
+      wheaten: { label: 'Wheaten', layers: [L('coat', 0xe2c48e)] },
+      tan: { label: 'Tan', layers: [L('coat', 0xb07a45)] },
+      black: { label: 'Black', layers: [L('coat-black')] },
+    },
+    variants: { ears: ['folded', 'prick'], tail: ['docked', 'natural'] },
+    features: {},
+    fit: 1,
   },
 ];
 
